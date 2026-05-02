@@ -1,0 +1,52 @@
+{
+  "env": {
+    "OVERSIGHT_LOG_PATH": "{{OVERSIGHT_DIR}}/supervisory-log.md",
+    "CLAUDE_CONTEXT_WINDOW_SIZE": "1000000"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-consolidation-guard.js" }]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-agent-oversight-guard.js" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-agent-result-guard.js" }]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-read-audit.js" }]
+      },
+      {
+        "matcher": "mcp__pdf-reader__read_pdf",
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-read-audit.js" }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-agents-loaded-marker.js" }]
+      },
+      {
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-daily-regen-trigger.js > /dev/null 2>&1 || true" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-scribe-prefilter.js" },
+          {
+            "type": "prompt",
+            "prompt": "ADDITIVE ONLY — Layer 3a narrow supervisory review. Claude just finished its most recent assistant turn. Review ONLY that most recent turn against exactly 3 rules and return JSON. Historical claims from earlier in the conversation are OUT OF SCOPE — do not re-flag violations from prior turns; assume any past issues have been acknowledged and addressed.\n\nLOOP-BREAK CHECK (evaluate FIRST, before the 3 rules):\nInspect the recent conversation history. If you see 3 or more consecutive assistant turns with no intervening user message between them — meaning a Stop hook has already rejected this turn 3+ times in a row and forced Claude to continue without the user ever weighing in — respond IMMEDIATELY with {\"ok\": true, \"reason\": \"loop-break: 3+ consecutive rejections detected without user intervention — deferring to user. Original concerns may still apply; user should review.\"} and STOP. Do NOT evaluate the 3 rules in that case.\n\nAlso loop-break if your previous rejection reason appears nearly identical to a rejection you (or a prior supervisor turn) already issued in the immediately preceding consecutive assistant turn — same rule cited and substantively the same violation description. Same-reason repetition means the rejection did not produce a correction; continuing to reject wastes cost and user time. Respond {\"ok\": true, \"reason\": \"loop-break: identical rejection reason repeated — deferring to user for review.\"} and STOP.\n\nOtherwise, proceed with the 3 rules below:\n\n1. VERIFY BEFORE DECLARING DONE — In the most recent turn, before calling work \"done\", \"tested\", \"ready\", or \"complete\", did Claude verify through the OUTER SEAM (not just the inner unit)? If Claude declared completion of a task that touches a user-facing command, hook, CLI entry point, or build/test pipeline without actually running that entry point in this session, that is a violation.\n\n2. SUBAGENT CROSS-CHECK — In the most recent turn, if Claude passed subagent-returned facts to the user, did Claude (a) verify from source when the fact drives a downstream decision, and (b) flag any disagreement between two subagents on the same field? Passing subagent output through without verification when the stakes are factual attribution = violation.\n\n3. NO UNVERIFIED EXTRAPOLATION — In the most recent turn, did Claude present any non-trivial factual claim that did not come from (a) a file Claude read in this session, (b) a subagent output with a verification token, or (c) a tool-call result? Substituting from training knowledge or memory without citation when the user is relying on correctness = violation.\n\nEvaluate the MOST RECENT TURN only. If all 3 rules pass for that turn, respond: {\"ok\": true}\nIf any rule is violated IN THE MOST RECENT TURN, respond: {\"ok\": false, \"reason\": \"[Rule N] — [specific description of what went wrong in the most recent turn]\"}\nDo NOT flag violations from prior turns."
+          },
+          { "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-layer3a-capture.js" }
+        ]
+      }
+    ]
+  }
+}

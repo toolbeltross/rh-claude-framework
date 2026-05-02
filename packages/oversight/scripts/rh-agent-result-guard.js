@@ -1,0 +1,84 @@
+// agent-result-guard.js — PostToolUse hook for Agent
+// Scans subagent results for tool-failure signals and emits a warning.
+
+const http = require('http');
+const { appendOversightEvent } = require('./lib/oversight-events');
+const { wrapHook } = require('./lib/hook-timing');
+const { config } = require('./lib/config');
+
+function notifyTelemetry(eventType, error, extra) {
+  if (process.env.OVERSIGHT_SELF_TEST === '1') return;
+  try {
+    const body = JSON.stringify({
+      tool_name: 'Agent', event_type: eventType, success: false, error, session_id: '', ...(extra || {}),
+    });
+    const req = http.request(
+      `${config.telemetryUrl}/api/hooks`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 1200 },
+      (res) => { res.resume(); }
+    );
+    req.on('error', () => {});
+    req.on('timeout', () => { req.destroy(); });
+    req.write(body);
+    req.end();
+  } catch {}
+}
+
+wrapHook('agent-result-guard', (input) => {
+  const output = (input?.tool_output || input?.tool_result || '').toString();
+  const desc   = input?.tool_input?.description || 'unnamed agent';
+  const sessionId = input?.session_id || '';
+
+  if (!output || output.length < 20) return {};
+
+  const failures = [];
+
+  if (/WebSearch.*denied|WebSearch.*blocked|WebFetch.*denied|WebFetch.*blocked/i.test(output))
+    failures.push('WebSearch or WebFetch was denied/blocked in subagent');
+
+  if (/permission.*denied|tool.*not.*allowed|not.*permitted|access.*denied/i.test(output))
+    if (!/court.*permission|statutory.*permission|written.*permission/i.test(output))
+      failures.push('Tool permission was denied in subagent');
+
+  if (/sources?\s*(found|consulted)\s*[:=]\s*0\b/i.test(output))
+    failures.push('Subagent found zero sources');
+  if (/successfully\s*processed\s*[:=]\s*0\b/i.test(output))
+    failures.push('Subagent processed zero items successfully');
+
+  if (/cannot complete this research|unable to (complete|perform|execute)/i.test(output))
+    failures.push('Subagent reported inability to complete the task');
+
+  const failedMatch = output.match(/failed\s*(?:or\s*truncated)?\s*[:=]\s*(\d+)/i);
+  const processedMatch = output.match(/successfully\s*processed\s*[:=]\s*(\d+)/i);
+  if (failedMatch && processedMatch) {
+    const failed    = parseInt(failedMatch[1], 10);
+    const processed = parseInt(processedMatch[1], 10);
+    if (failed > 0 && failed >= processed)
+      failures.push(`Subagent failure count (${failed}) >= success count (${processed})`);
+  }
+
+  if (/> 85%.*STOP|context.*overflow|compaction.*occurred.*mid/i.test(output))
+    failures.push('Subagent hit context limits — results may be incomplete');
+
+  if (failures.length > 0) {
+    const reason =
+      `SUBAGENT FAILURE DETECTED in "${desc}":\n` +
+      failures.map(f => `  - ${f}`).join('\n') + '\n\n' +
+      'ACTION REQUIRED: Do NOT silently proceed with degraded results.\n' +
+      'Inform the user immediately and ask for help resolving the issue.\n' +
+      'Do NOT substitute training knowledge without explicit user consent.';
+
+    notifyTelemetry('subagent_failure_detected',
+      `[SUBAGENT FAILURE] ${desc}: ${failures.join('; ')}`,
+      { session_id: sessionId, tool_input: { description: desc }, patterns: failures }
+    );
+
+    appendOversightEvent('subagent_failure_detected', {
+      session_id: sessionId, description: desc, patterns: failures,
+    });
+
+    return { decision: 'block', reason, hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: reason } };
+  }
+
+  return {};
+}, { hookType: 'PostToolUse', matcher: 'Agent' });

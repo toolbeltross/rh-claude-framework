@@ -1,0 +1,82 @@
+// read-audit.js
+// PostToolUse:Read + PostToolUse:mcp__pdf-reader__read_pdf hook.
+// Logs reads and warns on partial content from large files.
+
+const fs = require('fs');
+const path = require('path');
+const { wrapHook } = require('./lib/hook-timing');
+const { config } = require('./lib/config');
+
+const LOG_PATH = path.join(config.claudeDir, 'session-reads.log');
+const WARN_MARKER_DIR = path.join(config.claudeDir, 'read-warn-markers');
+const TRUNCATION_THRESHOLD_LINES = 800;
+
+function todayStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function shouldWarnOnce(filePath) {
+  try {
+    if (!fs.existsSync(WARN_MARKER_DIR)) fs.mkdirSync(WARN_MARKER_DIR, { recursive: true });
+    const safeName = filePath.replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
+    const marker = path.join(WARN_MARKER_DIR, `${todayStamp()}_${safeName}.warn`);
+    if (fs.existsSync(marker)) return false;
+    fs.writeFileSync(marker, '', 'utf8');
+    return true;
+  } catch { return false; }
+}
+
+function countLinesIfReasonable(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size > 5 * 1024 * 1024) return Infinity;
+    const content = fs.readFileSync(filePath, 'utf8');
+    return content.split(/\r?\n/).length;
+  } catch { return null; }
+}
+
+wrapHook('read-audit', (input) => {
+  const toolName = input?.tool_name || 'unknown';
+  const ti = input?.tool_input || {};
+  const timestamp = new Date().toISOString();
+
+  let entry;
+  let warning = null;
+
+  if (toolName === 'Read') {
+    const filepath = ti.file_path || 'unknown';
+    const offset = ti.offset || 0;
+    const limit = ti.limit || 'default(2000)';
+    entry = `${timestamp} | READ | offset:${offset} limit:${limit} | ${filepath}\n`;
+
+    if (filepath !== 'unknown' && offset === 0 && (limit === 'default(2000)' || limit === 2000)) {
+      const totalLines = countLinesIfReasonable(filepath);
+      if (totalLines !== null && totalLines > TRUNCATION_THRESHOLD_LINES) {
+        if (shouldWarnOnce(filepath)) {
+          warning = `[read-audit] ${filepath} has ${totalLines === Infinity ? '> 5MB worth of' : totalLines} lines (threshold ${TRUNCATION_THRESHOLD_LINES}). Direct Read in main context returns partial content. Per read-integrity.md, dispatch a subagent or use offset/limit reads. Suppressing further warnings for this file today.`;
+        }
+      }
+    }
+  } else if (toolName === 'mcp__pdf-reader__read_pdf') {
+    const sources = Array.isArray(ti.sources) ? ti.sources : [];
+    const urls = sources.map(s => s?.url || s?.path || '?').join(';');
+    const pages = ti.pages || 'all';
+    const to = (input?.tool_output || input?.tool_result || '').toString();
+    const m = to.match(/"(?:num_pages|total_pages|page_count|numPages|totalPages)"\s*:\s*(\d+)/i)
+           || to.match(/of\s+(\d+)\s+pages?/i)
+           || to.match(/(\d+)\s+pages?\s+total/i);
+    const respPages = m ? m[1] : '?';
+    entry = `${timestamp} | PDF  | requested:${pages} sources:${sources.length} resp_pages:${respPages} | ${urls}\n`;
+  } else {
+    entry = `${timestamp} | ${toolName} | ${JSON.stringify(ti).slice(0, 200)}\n`;
+  }
+
+  try { fs.appendFileSync(LOG_PATH, entry, 'utf8'); } catch {}
+
+  if (warning) {
+    process.stderr.write(warning + '\n');
+    return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: warning } };
+  }
+
+  return {};
+}, { hookType: 'PostToolUse', matcher: 'Read' });
