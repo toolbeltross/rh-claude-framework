@@ -64,22 +64,34 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
     }
   }
 
-  // Merge env vars (additive)
-  existing.env = { ...(existing.env || {}), ...(templateSettings.env || {}) };
+  // Merge env vars (additive — user's existing values WIN over template defaults).
+  // The spread order is intentional: user customizations like OVERSIGHT_LOG_PATH
+  // pointing at a custom workspace path must not be overwritten on re-init.
+  existing.env = { ...(templateSettings.env || {}), ...(existing.env || {}) };
 
-  // Merge hooks (replace by matcher key — don't duplicate)
+  // Merge hooks (dedupe by matcher + command-content, not just matcher).
+  // Multiple matchless entries (SessionStart, Stop) with DIFFERENT command bodies
+  // are legitimately distinct — the prior matcher-only key collapsed them.
   const existingHooks = existing.hooks || {};
   const templateHooks = templateSettings.hooks || {};
+
+  function entryKey(entry) {
+    const matcher = entry.matcher || '*';
+    const cmds = (entry.hooks || [])
+      .map(h => h.command || h.prompt || h.type || '')
+      .join('|');
+    return `${matcher}::${cmds}`;
+  }
 
   for (const [phase, entries] of Object.entries(templateHooks)) {
     if (!existingHooks[phase]) { existingHooks[phase] = entries; continue; }
     for (const newEntry of entries) {
-      const matcher = newEntry.matcher || '*';
-      const existingIdx = existingHooks[phase].findIndex(e => (e.matcher || '*') === matcher);
+      const newKey = entryKey(newEntry);
+      const existingIdx = existingHooks[phase].findIndex(e => entryKey(e) === newKey);
       if (existingIdx >= 0) {
-        existingHooks[phase][existingIdx] = newEntry;
+        existingHooks[phase][existingIdx] = newEntry; // exact match — replace (idempotent)
       } else {
-        existingHooks[phase].push(newEntry);
+        existingHooks[phase].push(newEntry);          // genuinely new — append
       }
     }
   }
