@@ -1,14 +1,17 @@
 // read-audit.js
 // PostToolUse:Read + PostToolUse:mcp__pdf-reader__read_pdf hook.
-// Logs reads and warns on partial content from large files.
+// Logs every read to ~/.claude/session-reads.log AND, for F-06, surfaces a
+// non-blocking warning when a Read returns partial content from a > 800-line
+// file with no offset/limit (per Workspace/.claude/rules/rh-read-integrity.md
+// the threshold above which direct reads in main context become unreliable).
+// The warning is rate-limited to once-per-file-per-session to avoid nag noise.
 
 const fs = require('fs');
 const path = require('path');
 const { wrapHook } = require('./lib/hook-timing');
-const { config } = require('./lib/config');
 
-const LOG_PATH = path.join(config.claudeDir, 'session-reads.log');
-const WARN_MARKER_DIR = path.join(config.claudeDir, 'read-warn-markers');
+const LOG_PATH = process.env.USERPROFILE + '/.claude/session-reads.log';
+const WARN_MARKER_DIR = process.env.USERPROFILE + '/.claude/read-warn-markers';
 const TRUNCATION_THRESHOLD_LINES = 800;
 
 function todayStamp() {
@@ -68,14 +71,26 @@ wrapHook('read-audit', (input) => {
     const respPages = m ? m[1] : '?';
     entry = `${timestamp} | PDF  | requested:${pages} sources:${sources.length} resp_pages:${respPages} | ${urls}\n`;
   } else {
+    // CRITICAL size bound (Phase 1 C3, 2026-05-02): .slice(0, 200) keeps
+    // entry well under the NTFS sub-block atomicity bound (~4KB). DO NOT
+    // remove this slice — toolInput can carry user content of arbitrary size.
     entry = `${timestamp} | ${toolName} | ${JSON.stringify(ti).slice(0, 200)}\n`;
   }
 
+  // JSONL atomic-append assumption: unlocked because Windows NTFS guarantees
+  // atomicity for sub-block writes (~4KB). Entry is bounded by the
+  // .slice(0, 200) above on toolInput. If you remove or relax that slice,
+  // switch to lib/file-lock.js withLock instead of bare appendFileSync.
   try { fs.appendFileSync(LOG_PATH, entry, 'utf8'); } catch {}
 
   if (warning) {
     process.stderr.write(warning + '\n');
-    return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: warning } };
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: warning,
+      }
+    };
   }
 
   return {};

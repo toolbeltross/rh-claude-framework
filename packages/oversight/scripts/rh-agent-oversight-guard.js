@@ -1,7 +1,17 @@
 // agent-oversight-guard.js
-// PreToolUse:Agent hook — auto-appends canonical oversight block to Agent
-// dispatch prompts missing required elements (verification tokens, context
-// report, batch overflow rule).
+// PreToolUse:Agent hook — enforces subagent-oversight.md by AUTO-APPENDING the
+// canonical oversight block to any Agent dispatch prompt that doesn't already
+// contain the three required elements (verification tokens, context report,
+// batch overflow rule).
+//
+// Behavior:
+//   - All 3 elements present → allow, no mutation
+//   - Any element missing    → auto-append canonical block, allow with updatedInput
+//
+// Telemetry: every auto-append POSTs an `oversight_auto_inject` event to the
+// telemetry server (fire-and-forget) so the supervisor can see how often
+// prompts get mutated and why. The supervisor was previously blind to this
+// because the auto-append was logged only to stderr / hook-debug.log.
 
 const http = require('http');
 const { appendOversightEvent } = require('./lib/oversight-events');
@@ -12,10 +22,15 @@ function notifyTelemetry(eventType, error, extra) {
   if (process.env.OVERSIGHT_SELF_TEST === '1') return;
   try {
     const body = JSON.stringify({
-      tool_name: 'Agent', event_type: eventType, success: false, error, session_id: '', ...(extra || {}),
+      tool_name: 'Agent',
+      event_type: eventType,
+      success: false,
+      error,
+      session_id: '',
+      ...(extra || {}),
     });
     const req = http.request(
-      `${config.telemetryUrl}/api/hooks`,
+      `http://localhost:${config.telemetryPort}/api/hooks`,
       { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 1200 },
       (res) => { res.resume(); }
     );
@@ -54,21 +69,38 @@ wrapHook('agent-oversight-guard', (input) => {
     batchOverflow:     /batch overflow|STOP and return|stop.*remaining count/i.test(prompt),
   };
 
-  if (Object.values(checks).every(Boolean)) return {};
+  const allPresent = Object.values(checks).every(Boolean);
+
+  if (allPresent) return {};
 
   const updatedInput = { ...toolInput, prompt: prompt + CANONICAL_BLOCK };
-  const missing = Object.entries(checks).filter(([, ok]) => !ok).map(([k]) => k);
+  const missing = Object.entries(checks)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
 
   process.stderr.write(`[agent-oversight-guard] Auto-appended oversight block. Missing elements: ${missing.join(', ')}\n`);
 
   notifyTelemetry('oversight_auto_inject',
     `[AUTO-INJECT] Missing oversight elements appended: ${missing.join(', ')}`,
-    { session_id: sessionId, tool_input: { description: toolInput.description || '', subagent_type: toolInput.subagent_type || '' }, missing_elements: missing }
+    {
+      session_id: sessionId,
+      tool_input: { description: toolInput.description || '', subagent_type: toolInput.subagent_type || '' },
+      missing_elements: missing,
+    }
   );
 
   appendOversightEvent('oversight_auto_inject', {
-    session_id: sessionId, description: toolInput.description || '', subagent_type: toolInput.subagent_type || '', missing_elements: missing,
+    session_id: sessionId,
+    description: toolInput.description || '',
+    subagent_type: toolInput.subagent_type || '',
+    missing_elements: missing,
   });
 
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput } };
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      updatedInput,
+    }
+  };
 }, { hookType: 'PreToolUse', matcher: 'Agent' });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Standalone Claude Code statusline — based on statusline-script.md
-// Temporary until claude-telemetry is installed and configured.
+// Temporary until rh-telemetry is installed and configured.
 // Reads JSON from stdin, outputs 2-3 line ANSI-formatted status.
 
 const DEFAULT_CONTEXT_WINDOW_SIZE = 200000;
