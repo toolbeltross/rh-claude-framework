@@ -1,8 +1,8 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-02
+**Last session:** 2026-05-04
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` (git init'd, no commits yet)
+**Branch:** `main` — 3 commits (initial `9c3455f`, rename `85c82ab`, merge `8745c69`)
 
 ## What exists
 
@@ -32,19 +32,19 @@ grep -r "rossb\|C:/Users/rossb\|OneDrive/Workspace\|claude-setup-ross\|toolbeltr
 
 ### Must-do before first real install
 
-1. **Test `rh-oversight init` without `--dry-run`** — confirm files actually copy, hooks merge correctly into settings.json, oversight.json gets written
-2. **Test installed scripts from `~/.claude/scripts/`** — the tests run from monorepo source; need to confirm they work after copy (relative `./lib/config` require path)
+1. ✅ **Test `rh-oversight init` without `--dry-run`** — Verified 2026-05-04 against tmp HOME `C:/Users/rossb/AppData/Local/Temp/rh-test-home-xRVm/`. `oversight.json` written with workspace + oversightDir + telemetryPort=7890; settings.json merged 4 phases / 8 hook entries; 20 scripts + 18 agents + 3 skills + 12 rules copied; starter CLAUDE.md written to tmp workspace.
+2. ✅ **Test installed scripts from `~/.claude/scripts/`** — Verified 2026-05-04. Self-test from installed location `<TMP_HOME>/.claude/scripts/rh-oversight-self-test.js` returned `oversight-self-test: 37/37 hard passed`. Relative `./lib/config` requires resolve correctly post-copy.
 
 ### Should-do before sharing
 
-5. **Migrate telemetry project** into `packages/telemetry/` — the telemetry project at `rh-telemetry/` should move in as the second workspace package. Its `setup-hooks.js` also has hardcoded paths (supervisory prompt rule citations at lines 122-127)
-6. **Initial git commit** — everything is staged but not committed
-7. **CLAUDE.md for the framework repo itself**
-8. **README.md** with install instructions
+5. **Migrate telemetry project** into `packages/telemetry/` — the telemetry project at `rh-telemetry/` should move in as the second workspace package. Its `setup-hooks.js` also has hardcoded paths (supervisory prompt rule citations at lines 122-127). See [`PLAN-20260504-framework-followups.md`](PLAN-20260504-framework-followups.md) Phase D for strategic options + execution checklist.
+6. ✅ **Initial git commit** — done in a prior session (commit `9c3455f`). This session added 2 more commits (rename `85c82ab`, merge `8745c69`).
+7. ✅ **CLAUDE.md for the framework repo itself** — [`CLAUDE.md`](CLAUDE.md) authored 2026-05-04
+8. ✅ **README.md** with install instructions — [`README.md`](README.md) authored 2026-05-04
 
 ### Nice-to-have
 
-9. Integration test: spawn `rh-oversight init` against a tmp HOME, then run self-test from the installed location
+9. Integration test: spawn `rh-oversight init` against a tmp HOME, then run self-test from the installed location *(Phase A of PLAN-20260504-framework-followups.md performed this manually; codifying it as a repeatable test is still pending)*
 10. npm link / npm pack testing for global install path
 
 ## Key architecture decisions (for pickup context)
