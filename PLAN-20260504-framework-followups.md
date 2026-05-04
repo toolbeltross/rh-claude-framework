@@ -5,6 +5,15 @@
 **Scope:** Close items 1, 2, 5, 6, 7, 8 in `PROGRESS.md`. Items 9, 10 remain nice-to-have.
 **Recovery posture:** All phases idempotent; checkbox tracking per step.
 
+**Status:** ✅ ALL PHASES EXECUTED 2026-05-04 (same day). PROGRESS.md items 1, 2, 5, 6, 7, 8 closed. Phase D (telemetry migration) was gated for sign-off, user picked D-α + D-1 + D-i, executed via PR #3 (migration) + repo archive. Items 9, 10 remain nice-to-have as planned. The phase checkboxes below were the original plan; all are now done — kept as historical narrative.
+
+| Phase | PR | Status |
+|---|---|---|
+| A — Validate init end-to-end | (verification only) | ✅ |
+| B — Author CLAUDE.md + README.md | #2 | ✅ |
+| C — PROGRESS.md fact corrections | #2 | ✅ |
+| D — Telemetry migration | #3 | ✅ |
+
 ---
 
 ## Phase A — Validate `rh-oversight init` end-to-end (covers PROGRESS #1 + #2)

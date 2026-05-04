@@ -1,8 +1,18 @@
 # PLAN — Oversight reconciliation: deployed ↔ framework
 
 **Created:** 2026-05-04 (queued from cutover session)
-**Status:** PLANNED — not started. Branch was attempted then rolled back; framework `main` is clean.
-**Why deferred:** medium-risk per-file work; needs deliberate plan + fresh context budget.
+**Status:** ✅ EXECUTED 2026-05-04 (same day) — framework reconciled with deployed via PR #5; init idempotency bug surfaced during deploy fixed via PR #6.
+**Original deferral reason:** medium-risk per-file work; needed deliberate plan + fresh context budget — proceeded same-session after user pushed forward.
+
+## Resolution summary
+
+- **PR #5** (`chore/oversight-reconcile-with-deployed`, merged): bulk-copied deployed → framework as zero-loss base, mechanically reapplied `lib/config` abstraction via regex transform, plus targeted fixes for `claude-setup-ross/...` paths to use `config.oversightDir` family. 19 oversight scripts in framework (12 use `lib/config` — others have no path resolution to abstract). 2 missing lib helpers added (`file-lock.js`, `phase-timing.js`).
+- **PR #6** (`fix/oversight-init-idempotency`, merged): init template was overwriting user-customized env vars + duplicating matchless hooks; fixed.
+- **Live deploy:** `rh-oversight init` against Ross's HOME wrote merged scripts to `~/.claude/scripts/`; backup at `~/.claude/scripts.pre-reconcile-20260504-151528/`.
+- **Outer-seam verification:** self-test from live `~/.claude/scripts/` returned **37/37 hard passed**, doc-sync probe now PASSES, hook-debug.log shows fresh entries from this session.
+- **Settings.json post-deploy fixes:** init's aggressive merge clobbered `OVERSIGHT_LOG_PATH` and created duplicate SessionStart hooks; both fixed by hand. The fix in PR #6 prevents this on future re-runs.
+
+The phase checkboxes below were the original plan; **all are now done** (verified outer-seam). Kept here as historical narrative.
 
 ---
 
