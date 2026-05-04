@@ -1,0 +1,7 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node /tmp/totally-custom-statusline.js"
+  },
+  "hooks": {}
+}
