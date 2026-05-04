@@ -39,7 +39,7 @@ function resolveConfig() {
   const file = loadFileConfig();
   const workspace = process.env.CLAUDE_WORKSPACE || file.workspace || autoDetectWorkspace();
   const claudeDir = process.env.CLAUDE_DIR || file.claudeDir || CLAUDE_DIR;
-  const telemetryPort = parseInt(process.env.CLAUDE_TELEMETRY_PORT || file.telemetryPort || '7890', 10);
+  const telemetryPort = parseInt(process.env.RH_TELEMETRY_PORT || file.telemetryPort || '7890', 10);
 
   _cachedConfig = {
     home: HOME,

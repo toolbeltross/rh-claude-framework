@@ -55,10 +55,10 @@ When invoked at session start or asked for recommendations, provide **environmen
 
 #### Verify, don't assume — environment-hook reality is empirical
 
-This block previously hardcoded per-environment "NOT supported" claims (e.g., `UserPromptSubmit` not supported in Claude Desktop, `statusLine` not supported there, "no hooks fire at all" for empty entrypoint). **Those claims were wrong** — verified 2026-04-25 in Claude Desktop where `user-prompt` (52 fires), `config-change` (23), `status` (8), `tool` (378), `stop` (64), `subagent-start/stop` (2/5) all fired in a single session via `rh-claude-code-telemetry`'s `hook-forwarder.js`.
+This block previously hardcoded per-environment "NOT supported" claims (e.g., `UserPromptSubmit` not supported in Claude Desktop, `statusLine` not supported there, "no hooks fire at all" for empty entrypoint). **Those claims were wrong** — verified 2026-04-25 in Claude Desktop where `user-prompt` (52 fires), `config-change` (23), `status` (8), `tool` (378), `stop` (64), `subagent-start/stop` (2/5) all fired in a single session via `rh-telemetry`'s `hook-forwarder.js`.
 
 **Why hardcoded environment claims drift wrong:**
-1. `rh-claude-code-telemetry` (the workspace's telemetry layer, npm package name verified via `package.json`) actively forwards events that some sources claim are "unsupported" — it polyfills/extends hook coverage cross-environment.
+1. `rh-telemetry` (the workspace's telemetry layer, npm package name verified via `package.json`) actively forwards events that some sources claim are "unsupported" — it polyfills/extends hook coverage cross-environment.
 2. Anthropic ships changes to which hooks fire in which environment without explicit announcements.
 3. The user's `settings.json` is shared across CLI / VS Code extension / VS Code terminals (bash + PowerShell) / browser / Claude Desktop. A hook that's a no-op in one environment may fire in another.
 
