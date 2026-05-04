@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agents Tab v2 — Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a; color: #d1d5db; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; padding: 16px; max-width: 1100px; margin: 0 auto;
+  }
+
+  :root {
+    --accent: #8b5cf6; --blue: #60a5fa; --cyan: #22d3ee; --green: #34d399;
+    --amber: #fbbf24; --red: #f87171; --gray-400: #9ca3af; --gray-500: #6b7280;
+    --gray-600: #4b5563; --gray-700: #374151; --gray-800: #1f2937; --gray-900: #111827;
+    --gray-950: #030712;
+  }
+
+  .section-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--gray-400);
+  }
+  .badge {
+    font-size: 10px; padding: 0 6px; border-radius: 9999px; border: 1px solid;
+    display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  }
+  .badge-purple { color: var(--accent); background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); }
+  .badge-cyan { color: var(--cyan); background: rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.3); }
+  .badge-amber { color: var(--amber); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.3); }
+  .badge-red { color: var(--red); background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); }
+  .badge-gray { color: var(--gray-500); background: rgba(107,114,128,0.1); border-color: rgba(107,114,128,0.3); }
+
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .model-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .pulse { animation: pulse 1.2s ease-in-out infinite; }
+
+  .new-marker {
+    font-size: 9px; color: var(--cyan); border: 1px solid rgba(34,211,238,0.4);
+    background: rgba(34,211,238,0.08); padding: 0 4px; border-radius: 3px;
+    font-weight: 600; margin-left: 4px; vertical-align: middle;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    font-size: 10px; font-weight: 500; color: var(--gray-500); text-align: left;
+    padding: 4px 6px 4px 0; border-bottom: 1px solid var(--gray-800);
+    position: sticky; top: 0; background: var(--gray-900); white-space: nowrap;
+  }
+  th.right { text-align: right; }
+  td { padding: 5px 6px 5px 0; border-bottom: 1px solid rgba(31,41,55,0.5); vertical-align: top; }
+  td.right { text-align: right; font-family: 'JetBrains Mono', monospace; vertical-align: middle; white-space: nowrap; }
+  td.mid { vertical-align: middle; white-space: nowrap; }
+
+  tr.active-row { background: rgba(52,211,153,0.03); }
+  tr.active-row td { border-bottom-color: rgba(52,211,153,0.1); }
+  tr.active-row td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+
+  tr.orphan-row { background: rgba(248,113,113,0.02); }
+  tr.orphan-row td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+
+  tr.completed-row:hover { background: rgba(31,41,55,0.3); cursor: pointer; }
+
+  tr.section-sep td {
+    border-bottom: none; padding: 2px 0; font-size: 9px;
+    color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
+  .prompt-text { font-size: 11px; color: var(--gray-400); line-height: 1.4; }
+  .result-text { font-size: 11px; color: var(--gray-500); line-height: 1.4; margin-top: 2px; }
+
+  /* Mini context bar for active agents */
+  .ctx-bar-track {
+    width: 48px; height: 4px; background: var(--gray-700); border-radius: 9999px;
+    overflow: hidden; display: inline-block; vertical-align: middle;
+  }
+  .ctx-bar-fill { height: 100%; border-radius: 9999px; }
+
+  /* Expanded detail row */
+  tr.detail-row td { padding: 0 0 8px 0; border-bottom: 1px solid var(--gray-800); }
+  .detail-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    padding: 6px 8px 0 24px; align-items: stretch;
+  }
+  .detail-cell {
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .detail-panel {
+    background: var(--gray-950); border: 1px solid var(--gray-800);
+    border-radius: 4px; font-size: 11px; color: var(--gray-400);
+    white-space: pre-wrap; overflow-y: auto;
+    line-height: 1.4; padding: 6px 8px;
+    flex: 1; min-height: 60px; max-height: 160px;
+  }
+  .detail-label {
+    font-size: 9px; color: var(--gray-600); margin-bottom: 2px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
+  }
+  .detail-meta { padding: 4px 8px 0 24px; font-size: 10px; color: var(--gray-600); }
+
+  /* Header strip — prominent, information-dense summary bar */
+  .agents-header {
+    background: var(--gray-950); border: 1px solid var(--gray-800);
+    border-radius: 6px; padding: 8px 14px;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .agents-header-group {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .agents-header-sep {
+    width: 1px; height: 24px; background: var(--gray-700); flex-shrink: 0;
+  }
+  /* Big stat in header */
+  .header-stat {
+    display: flex; flex-direction: column; gap: 0px; align-items: center;
+  }
+  .header-stat-value {
+    font-size: 16px; font-weight: 700; line-height: 1.1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .header-stat-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500);
+  }
+  /* Smaller inline stat */
+  .header-mini-stat {
+    display: flex; flex-direction: column; gap: 0px; align-items: center;
+  }
+  .header-mini-value {
+    font-size: 12px; font-weight: 600; line-height: 1.1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .header-mini-label {
+    font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-600);
+  }
+
+  .flex { display: flex; align-items: center; }
+  .gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
+  .wrap { flex-wrap: wrap; }
+  .ml-auto { margin-left: auto; }
+  .shrink-0 { flex-shrink: 0; }
+  .text-accent { color: var(--accent); } .text-blue { color: var(--blue); }
+  .text-cyan { color: var(--cyan); } .text-green { color: var(--green); }
+  .text-amber { color: var(--amber); } .text-red { color: var(--red); }
+  .text-gray-400 { color: var(--gray-400); } .text-gray-500 { color: var(--gray-500); }
+  .text-gray-600 { color: var(--gray-600); }
+  .font-bold { font-weight: 700; } .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+  h1 { font-size: 14px; color: #e5e7eb; margin-bottom: 12px; font-weight: 600; }
+  h2 { font-size: 11px; color: var(--gray-400); margin-bottom: 6px; font-weight: 600;
+       text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .callout {
+    background: rgba(34,211,238,0.05); border: 1px solid rgba(34,211,238,0.2);
+    border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px;
+    color: var(--cyan); line-height: 1.5;
+  }
+  .callout strong { color: #e5e7eb; }
+  .callout ul { margin: 6px 0 0 16px; color: var(--gray-400); }
+  .callout li { margin-bottom: 3px; }
+  .callout code { background: rgba(34,211,238,0.1); padding: 1px 4px; border-radius: 3px; font-size: 10px; }
+
+  .above-tab {
+    background: var(--gray-950); border: 1px dashed var(--gray-700);
+    border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; opacity: 0.5;
+  }
+  .above-tab-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--gray-600); margin-bottom: 4px;
+  }
+
+  .info-icon {
+    font-size: 11px; color: var(--gray-600); cursor: pointer;
+    user-select: none; line-height: 1;
+  }
+  .info-icon:hover { color: var(--gray-400); }
+</style>
+</head>
+<body>
+
+<h1>Agents Tab v2 — Unified Table with Live Telemetry</h1>
+
+<div class="callout">
+  <strong>Key findings from live investigation:</strong>
+  <ul>
+    <li>Subagent transcript JSONL is <strong>written incrementally</strong> while the agent runs — file exists from the moment the agent starts</li>
+    <li>Line 1 = user message containing the <strong>prompt</strong>. Line 2+ = assistant with <code>model</code>, <code>usage</code> (input_tokens, cache_read, cache_write, output_tokens)</li>
+    <li><code>meta.json</code> alongside contains <code>agentType</code> and <code>description</code></li>
+    <li>This means we can show <strong>live context fill, cost, model, and turn count</strong> for active agents by reading their transcript on each tool event</li>
+  </ul>
+  <strong>Design changes:</strong>
+  <ul>
+    <li><strong>Removed Model column</strong> — model is now a colored dot next to agent name (Opus=purple, Sonnet=blue, Haiku=cyan). Already in the color system, no new information lost.</li>
+    <li><strong>Added live context/cost for active agents</strong> — parsed from transcript on each tool event. Shows mini context bar + cost so far.</li>
+    <li>Prompt/Result text flows naturally — <code>title</code> hover for full text, click-to-expand for detail panel</li>
+  </ul>
+</div>
+
+<!-- What's above -->
+<div class="above-tab">
+  <div class="above-tab-label">Already visible above (Row 1: Context + Model | Row 2: Plan Usage)</div>
+  <div class="flex gap-3 wrap" style="font-size: 11px; color: var(--gray-600);">
+    <span>Context: 45% | 450K/1M | ~12 turns left</span> <span>|</span>
+    <span>Model: Opus 72% Haiku 28%</span> <span>|</span>
+    <span>Plan: 5hr 6% &middot; 7day 78%</span>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="flex gap-1" style="margin-bottom: 0;">
+  <div style="padding: 6px 12px; font-size: 12px; font-weight: 500; background: var(--gray-900); color: #f3f4f6; border: 1px solid var(--gray-800); border-bottom: none; border-radius: 6px 6px 0 0;">
+    <span class="flex gap-1">Agents <span class="badge badge-cyan" style="font-size: 10px;">2</span></span>
+  </div>
+  <div style="padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--gray-500);">Tools <span style="font-size: 10px; color: var(--gray-600);">47</span></div>
+  <div style="padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--gray-500);">Failures <span style="font-size: 10px; color: var(--red);">3</span></div>
+  <div style="padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--gray-500);">Details</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- AGENTS TAB CONTENT -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div style="background: var(--gray-900); border: 1px solid var(--gray-800); border-top: none; border-radius: 0 0 8px 8px; padding: 10px 14px;">
+
+  <!-- Header — prominent summary strip -->
+  <div class="agents-header">
+    <!-- Title -->
+    <span class="section-label flex gap-1 shrink-0" style="align-items: center; font-size: 11px;"
+          title="Subagents spawned by Claude. Each runs in its own context.">
+      Agents <span class="info-icon" title="Click for more info">&#9432;</span>
+    </span>
+
+    <div class="agents-header-sep"></div>
+
+    <!-- Big stats: active + done -->
+    <div class="agents-header-group">
+      <div class="header-stat" title="Currently running agents">
+        <span class="header-stat-value text-cyan">2</span>
+        <span class="header-stat-label">active</span>
+      </div>
+      <div class="header-stat" title="Completed agents this session">
+        <span class="header-stat-value text-gray-400">5</span>
+        <span class="header-stat-label">done</span>
+      </div>
+    </div>
+
+    <div class="agents-header-sep"></div>
+
+    <!-- Cost + tokens -->
+    <div class="agents-header-group">
+      <div class="header-stat" title="Total agent cost: $2.18 — 28.4% of $7.67 session total">
+        <span class="header-stat-value text-amber">$2.18</span>
+        <span class="header-stat-label">agent cost</span>
+      </div>
+      <div class="header-mini-stat" title="28.4% of total session cost attributed to subagents">
+        <span class="header-mini-value text-gray-400">28%</span>
+        <span class="header-mini-label">of session</span>
+      </div>
+      <div class="header-mini-stat" title="Total tokens across all completed agents: 142,300">
+        <span class="header-mini-value text-gray-400">142K</span>
+        <span class="header-mini-label">tokens</span>
+      </div>
+    </div>
+
+    <div class="agents-header-sep"></div>
+
+    <!-- Health indicators -->
+    <div class="agents-header-group">
+      <div class="header-mini-stat" title="1 agent orphaned (no SubagentStop received) — likely lost during compaction">
+        <span class="header-mini-value text-red">1</span>
+        <span class="header-mini-label">orphaned</span>
+      </div>
+      <div class="header-mini-stat" title="3 tool failures across all agents">
+        <span class="header-mini-value text-red">3</span>
+        <span class="header-mini-label">fails</span>
+      </div>
+      <div class="header-mini-stat" title="1 agent transcript not found — token/cost data missing, totals understate spend">
+        <span class="header-mini-value text-amber">1</span>
+        <span class="header-mini-label">lost tx</span>
+      </div>
+    </div>
+
+    <div class="agents-header-sep"></div>
+
+    <!-- Timeline toggle -->
+    <div class="agents-header-group" style="cursor: pointer;"
+         title="Click to expand/collapse the subagent timeline Gantt chart — 7 agents, 1 compaction, 4 stops">
+      <span class="text-gray-400" style="font-size: 10px; border-bottom: 1px dotted var(--gray-700);">&#9662; timeline</span>
+      <span class="text-gray-500" style="font-size: 10px;">7a &middot; 1c &middot; 4s</span>
+    </div>
+
+    <!-- Version — far right -->
+    <span class="ml-auto badge badge-gray" style="font-size: 9px;" title="Claude Code version (from statusLine)">v2.1.117</span>
+  </div>
+
+  <!-- TABLE -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 16px;" title="Agent status"></th>
+        <th title="Agent type (model shown as colored dot: purple=Opus, blue=Sonnet, cyan=Haiku)">Agent</th>
+        <th class="right" title="Agent cost (live estimate for active, transcript-based for completed)">Cost</th>
+        <th class="right" title="Context fill — live for active agents (from transcript), final for completed">Ctx</th>
+        <th class="right" title="Duration — live elapsed for active, total for completed">Dur</th>
+        <th class="right" title="Tool calls (last tool in parentheses)">Tools</th>
+        <th style="padding-left: 8px;" title="Agent prompt and result. Full text on hover, click row to expand.">Prompt / Result</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <!-- ── ACTIVE AGENTS ── live telemetry from transcript -->
+
+      <tr class="active-row">
+        <td class="mid"><span class="dot pulse" style="background: var(--green);" title="Agent is actively running"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--cyan);" title="Model: claude-haiku-4-5-20251001"></span>
+            <span class="font-bold text-cyan" title="Agent type: Explore">Explore</span>
+          </span>
+        </td>
+        <td class="right font-mono" style="font-size: 11px;" title="Live cost estimate from transcript parse: $0.08">
+          <span class="text-amber">$0.08</span>
+          <span class="new-marker" style="margin-left: 2px; font-size: 8px;">LIVE</span>
+        </td>
+        <td class="right" title="Agent context: 34% filled (14.8K of 43.7K tokens used)">
+          <div class="ctx-bar-track">
+            <div class="ctx-bar-fill" style="width: 34%; background: var(--green);"></div>
+          </div>
+          <span class="font-mono text-gray-400" style="font-size: 10px; margin-left: 4px;">34%</span>
+        </td>
+        <td class="right text-gray-400 font-mono" title="Elapsed: 2 minutes 34 seconds">2m34s</td>
+        <td class="right" title="12 tool calls (most recent: Grep)"><span class="text-blue">12</span> <span class="text-gray-600" style="font-size: 10px;">(Grep)</span></td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text" title="Find all files matching &quot;*.test.js&quot; under tests/ and check which ones import from store.js. Report file paths and line counts.">Find all files matching "*.test.js" under tests/ and check which ones import from store.js. Report file paths and line counts.</div>
+        </td>
+      </tr>
+
+      <tr class="active-row">
+        <td class="mid"><span class="dot pulse" style="background: var(--green);" title="Agent is actively running"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--accent);" title="Model: claude-opus-4-6"></span>
+            <span class="font-bold text-accent" title="Agent type: Plan">Plan</span>
+          </span>
+          <span class="badge badge-amber" style="font-size: 9px; margin-left: 4px;" title="No tool events for 2m18s">idle 2m</span>
+        </td>
+        <td class="right font-mono" style="font-size: 11px;" title="Live cost estimate: $0.42">
+          <span class="text-amber">$0.42</span>
+        </td>
+        <td class="right" title="Agent context: 67% filled (58.2K of 87K tokens used) — approaching limit">
+          <div class="ctx-bar-track">
+            <div class="ctx-bar-fill" style="width: 67%; background: var(--amber);"></div>
+          </div>
+          <span class="font-mono text-amber" style="font-size: 10px; margin-left: 4px;">67%</span>
+        </td>
+        <td class="right text-gray-400 font-mono" title="Elapsed: 5 minutes 2 seconds">5m02s</td>
+        <td class="right" title="3 tool calls (most recent: Read)"><span class="text-blue">3</span> <span class="text-gray-600" style="font-size: 10px;">(Read)</span></td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text" title="Design implementation plan for adding rate_limits display to the Agents tab. Consider existing PlanUsage component and avoid duplicating what's already shown in Row 2 of SessionTab.">Design implementation plan for adding rate_limits display to the Agents tab. Consider existing PlanUsage component and avoid duplicating what's already shown in Row 2 of SessionTab.</div>
+        </td>
+      </tr>
+
+      <!-- ── SEPARATOR ── -->
+      <tr class="section-sep"><td colspan="7" style="padding-top: 6px;">completed</td></tr>
+
+      <!-- ── COMPLETED AGENTS ── -->
+
+      <tr class="completed-row" title="Click to expand full prompt and result">
+        <td class="mid"><span class="dot" style="background: var(--gray-600);" title="Agent completed"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--accent);" title="Model: claude-opus-4-6"></span>
+            <span class="font-bold text-blue" title="Agent type: general-purpose">general</span>
+          </span>
+          <span class="badge badge-red" style="font-size: 9px; margin-left: 4px;" title="2 tool failures inside this agent">2 fails</span>
+        </td>
+        <td class="right text-amber font-mono" title="Cost: $1.0400 (from transcript)">$1.04</td>
+        <td class="right text-gray-500 font-mono" style="font-size: 10px;" title="Used 145K tokens total (input + output)">145K</td>
+        <td class="right text-gray-500" title="Duration: 12 minutes 5 seconds">12m05</td>
+        <td class="right text-gray-500" title="18 tool calls (last: Edit)">18</td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text" title="Review migration 0042_user_schema.sql for safety. Context: adding a NOT NULL column to a 50M-row table with backfill default. Is the backfill safe under concurrent writes?">Review migration 0042_user_schema.sql for safety. Context: adding a NOT NULL column to a 50M-row table with backfill default. Is the backfill safe under concurrent writes?</div>
+          <div class="result-text" style="color: var(--red);" title="The migration is NOT safe under concurrent writes. The backfill holds an ACCESS EXCLUSIVE lock for 3-8 minutes on 50M rows, blocking all reads and writes. Recommend: add column as nullable first, backfill in batches, then add NOT NULL constraint.">&#x2717; Migration NOT safe — holds ACCESS EXCLUSIVE lock for 3-8 min, blocks all reads and writes</div>
+        </td>
+      </tr>
+
+      <!-- Expanded detail (click to toggle) -->
+      <tr class="detail-row">
+        <td colspan="7">
+          <div class="detail-grid">
+            <div class="detail-cell">
+              <div class="detail-label">Prompt</div>
+              <div class="detail-panel">Review migration 0042_user_schema.sql for safety. Context: we're adding a NOT NULL column to a 50M-row table. Existing rows get a backfill default. I want a second opinion on whether the backfill approach is safe under concurrent writes — I've checked locking behavior but want independent verification. Report: is this safe, and if not, what specifically breaks?</div>
+            </div>
+            <div class="detail-cell">
+              <div class="detail-label">Result</div>
+              <div class="detail-panel" style="color: var(--red);">The migration is NOT safe under concurrent writes. The backfill runs as a single transaction that holds an ACCESS EXCLUSIVE lock on the table for the entire duration. On a 50M-row table this will take 3-8 minutes, during which all reads and writes to the table are blocked.
+
+Recommend: add column as nullable first, backfill in batches of 10K-50K rows with explicit commits, then add NOT NULL constraint as a separate migration.</div>
+            </div>
+          </div>
+          <div class="detail-meta flex gap-2 wrap">
+            <span title="Start and end time">01:22:17 — 01:34:22</span>
+            <span>&middot;</span>
+            <span title="Input: 80,200 | Output: 64,800 | Cache Read: 42,100">80.2K in / 64.8K out</span>
+            <span>&middot;</span>
+            <span title="Number of model turns">6 turns</span>
+            <span>&middot;</span>
+            <span class="badge badge-gray" style="font-size: 9px;" title="Permission mode the agent ran under">plan</span>
+            <span class="font-mono ml-auto" title="Agent ID: c3d1e88a-7f92-4b11-a3e2-1234567890ab">c3d1e88a</span>
+          </div>
+        </td>
+      </tr>
+
+      <tr class="completed-row" title="Click to expand full prompt and result">
+        <td class="mid"><span class="dot" style="background: var(--gray-600);"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--accent);"></span>
+            <span class="font-bold text-accent">facilitator</span>
+          </span>
+        </td>
+        <td class="right text-amber font-mono">$0.55</td>
+        <td class="right text-gray-500 font-mono" style="font-size: 10px;">62K</td>
+        <td class="right text-gray-500">4m22</td>
+        <td class="right text-gray-500">8</td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text">Orchestrate batch PDF extraction for 5 K-1 documents. Dispatch pdf-extractor agents in parallel, collect results, cross-check entity names.</div>
+          <div class="result-text">Dispatched 3 subagents, all completed. 5 K-1s extracted, entity names cross-checked — 0 conflicts.</div>
+        </td>
+      </tr>
+
+      <tr class="completed-row" title="Click to expand full prompt and result">
+        <td class="mid"><span class="dot" style="background: var(--gray-600);"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--blue);"></span>
+            <span class="font-bold text-amber">excel-writer</span>
+          </span>
+        </td>
+        <td class="right font-mono" style="color: rgba(251,191,36,0.6);" title="Estimated cost — transcript unavailable">~$0.32</td>
+        <td class="right text-gray-500 font-mono" style="font-size: 10px;">3.7K</td>
+        <td class="right text-gray-500">23m48</td>
+        <td class="right text-gray-500">11</td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text">Update ASSETS tab with Q1 K-1 data from extracted PDFs. Verify formulas and formatting are intact after write.</div>
+          <div class="result-text">Updated 12 rows in ASSETS tab. All formulas intact. Chart ranges auto-expanded.</div>
+        </td>
+      </tr>
+
+      <tr class="completed-row" title="Click to expand">
+        <td class="mid"><span class="dot" style="background: var(--gray-600);"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--cyan);"></span>
+            <span class="font-bold text-cyan">Explore</span>
+          </span>
+        </td>
+        <td class="right text-amber font-mono">$0.14</td>
+        <td class="right text-gray-500 font-mono" style="font-size: 10px;">3.0K</td>
+        <td class="right text-gray-500">1m30</td>
+        <td class="right text-gray-500">6</td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text">Read package.json and report the "version" field value.</div>
+          <div class="result-text">version: 1.0.0</div>
+        </td>
+      </tr>
+
+      <tr class="completed-row" title="Click to expand">
+        <td class="mid"><span class="dot" style="background: var(--gray-600);"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--cyan);"></span>
+            <span class="font-bold text-green">code-guide</span>
+          </span>
+          <span class="badge badge-amber" style="font-size: 9px; margin-left: 4px;" title="Transcript file not found — token/cost data unavailable">transcript lost</span>
+        </td>
+        <td class="right text-amber font-mono">$0.13</td>
+        <td class="right text-gray-500 font-mono" style="font-size: 10px;">1.3K</td>
+        <td class="right text-gray-500">0m45</td>
+        <td class="right text-gray-500">10</td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text">Look up official Claude Code hooks documentation. List every field in SubagentStart/SubagentStop stdin JSON.</div>
+          <div class="result-text">Listed SubagentStart/Stop payload fields. SubagentStart: session_id, transcript_path, cwd, agent_id, agent_type, hook_event_name.</div>
+        </td>
+      </tr>
+
+      <!-- ── ORPHANED ── -->
+      <tr class="orphan-row" style="cursor: pointer;" title="Click to expand — orphaned agent">
+        <td class="mid"><span class="dot" style="background: var(--red);" title="Orphaned — no SubagentStop received (12 min idle)"></span></td>
+        <td class="mid">
+          <span class="flex gap-1">
+            <span class="model-dot" style="background: var(--accent);"></span>
+            <span class="font-bold text-accent">facilitator</span>
+          </span>
+          <span class="badge badge-red" style="font-size: 9px; margin-left: 4px;">orphaned</span>
+          <span class="badge badge-amber" style="font-size: 9px; margin-left: 2px;" title="Ran during 1 compaction event">&#8635;1c</span>
+        </td>
+        <td class="right text-gray-600">—</td>
+        <td class="right text-gray-600">—</td>
+        <td class="right text-gray-500">?</td>
+        <td class="right text-gray-500">3</td>
+        <td style="padding-left: 8px;">
+          <div class="prompt-text">Orchestrate batch PDF extraction for 5 K-1 documents. Dispatch pdf-extractor agents in parallel...</div>
+          <div class="result-text" style="color: var(--red); font-style: italic;">no result — orphaned after 12m idle (compaction likely dropped SubagentStop)</div>
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+
+  <!-- No footer needed — health indicators (orphaned, fails, lost transcripts) are in the header strip -->
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- DATA SOURCE NOTES -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div style="margin-top: 32px; padding-top: 16px; border-top: 2px solid var(--gray-800);">
+  <h2 style="color: var(--cyan); margin-bottom: 12px;">Data Sources — Verified Against Live Payloads</h2>
+  <table style="font-size: 11px;">
+    <thead><tr><th>Column / Element</th><th>Active agents</th><th>Completed agents</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Model dot</strong></td>
+        <td>Line 2 of transcript JSONL (<code>message.model</code>). Available immediately after first API call.</td>
+        <td>Already parsed on SubagentStop via <code>parseTranscript()</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Cost</strong></td>
+        <td style="color: var(--cyan);"><strong>NEW:</strong> Live estimate — parse transcript tail on each tool event. Sum <code>usage</code> across all lines, apply <code>cost-rates.js</code>.</td>
+        <td>Already available from transcript parse.</td>
+      </tr>
+      <tr>
+        <td><strong>Ctx (context fill)</strong></td>
+        <td style="color: var(--cyan);"><strong>NEW:</strong> Last assistant line's <code>input_tokens + cache_read + cache_creation</code> = context used. Show as mini bar + percentage. Color: green &lt;50%, amber 50-80%, red &gt;80%.</td>
+        <td>Show total tokens (already have). Context fill % less meaningful after completion — just show raw token count.</td>
+      </tr>
+      <tr>
+        <td><strong>Prompt</strong></td>
+        <td style="color: var(--cyan);"><strong>NEW:</strong> Line 1 of transcript JSONL (<code>message.content</code>). Read once on SubagentStart (transcript_path in payload, file exists immediately).</td>
+        <td style="color: var(--cyan);"><strong>NEW:</strong> Same — read on SubagentStop if not already cached from start.</td>
+      </tr>
+      <tr>
+        <td><strong>Result</strong></td>
+        <td>Not available (agent still running).</td>
+        <td>Already captured: <code>last_assistant_message</code> from SubagentStop payload.</td>
+      </tr>
+      <tr>
+        <td><strong>Permission mode</strong></td>
+        <td>Not in SubagentStart payload.</td>
+        <td style="color: var(--cyan);"><strong>NEW:</strong> <code>permission_mode</code> from SubagentStop payload. Show in expanded detail.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 style="color: var(--cyan); margin-top: 16px; margin-bottom: 8px;">Performance Considerations</h2>
+  <div style="font-size: 11px; color: var(--gray-400); line-height: 1.6;">
+    <p><strong>Transcript read frequency for active agents:</strong> Parse on each tool event (agent_id-scoped, not every tool event). Reads last ~4KB via <code>readTail</code> (same function we already use on SubagentStop). On a typical agent doing 1 tool/second peak, that's 1 small file read per second per agent — negligible I/O.</p>
+    <p style="margin-top: 6px;"><strong>Prompt read:</strong> One-shot on SubagentStart. Read first line only (~1-5KB). Cache in memory on the active agent record. Never re-read.</p>
+    <p style="margin-top: 6px;"><strong>Fallback:</strong> If transcript is unavailable (race condition, permissions), degrade gracefully to "—" for cost/context, same as current behavior for active agents.</p>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.vite/
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
+*.tgz
+tests/visual-parity/output/
+.claude/settings.local.json
+.claude/worktrees/
+hook-debug.log
+
+# Repo-root PNG working artifacts from visual-verification sessions.
+# Canonical README screenshots live in docs/screenshots/ and are tracked.
+/verify-*.png
+/critique-*.png
+/heartbeat-*.png
+/turnheartbeat-*.png
+/turns-tab-*.png
+/header-*.png
+/heatmap-*.png
+/lollipop-*.png
+/overview-*.png
+/details-tab-*.png
+/dashboard-*.png
+/fixes-*.png
+/final-state.png
+.playwright-mcp/

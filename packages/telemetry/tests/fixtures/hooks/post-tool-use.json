@@ -1,0 +1,8 @@
+{
+  "tool_name": "Read",
+  "tool_input": { "file_path": "/some/file.js" },
+  "session_id": "test-session-abc123",
+  "event_type": "post_tool_use",
+  "cwd": "/tmp/fake-project",
+  "success": true
+}
