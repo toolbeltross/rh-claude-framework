@@ -1,6 +1,13 @@
 // consolidation-guard.js
 // PreToolUse:Write hook — blocks consolidation-document Writes that lack a
 // Source Registry with verification tokens.
+//
+// Refactor 2026-04-25 (proposed + accepted): the previous version had two
+// silent-failure problems (a) JSON.parse on malformed stdin would throw,
+// causing fail-CLOSED behavior (block); (b) blocks were not surfaced to the
+// telemetry feed, so the supervisor was blind. Fixes:
+//   - Try/catch around stdin parse with fail-OPEN on malformed input
+//   - Fire-and-forget POST to /api/hooks on every block so the supervisor sees them
 
 const http = require('http');
 const { appendOversightEvent } = require('./lib/oversight-events');
@@ -19,7 +26,7 @@ function notifyTelemetry(eventType, error, extra) {
       ...(extra || {}),
     });
     const req = http.request(
-      `${config.telemetryUrl}/api/hooks`,
+      `http://localhost:${config.telemetryPort}/api/hooks`,
       { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 1200 },
       (res) => { res.resume(); }
     );
@@ -47,11 +54,17 @@ wrapHook('consolidation-guard', (input) => {
 
     notifyTelemetry('consolidation_blocked',
       `[BLOCK] Missing Source Registry / tokens for ${filename}`,
-      { session_id: sessionId, tool_input: { file_path: filename, missing_registry: !hasRegistry, missing_tokens: !hasTokens } }
+      {
+        session_id: sessionId,
+        tool_input: { file_path: filename, missing_registry: !hasRegistry, missing_tokens: !hasTokens },
+      }
     );
 
     appendOversightEvent('consolidation_blocked', {
-      session_id: sessionId, file_path: filename, missing_registry: !hasRegistry, missing_tokens: !hasTokens,
+      session_id: sessionId,
+      file_path: filename,
+      missing_registry: !hasRegistry,
+      missing_tokens: !hasTokens,
     });
 
     return { decision: 'block', reason };
