@@ -37,7 +37,7 @@ grep -r "rossb\|C:/Users/rossb\|OneDrive/Workspace\|claude-setup-ross\|toolbeltr
 
 ### Should-do before sharing
 
-5. **Migrate telemetry project** into `packages/telemetry/` — the telemetry project at `rh-claude-code-telemetry/` should move in as the second workspace package. Its `setup-hooks.js` also has hardcoded paths (supervisory prompt rule citations at lines 122-127)
+5. **Migrate telemetry project** into `packages/telemetry/` — the telemetry project at `rh-telemetry/` should move in as the second workspace package. Its `setup-hooks.js` also has hardcoded paths (supervisory prompt rule citations at lines 122-127)
 6. **Initial git commit** — everything is staged but not committed
 7. **CLAUDE.md for the framework repo itself**
 8. **README.md** with install instructions

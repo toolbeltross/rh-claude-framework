@@ -41,19 +41,19 @@ const tests = [
     },
   },
   {
-    name: 'config respects CLAUDE_TELEMETRY_PORT env var',
+    name: 'config respects RH_TELEMETRY_PORT env var',
     fn: () => {
-      const orig = process.env.CLAUDE_TELEMETRY_PORT;
+      const orig = process.env.RH_TELEMETRY_PORT;
       const { resolveConfig, resetCache } = require('../scripts/lib/config');
       try {
-        process.env.CLAUDE_TELEMETRY_PORT = '9999';
+        process.env.RH_TELEMETRY_PORT = '9999';
         resetCache();
         const c = resolveConfig();
         assert.strictEqual(c.telemetryPort, 9999);
         assert.strictEqual(c.telemetryUrl, 'http://localhost:9999');
       } finally {
-        if (orig === undefined) delete process.env.CLAUDE_TELEMETRY_PORT;
-        else process.env.CLAUDE_TELEMETRY_PORT = orig;
+        if (orig === undefined) delete process.env.RH_TELEMETRY_PORT;
+        else process.env.RH_TELEMETRY_PORT = orig;
         resetCache();
       }
     },
