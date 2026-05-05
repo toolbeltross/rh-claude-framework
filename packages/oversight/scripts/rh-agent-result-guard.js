@@ -91,6 +91,48 @@ wrapHook('agent-result-guard', (input) => {
     failures.push('Subagent hit context limits — results may be incomplete');
   }
 
+  // Protocol-compliance check (added 2026-05-04, F-09 follow-up):
+  // If the dispatching prompt required the oversight protocol (either the author
+  // included it, or rh-agent-oversight-guard.js auto-injected the canonical block),
+  // the response should contain the self-reported telemetry block. Log violations
+  // to oversight-events.jsonl as a soft signal — does NOT add to `failures` so
+  // working flows are not disrupted on first deploy. Promote to hard block once
+  // the false-positive rate is understood.
+  const promptText = (input?.tool_input?.prompt || '').toString();
+  const promptRequiredProtocol =
+    /verification token|literal first line|first line verbatim/i.test(promptText) &&
+    /compaction/i.test(promptText) &&
+    /% used/i.test(promptText);
+
+  if (promptRequiredProtocol && output.length > 200) {
+    const hasTelemetryBlock =
+      /items?\s*(found|processed|successful|failed)/i.test(output) &&
+      (/context\s*usage|%\s*used|compaction/i.test(output));
+    const hasVerificationArtifact =
+      /first line[:\s]|verification token|line count[:\s]/i.test(output);
+
+    const protocolMissing = [];
+    if (!hasTelemetryBlock) protocolMissing.push('telemetry-block');
+    if (!hasVerificationArtifact) protocolMissing.push('verification-artifact');
+
+    if (protocolMissing.length > 0) {
+      notifyTelemetry('subagent_protocol_violation',
+        `[PROTOCOL VIOLATION] ${desc}: missing ${protocolMissing.join(', ')}`,
+        {
+          session_id: sessionId,
+          tool_input: { description: desc },
+          missing_elements: protocolMissing,
+        }
+      );
+      appendOversightEvent('subagent_protocol_violation', {
+        session_id: sessionId,
+        description: desc,
+        missing_elements: protocolMissing,
+      });
+      process.stderr.write(`[agent-result-guard] Protocol violation in "${desc}": missing ${protocolMissing.join(', ')}\n`);
+    }
+  }
+
   if (failures.length > 0) {
     const reason =
       `SUBAGENT FAILURE DETECTED in "${desc}":\n` +

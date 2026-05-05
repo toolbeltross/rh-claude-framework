@@ -100,6 +100,48 @@ const tests = [
       assert.ok(out.decision !== 'block', 'should not block clean output');
     },
   },
+  {
+    name: 'agent-result-guard flags protocol violation when prompt required protocol but output lacks telemetry+token',
+    fn: () => {
+      const r = runHook('rh-agent-result-guard.js', {
+        session_id: 'test-protocol-violation',
+        tool_input: {
+          description: 'protocol test',
+          prompt: 'Process N files. Return verification token (literal first line) for each. End with telemetry: compaction count and % used.'
+        },
+        tool_output: 'I read the files and the analysis is complete. The findings are consistent across all sources and no anomalies were detected. The work has been finished successfully without any issues whatsoever and I am providing this longer summary so the length-gate on the protocol check is exceeded.'
+      });
+      assert.ok(/Protocol violation/.test(r.stderr), 'stderr should warn about protocol violation');
+    },
+  },
+  {
+    name: 'agent-result-guard does not flag when output contains telemetry block + verification artifact',
+    fn: () => {
+      const r = runHook('rh-agent-result-guard.js', {
+        session_id: 'test-compliant',
+        tool_input: {
+          description: 'compliant test',
+          prompt: 'Process files. Return verification token (literal first line). End with telemetry including compaction and % used.'
+        },
+        tool_output: "File 1 first line: '# Header'\nFile 2 first line: '---\\nname: x'\n\nItems found: 2 / Items processed: 2 / Items failed: 0\nContext usage: 0 compactions, 23% used"
+      });
+      assert.ok(!/Protocol violation/.test(r.stderr), 'stderr should be clean for compliant output');
+    },
+  },
+  {
+    name: 'agent-result-guard does not flag protocol when prompt did not require protocol',
+    fn: () => {
+      const r = runHook('rh-agent-result-guard.js', {
+        session_id: 'test-no-protocol',
+        tool_input: {
+          description: 'simple task',
+          prompt: 'Just summarize this file.'
+        },
+        tool_output: 'Here is a brief summary of the requested content with relevant details and context.'
+      });
+      assert.ok(!/Protocol violation/.test(r.stderr), 'stderr should be clean when prompt did not require protocol');
+    },
+  },
   // Robustness: malformed input should not crash
   {
     name: 'consolidation-guard handles empty stdin',
