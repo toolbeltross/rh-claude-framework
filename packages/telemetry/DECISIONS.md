@@ -36,8 +36,10 @@ Yesterday's session bailed on the directory rename due to "Device or resource bu
 
 ### Carried forward
 
-- **Delete `toolbeltross/claude-telemetry` (the obsolete second repo)** — still queued; needs `gh auth refresh -h github.com -s delete_repo` browser OAuth flow. `toolbeltross/claude-telemetry-archived` discovered during this session — left untouched pending user direction.
-- **Framework migration** (`rh-telemetry/` → `rh-claude-framework/packages/telemetry/`) — out of scope per the rename-first decision in the 2026-05-03 entry.
+- **Delete `toolbeltross/claude-telemetry` (the obsolete second repo)** — ✅ done 2026-05-04. User completed `gh auth refresh -h github.com -s delete_repo` OAuth; `gh repo delete toolbeltross/claude-telemetry --yes` succeeded; `gh repo view` returns 404.
+- **`toolbeltross/claude-telemetry-archived`** — moved to local Archive (`Workspace/Archive/claude-telemetry-archived/`) preserving full git history (commit `285878c`); GitHub repo deleted afterward.
+- **Framework migration** (`rh-telemetry/` → `rh-claude-framework/packages/telemetry/`) — ✅ done 2026-05-04 via PR #3. D-α copy strategy (zero loss base + reapplied `lib/config` abstraction). Live `:7890` server cut over from old workspace clone to migrated location. Old `toolbeltross/rh-telemetry` GitHub repo archived (read-only). This file you're reading now is the migrated DECISIONS.md.
+- **OVERSIGHT_SYSTEM.md design-doc sync** — ✅ done 2026-05-04. Appended "2026-05-04 (later)" + "2026-05-04 (final)" bullets under Rename history. Re-ran `rh-daily-regen.js` (9/9 ok) and `rh-oversight-self-test.js` — `doc-sync probe` now PASS, 37/37 hard, 0 soft warnings.
 
 ### Source
 
