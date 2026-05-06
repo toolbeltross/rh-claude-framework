@@ -1,8 +1,30 @@
 # Distribution Readiness Plan
 
-Status: PENDING — implement as Ross Here (admin, repo owner)
+Status: PRE-PUBLISH GATE — Phases 1, 2, 3, 4.3 ✅ DONE 2026-05-06 (verified against current monorepo state). Phase 4.1 (git ownership decision) and Phase 5 (npm publish) remain user-gated.
 
-## Open Question
+## Status check (2026-05-06)
+
+| Phase | Item | Current state |
+|---|---|---|
+| 1.1 | Remove `docs/` from npm `files` | ✅ Done — `files: ["bin/", "server/", "scripts/*.js", "dist/"]` |
+| 1.2 | Remove `src/` from npm `files` | ✅ Done — same |
+| 1.3 | Remove `['Ross Here', 'rossb']` profiles in `setup-hooks.js` | ✅ Done — grep returns zero matches |
+| 1.4 | Add LICENSE | ✅ Done — `packages/telemetry/LICENSE` exists |
+| 1.5 | Move/remove `cross-env` | ✅ Done — `cross-env` not in package.json |
+| 2.1 | Delete 5 obsolete scripts | ✅ Done (4/5 already gone via prior cleanup; 1 kept: `supervisory-agent-prompt.md` is still the active reference doc for Layer 3a per `CLAUDE.md:235` — re-enabled 2026-04-19 after the plan was written) |
+| 2.2 | Clean up `filterOurEntries` strings | ✅ Done — only `'ADDITIVE ONLY'` remains and it's the LIVE Layer 3a marker (load-bearing for hook detection during reinstall) |
+| 3.1 | README accuracy fixes | ✅ Done 2026-05-06 — clone URL updated to framework, slash commands renamed `/telemetry` → `/rh-telemetry`, hook count and Stop description already current |
+| 3.2 | Privacy section | ✅ Done — README lines 178-183 |
+| 4.1 | Git ownership (Ross Here vs rossb) | ⏳ User decision — not actionable in-session |
+| 4.2 | Verify git remote matches package.json | ✅ Done — `repository.url: https://github.com/toolbeltross/rh-claude-framework`, `directory: packages/telemetry` |
+| 4.3 | `.npmignore` defense-in-depth | ✅ Done — `.npmignore` exists |
+| 5 | `npm pack` + `npm publish` | ⏳ User-gated, irreversible (72h unpublish window) |
+
+**Net pending for npm publish:** make 4.1 ownership decision (or skip via `safe.directory`), then run Phase 5.
+
+---
+
+## Open Question (original — preserved for context)
 
 Both `rossb` and `Ross Here` are the same person. The repo is currently owned by Ross Here.
 Decision needed: which user should own the files going forward?

@@ -104,11 +104,11 @@ Then open http://localhost:7890 in your browser.
 ## Alternative: Clone & Dev
 
 ```bash
-git clone https://github.com/toolbeltross/rh-telemetry.git
-cd rh-telemetry
+git clone https://github.com/toolbeltross/rh-claude-framework.git
+cd rh-claude-framework/packages/telemetry
 npm install
 npm run setup-hooks       # configure Claude Code hooks
-npm run install-skills    # install /telemetry skill
+npm run install-skills    # install /rh-telemetry skill
 npm run dev               # Vite on :5173, API on :7890
 ```
 
@@ -131,7 +131,7 @@ npm run dev               # Vite on :5173, API on :7890
    - `TaskCompleted` — logs task completions
    - `statusLine` — sends live session data (cost, context, model)
 
-2. **Skills** — Installs `/telemetry` and `/telemetry-setup` as Claude Code skills
+2. **Skills** — Installs `/rh-telemetry` and `/rh-telemetry-setup` as Claude Code skills
 
 ## Usage
 
@@ -158,7 +158,7 @@ rh-telemetry status         # check if server is running
 
 ### Inline Skill
 
-Inside any Claude Code session, type `/telemetry` to get an inline summary without leaving the conversation.
+Inside any Claude Code session, type `/rh-telemetry` to get an inline summary without leaving the conversation.
 
 ## Architecture
 
