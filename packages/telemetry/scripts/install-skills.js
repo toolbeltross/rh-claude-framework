@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Installs /telemetry and /telemetry-setup as Claude Code skills.
-// Creates skill directories under ~/.claude/skills/ and generates SKILL.md files.
+// Installs /rh-telemetry and /rh-telemetry-setup as Claude Code skills.
+// Creates skill directories under ~/.claude/skills/ and generates SKILL.md files
+// that invoke the project's CLI directly via absolute path (no copy, no symlink).
 
-import { mkdir, copyFile, writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
@@ -12,26 +13,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
 const SKILLS_DIR = join(homedir(), '.claude', 'skills');
 
-const TELEMETRY_SKILL_DIR = join(SKILLS_DIR, 'telemetry');
-const SETUP_SKILL_DIR = join(SKILLS_DIR, 'telemetry-setup');
+const TELEMETRY_SKILL_DIR = join(SKILLS_DIR, 'rh-telemetry');
+const SETUP_SKILL_DIR = join(SKILLS_DIR, 'rh-telemetry-setup');
 
 async function main() {
-  // Create skill directories
-  await mkdir(join(TELEMETRY_SKILL_DIR, 'scripts'), { recursive: true });
+  // Create skill directories (no scripts/ subdir — SKILL.md invokes the project's CLI directly via absolute path)
+  await mkdir(TELEMETRY_SKILL_DIR, { recursive: true });
   await mkdir(SETUP_SKILL_DIR, { recursive: true });
 
-  // Copy the standalone CLI script into the telemetry skill
-  await copyFile(
-    join(PROJECT_ROOT, 'scripts', 'telemetry-cli.js'),
-    join(TELEMETRY_SKILL_DIR, 'scripts', 'telemetry-cli.js')
-  );
-
-  // Generate /telemetry SKILL.md
-  // Uses !`command` for dynamic context injection — runs before Claude sees the prompt
-  const cliPath = join(TELEMETRY_SKILL_DIR, 'scripts', 'telemetry-cli.js').replace(/\\/g, '/');
+  // SKILL.md invokes the project's CLI via absolute path. No copy. No symlink. Works for both
+  // workspace-dev (PROJECT_ROOT = clone) and `npm install -g rh-telemetry` (PROJECT_ROOT =
+  // node_modules/rh-telemetry). Avoids the relative-import breakage that copying alone causes.
+  const cliPath = join(PROJECT_ROOT, 'scripts', 'telemetry-cli.js').replace(/\\/g, '/');
 
   const telemetrySkillMd = `---
-name: telemetry
+name: rh-telemetry
 description: Show Claude Code session stats, costs, context usage, and model breakdown inline
 argument-hint: "[summary|sessions|costs|context|activity|session <name>]"
 ---
@@ -64,7 +60,7 @@ Available subcommands the user can pass as arguments:
   const projectPath = PROJECT_ROOT.replace(/\\/g, '/');
 
   const setupSkillMd = `---
-name: telemetry-setup
+name: rh-telemetry-setup
 description: Configure Claude Code hooks and launch the telemetry web dashboard
 disable-model-invocation: true
 ---
@@ -105,20 +101,38 @@ If the user asks to just start the server, only run step 2.
     JSON.stringify({ projectPath: PROJECT_ROOT, installedAt: new Date().toISOString() }, null, 2)
   );
 
+  // Self-test: verify the installed skill is end-to-end callable. This is the linchpin —
+  // any future change that breaks the CLI's import graph fails install-skills.js immediately
+  // on the developer's workstation, instead of silently in a user's next /rh-telemetry invocation.
+  const { spawnSync } = await import('child_process');
+  const r = spawnSync(
+    process.execPath,
+    [join(PROJECT_ROOT, 'scripts', 'telemetry-cli.js'), 'summary'],
+    { encoding: 'utf-8', timeout: 10_000 }
+  );
+  if (r.status !== 0 || !/Claude Code Telemetry|No sessions found/.test(r.stdout || '')) {
+    console.error('Self-test failed. Skill is installed but CLI is not invokable.');
+    console.error('exit:', r.status);
+    console.error('stdout:', r.stdout);
+    console.error('stderr:', r.stderr);
+    process.exit(1);
+  }
+  console.log('Self-test passed (CLI is callable end-to-end).');
+
   console.log('Claude Code skills installed successfully!');
   console.log('');
   console.log('Skills created:');
-  console.log(`  /telemetry       → ${TELEMETRY_SKILL_DIR}`);
-  console.log(`  /telemetry-setup → ${SETUP_SKILL_DIR}`);
+  console.log(`  /rh-telemetry       → ${TELEMETRY_SKILL_DIR}`);
+  console.log(`  /rh-telemetry-setup → ${SETUP_SKILL_DIR}`);
   console.log('');
   console.log('Usage:');
-  console.log('  /telemetry              — show session summary inline');
-  console.log('  /telemetry sessions     — list all sessions by cost');
-  console.log('  /telemetry costs        — cost breakdown by model');
-  console.log('  /telemetry context      — context window details');
-  console.log('  /telemetry activity     — daily activity stats');
-  console.log('  /telemetry session X    — details for project X');
-  console.log('  /telemetry-setup        — configure hooks & launch dashboard');
+  console.log('  /rh-telemetry              — show session summary inline');
+  console.log('  /rh-telemetry sessions     — list all sessions by cost');
+  console.log('  /rh-telemetry costs        — cost breakdown by model');
+  console.log('  /rh-telemetry context      — context window details');
+  console.log('  /rh-telemetry activity     — daily activity stats');
+  console.log('  /rh-telemetry session X    — details for project X');
+  console.log('  /rh-telemetry-setup        — configure hooks & launch dashboard');
   console.log('');
   console.log('Start a new Claude Code session to use these skills.');
 }

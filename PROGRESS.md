@@ -18,7 +18,7 @@
 | Templates (CLAUDE.md, settings.json) | `packages/oversight/templates/` | Done | settings.json template used by init dry-run |
 | Init CLI (`rh-oversight init/reset/self-test`) | `packages/oversight/bin/rh-oversight.js` + `lib/init.js` | Done | **Dry-run only** — write path NOT tested |
 | Test suite | `packages/oversight/tests/` | Done — 16/16 passing | Runner + config + guard suites |
-| packages/telemetry/ | Stub dir only | Placeholder | Not started |
+| packages/telemetry/ | Migrated 2026-05-04 (chore/migrate-telemetry-to-monorepo, `f91cc47`) | Done — full project copy | Tests pass; install-skills.js hardened 2026-05-06 (DECISIONS.md entry) |
 
 ## Zero hardcoded paths verified
 
@@ -37,7 +37,7 @@ grep -r "rossb\|C:/Users/rossb\|OneDrive/Workspace\|claude-setup-ross\|toolbeltr
 
 ### Should-do before sharing
 
-5. **Migrate telemetry project** into `packages/telemetry/` — the telemetry project at `rh-telemetry/` should move in as the second workspace package. Its `setup-hooks.js` also has hardcoded paths (supervisory prompt rule citations at lines 122-127). See [`PLAN-20260504-framework-followups.md`](PLAN-20260504-framework-followups.md) Phase D for strategic options + execution checklist.
+5. ✅ **Migrate telemetry project** into `packages/telemetry/` — landed via `chore/migrate-telemetry-to-monorepo` (`f91cc47`, 2026-05-04). The standalone `toolbeltross/rh-telemetry` GitHub repo is now archived (read-only); the monorepo `packages/telemetry/` is canonical. See [`PLAN-20260504-framework-followups.md`](PLAN-20260504-framework-followups.md) Phase D for the original plan. Note: `setup-hooks.js` may still have hardcoded paths to audit (supervisory prompt rule citations) — separate followup.
 6. ✅ **Initial git commit** — done in a prior session (commit `9c3455f`). This session added 2 more commits (rename `85c82ab`, merge `8745c69`).
 7. ✅ **CLAUDE.md for the framework repo itself** — [`CLAUDE.md`](CLAUDE.md) authored 2026-05-04
 8. ✅ **README.md** with install instructions — [`README.md`](README.md) authored 2026-05-04

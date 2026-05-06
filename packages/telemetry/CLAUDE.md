@@ -94,7 +94,7 @@ src/
     MetricCard.jsx        — Reusable label+value card with tooltip support
 scripts/
   setup-hooks.js              — Configures all Claude Code hooks in ~/.claude/settings.json
-  install-skills.js           — Installs /telemetry and /telemetry-setup Claude Code skills
+  install-skills.js           — Installs /rh-telemetry and /rh-telemetry-setup Claude Code skills (writes ~/.claude/skills/rh-telemetry/SKILL.md that invokes telemetry-cli.js via project absolute path; self-tests CLI invocation before exiting success)
   hook-forwarder.js           — Cross-platform hook forwarder (reads stdin JSON, POSTs to server)
   start-bg.js                 — Background server starter (auto-starts on session via hooks)
   tool-validator.js            — Layer 1 deterministic bash command checker (blocks cat→Read, grep→Grep, etc.)
@@ -409,7 +409,7 @@ Four-tier test harness. Plain Node `assert` scripts — no test framework, no ne
 
 - **Global install**: `npm install -g rh-telemetry` → use `rh-telemetry` commands
 - **Local dev**: `git clone` + `npm install` → use `npm run` scripts
-- Generated `/telemetry-setup` SKILL.md includes absolute paths resolved at install time (by design — needed so the skill can find the package wherever it was installed)
+- Generated `/rh-telemetry` and `/rh-telemetry-setup` SKILL.md files include the project's absolute path resolved at install time (by design — needed so the skill can find the project wherever it was installed). No copy, no symlink: SKILL.md invokes `<PROJECT_ROOT>/scripts/telemetry-cli.js` directly. This pattern survives directory renames as long as `node scripts/install-skills.js` is re-run from the new location — see `DECISIONS.md` 2026-05-06 entry for why.
 
 ## Known Issues / TODO
 
