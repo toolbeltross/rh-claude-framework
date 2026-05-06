@@ -20,7 +20,7 @@ rh-claude-framework/
     │   ├── rules/                  # workspace rule files (copied to <workspace>/.claude/rules/)
     │   ├── templates/              # settings.json + CLAUDE.md templates
     │   └── tests/                  # config + guard test suites
-    └── telemetry/                  # rh-telemetry (stub — migration pending)
+    └── telemetry/                  # rh-telemetry (migrated 2026-05-04; canonical home — standalone GitHub repo is archived)
 ```
 
 ## Conventions

@@ -4,6 +4,50 @@ Decision lineage for this project. Append-only. Newest at top.
 
 ---
 
+## 2026-05-06 — Skill installation pipeline: kill the rename-fragility class
+
+### Decision
+
+Re-architected `packages/telemetry/scripts/install-skills.js` so a future rename never breaks `/rh-telemetry` again. Three coordinated changes:
+
+1. **Install path matches slash command**: writes to `~/.claude/skills/rh-telemetry/` (was `telemetry/`). Eliminates the drift between install path and the registered slash-command name that has caused the failure on every rename.
+2. **SKILL.md invokes the project CLI via absolute path** — no copy, no symlink. The generated `~/.claude/skills/rh-telemetry/SKILL.md` runs `node "<PROJECT_ROOT>/scripts/telemetry-cli.js"` directly. Replaces the prior copy-then-symlink-server-dir scheme that broke on every rename because `telemetry-cli.js`'s relative `import '../server/config.js'` could never be satisfied at the install location without dragging the entire `server/` tree.
+3. **Self-test gate at end of `install-skills.js`** — spawns the installed CLI with `summary` and exits non-zero unless the output matches `/Claude Code Telemetry|No sessions found/`. Any future change that breaks the CLI's import graph fails the installer immediately on the developer's workstation.
+
+Plus a unit-test mirror at `packages/telemetry/tests/unit/install-skills.test.js` (5 tests) so the failure class is also caught in pre-commit.
+
+### Why
+
+Every prior rename (`claude-telemetry` → `rh-claude-code-telemetry` → `rh-telemetry`) left `/rh-telemetry` broken in exactly the same way: a stale chain of symlinks (`~/.claude/skills/rh-telemetry/server` → `node_modules/claude-code-telemetry/server` → `<old-project-name>/server`). The 2026-05-04 rename completion (entry below) updated 12 hook paths in `settings.json` but did not touch the skill install pathway, so the next user invocation of `/rh-telemetry` failed with `ERR_MODULE_NOT_FOUND`. This entry's changes make `node scripts/install-skills.js` from the new project root the single canonical recovery — and the self-test guarantees any regression surfaces at install time, not at user-invocation time weeks later.
+
+### Provenance note — landed in framework, not standalone
+
+The work was first done on the standalone `toolbeltross/rh-telemetry` repo (commit `fe7b7c5` on `main`, local-only). That repo turned out to be archived on GitHub (the migration to `rh-claude-framework/packages/telemetry/` had landed via `chore/migrate-telemetry-to-monorepo` at `f91cc47` but the on-disk copies had drifted apart). The standalone commit is dead-end. This entry records the work as it lives in the framework repo, which is the canonical home going forward.
+
+### Strategic choices made
+
+| Choice | Picked | Alternative considered |
+|---|---|---|
+| CLI distribution strategy | Absolute path in SKILL.md (no copy, no symlink) | (a) Inline the 5 needed config constants — rejected, creates two sources of truth; (b) Copy `server/config.js` + `start-bg.js` + transitive deps — rejected, `start-bg.js` spawns `server/index.js` from `__dirname/..`, requires copying the entire `server/` tree, brittle; (c) Bundle with esbuild — rejected, adds dep + build step. Absolute path works identically for `npm install -g rh-telemetry` (PROJECT_ROOT = `node_modules/rh-telemetry/`) and workspace dev (PROJECT_ROOT = clone). |
+| Install-path naming | `rh-telemetry/` (matches slash command + npm package) | `telemetry/` (legacy). Rejected — the gap between install path and slash command was Defect A in the recurrence pattern. |
+| Branch strategy | New `fix/skill-install-rename-resilient` branch off main | (a) Commit on current `fix/result-guard-protocol-compliance` — rejected, mixes unrelated work; (b) commit directly to main — rejected, bypasses repo's per-topic-branch PR pattern. |
+
+### Verification gates passed in this session
+
+- **G1** (outer seam) — `/rh-telemetry` invoked via Skill tool returned live data; SKILL.md "Base directory" header confirmed regenerated file was loaded fresh
+- **G2** (outer seam) — `/rh-telemetry live` returned current live session block
+- **G3** — `node packages/telemetry/scripts/install-skills.js` printed literal `Self-test passed (CLI is callable end-to-end).`
+- **G4** — `node tests/unit/install-skills.test.js` → 5/5 against the framework path
+- **G5** — `~/.claude/skills/rh-telemetry/SKILL.md` now references `<framework>/packages/telemetry/scripts/telemetry-cli.js`, not the standalone path
+
+### Source
+
+- Plan file: `C:/Users/rossb/.claude/plans/check-with-the-supervisor-sparkling-meteor.md`
+- Standalone-repo mirror commit (dead-end): `toolbeltross/rh-telemetry@fe7b7c5` (local-only, repo archived)
+- This commit's branch: `fix/skill-install-rename-resilient` off `main` at `89966c0`
+
+---
+
 ## 2026-05-04 — Rename completion (directory + GitHub repo)
 
 ### Decision
