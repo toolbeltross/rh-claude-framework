@@ -1,6 +1,6 @@
 # Distribution Readiness Plan
 
-Status: PRE-PUBLISH GATE — Phases 1, 2, 3, 4.3 ✅ DONE 2026-05-06 (verified against current monorepo state). Phase 4.1 (git ownership decision) and Phase 5 (npm publish) remain user-gated.
+Status: **CLOSED 2026-05-06 — npm publication not being pursued.** User decision: the package will continue to be consumed via local clone of `rh-claude-framework`, not via npm registry. Phases 1, 2, 3, 4.2, 4.3 had already landed (mechanical pre-publish hygiene — kept since they're useful regardless of distribution channel). Phase 4.1 (git ownership) and Phase 5 (`npm publish`) are no longer relevant. Plan retained as historical record of the cleanup work that did happen, in case a future decision reverses course.
 
 ## Status check (2026-05-06)
 
@@ -15,12 +15,12 @@ Status: PRE-PUBLISH GATE — Phases 1, 2, 3, 4.3 ✅ DONE 2026-05-06 (verified a
 | 2.2 | Clean up `filterOurEntries` strings | ✅ Done — only `'ADDITIVE ONLY'` remains and it's the LIVE Layer 3a marker (load-bearing for hook detection during reinstall) |
 | 3.1 | README accuracy fixes | ✅ Done 2026-05-06 — clone URL updated to framework, slash commands renamed `/telemetry` → `/rh-telemetry`, hook count and Stop description already current |
 | 3.2 | Privacy section | ✅ Done — README lines 178-183 |
-| 4.1 | Git ownership (Ross Here vs rossb) | ⏳ User decision — not actionable in-session |
+| 4.1 | Git ownership (Ross Here vs rossb) | ❌ Not pursuing — npm publish closed out |
 | 4.2 | Verify git remote matches package.json | ✅ Done — `repository.url: https://github.com/toolbeltross/rh-claude-framework`, `directory: packages/telemetry` |
 | 4.3 | `.npmignore` defense-in-depth | ✅ Done — `.npmignore` exists |
-| 5 | `npm pack` + `npm publish` | ⏳ User-gated, irreversible (72h unpublish window) |
+| 5 | `npm pack` + `npm publish` | ❌ Not pursuing — distribution channel will remain "clone the framework repo" |
 
-**Net pending for npm publish:** make 4.1 ownership decision (or skip via `safe.directory`), then run Phase 5.
+**Net pending for npm publish:** none — plan closed.
 
 ---
 
