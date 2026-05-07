@@ -47,6 +47,84 @@ function resolveTemplate(templateContent, vars) {
   return result;
 }
 
+/**
+ * Pure merge logic — given existing hooks object + template hooks object,
+ * return the merged result. Extracted from mergeHooks() for testability.
+ *
+ * MERGE SEMANTICS (revised 2026-05-06 to fix F-10 root cause):
+ *
+ * For each phase in the template:
+ *   - If no existing entries for the phase → take the template entries verbatim
+ *   - For each template entry:
+ *     - If an existing entry with the same matcher exists → MERGE per-hook into
+ *       it. Template hooks whose command/prompt content already appears in the
+ *       existing entry's hooks are no-ops (idempotent re-run). Template hooks
+ *       not yet present are appended to the existing entry's hooks array.
+ *       Foreign hooks (those in existing but not in template) are PRESERVED.
+ *     - If no existing entry has the same matcher → append the template entry.
+ *
+ * Why per-hook (not per-entry) is the right granularity:
+ * The 2026-05-04 incident (F-10) was: rh-telemetry's setup-hooks.js had added
+ * `hook-forwarder.js stop` to the Stop chain, then this merge logic ran on a
+ * fresh settings.json (file recreated) and produced a Stop chain WITHOUT
+ * hook-forwarder.js stop. The supervisory log silently went 3 days without
+ * entries before manual investigation surfaced it.
+ *
+ * The fix preserves any hook the existing chain already has (telemetry's, the
+ * user's manual additions, etc.) while still applying the template's own hooks
+ * idempotently. See OVERSIGHT_SYSTEM.md F-10 and PROGRESS.md item 11 for
+ * background. Test coverage: tests/test-init-merge.js.
+ */
+function mergeHooksData(existingHooks, templateHooks) {
+  // Identity for an individual hook within a chain — based on what makes it
+  // observably the same. Two hooks with the same command string are treated
+  // as the same hook regardless of the type field. Prompt-type hooks fall
+  // back to the prompt body (long but content-stable).
+  function hookKey(h) {
+    if (!h) return '';
+    return h.command || h.prompt || JSON.stringify(h);
+  }
+  // Identity for an entry — the matcher (or '*' for matcherless entries).
+  // We merge per-hook within entries that share a matcher.
+  function entryMatcher(entry) {
+    return entry.matcher || '*';
+  }
+
+  // Shallow clone so callers' input objects aren't mutated.
+  const result = {};
+  for (const [phase, entries] of Object.entries(existingHooks)) {
+    result[phase] = entries.map(e => ({
+      ...e,
+      hooks: [...(e.hooks || [])],
+    }));
+  }
+
+  for (const [phase, templateEntries] of Object.entries(templateHooks)) {
+    if (!result[phase]) {
+      result[phase] = templateEntries.map(e => ({ ...e, hooks: [...(e.hooks || [])] }));
+      continue;
+    }
+    for (const newEntry of templateEntries) {
+      const newMatcher = entryMatcher(newEntry);
+      const existingEntryIdx = result[phase].findIndex(e => entryMatcher(e) === newMatcher);
+
+      if (existingEntryIdx === -1) {
+        // No existing entry with this matcher — add as a new entry
+        result[phase].push({ ...newEntry, hooks: [...(newEntry.hooks || [])] });
+        continue;
+      }
+
+      // Same matcher — merge hooks per-hook. Foreign hooks are preserved.
+      const existingEntry = result[phase][existingEntryIdx];
+      const existingHookKeys = new Set((existingEntry.hooks || []).map(hookKey));
+      const newHooksToAdd = (newEntry.hooks || []).filter(h => !existingHookKeys.has(hookKey(h)));
+      existingEntry.hooks = [...(existingEntry.hooks || []), ...newHooksToAdd];
+    }
+  }
+
+  return result;
+}
+
 function mergeHooks(settingsPath, templatePath, vars, opts) {
   const templateRaw = fs.readFileSync(templatePath, 'utf8');
   const resolved = resolveTemplate(templateRaw, vars);
@@ -69,38 +147,12 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
   // pointing at a custom workspace path must not be overwritten on re-init.
   existing.env = { ...(templateSettings.env || {}), ...(existing.env || {}) };
 
-  // Merge hooks (dedupe by matcher + command-content, not just matcher).
-  // Multiple matchless entries (SessionStart, Stop) with DIFFERENT command bodies
-  // are legitimately distinct — the prior matcher-only key collapsed them.
-  const existingHooks = existing.hooks || {};
-  const templateHooks = templateSettings.hooks || {};
-
-  function entryKey(entry) {
-    const matcher = entry.matcher || '*';
-    const cmds = (entry.hooks || [])
-      .map(h => h.command || h.prompt || h.type || '')
-      .join('|');
-    return `${matcher}::${cmds}`;
-  }
-
-  for (const [phase, entries] of Object.entries(templateHooks)) {
-    if (!existingHooks[phase]) { existingHooks[phase] = entries; continue; }
-    for (const newEntry of entries) {
-      const newKey = entryKey(newEntry);
-      const existingIdx = existingHooks[phase].findIndex(e => entryKey(e) === newKey);
-      if (existingIdx >= 0) {
-        existingHooks[phase][existingIdx] = newEntry; // exact match — replace (idempotent)
-      } else {
-        existingHooks[phase].push(newEntry);          // genuinely new — append
-      }
-    }
-  }
-
-  existing.hooks = existingHooks;
+  // Merge hooks via the pure mergeHooksData function (per-hook additive merge).
+  existing.hooks = mergeHooksData(existing.hooks || {}, templateSettings.hooks || {});
 
   if (opts.dryRun) {
     console.log(`  [dry-run] would write merged hooks to ${settingsPath}`);
-    console.log(`  [dry-run] hook phases: ${Object.keys(existingHooks).join(', ')}`);
+    console.log(`  [dry-run] hook phases: ${Object.keys(existing.hooks).join(', ')}`);
   } else {
     fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + '\n', 'utf8');
     console.log(`  Merged hooks into ${settingsPath}`);
@@ -214,4 +266,4 @@ function run(extraOpts = {}) {
   console.log('\n  Done. Run `rh-oversight self-test` to verify.\n');
 }
 
-module.exports = { run };
+module.exports = { run, mergeHooksData };
