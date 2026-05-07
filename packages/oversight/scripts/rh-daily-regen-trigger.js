@@ -86,6 +86,52 @@ try {
   // Probe must never block session start; swallow any error.
 }
 
+// ─── Daily-regen marker probe (added 2026-05-06) ─────────────────────────
+//
+// PARALLEL TO THE SUPERVISORY-LOG PROBE ABOVE — same shape, different target.
+// Catches the case where the SessionStart-trigger pathway silently fails to
+// produce a successful daily-regen run. The trigger script (this file) spawns
+// daily-regen.js detached + stdio:ignored; on Windows the detached child can
+// be killed when the parent shell exits, especially for long-running steps
+// (rh-learning-loop ~5 min). The Windows Task Scheduler is the documented
+// primary trigger; this SessionStart trigger is best-effort.
+//
+// Without this probe, a 3-day gap (2026-05-04 → 2026-05-07) went unnoticed —
+// workspace HTML renders, ENVIRONMENT.md, OVERSIGHT_STATE.md all stale.
+//
+// 48h threshold (vs 24h for the supervisory-log probe) because daily-regen is
+// expected to skip same-day re-runs via --skip-if-today-done; a 24h threshold
+// would false-positive on every-other-day usage patterns.
+try {
+  const REGEN_MARKER = path.join(
+    os.homedir(),
+    ".claude",
+    "scripts",
+    "daily-regen.last-run"
+  );
+  const REGEN_STALENESS_MS = 48 * 60 * 60 * 1000;
+
+  const stat = fs.statSync(REGEN_MARKER, { throwIfNoEntry: false });
+  if (stat) {
+    const ageMs = Date.now() - stat.mtimeMs;
+    if (ageMs > REGEN_STALENESS_MS) {
+      const { appendOversightEvent } = require("./lib/oversight-events");
+      appendOversightEvent("daily_regen_stale_alert", {
+        marker_path: REGEN_MARKER,
+        last_mtime: new Date(stat.mtimeMs).toISOString(),
+        age_hours: Math.round(ageMs / 3_600_000),
+        threshold_hours: 48,
+        note: "daily-regen marker unwritten for >48h. SessionStart-trigger pathway may not be reliably producing successful runs on Windows; check Windows Task Scheduler 'Claude Code Daily Regen' task as the documented primary trigger.",
+      });
+    }
+  }
+  // Note: missing marker is NOT alerted on — first install / fresh user has
+  // no marker until daily-regen completes once. Different from the supervisory
+  // log which is incrementally append-only.
+} catch {
+  // Probe must never block session start; swallow any error.
+}
+
 // ─── Daily regen trigger (original responsibility) ────────────────────────
 
 const SCRIPT = path.join(__dirname, "daily-regen.js");
