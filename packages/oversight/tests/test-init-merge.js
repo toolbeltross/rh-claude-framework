@@ -1,0 +1,179 @@
+// Unit tests for lib/init.js mergeHooksData — per-hook additive merge.
+//
+// Origin: 2026-05-04 incident (F-10) where rh-oversight init's prior merge
+// logic dropped hook-forwarder.js stop from the Stop chain after rh-telemetry
+// setup had previously added it. Supervisory log silently went 3 days without
+// entries. See OVERSIGHT_SYSTEM.md F-10 + framework PROGRESS.md item 11.
+
+const assert = require('assert');
+const { mergeHooksData } = require('../lib/init');
+
+// Helper: build a hook entry with given matcher + command list.
+// Matcherless entries (Stop, SessionStart, PreCompact, etc.) pass null.
+function entry(matcher, commands) {
+  const e = { hooks: commands.map(c => ({ type: 'command', command: c })) };
+  if (matcher !== null && matcher !== undefined) e.matcher = matcher;
+  return e;
+}
+
+// Extract command strings from a phase's entries (flattened, in order).
+function commandsIn(hooks, phase) {
+  const out = [];
+  for (const e of hooks[phase] || []) {
+    for (const h of e.hooks || []) out.push(h.command || h.prompt || '<other>');
+  }
+  return out;
+}
+
+const tests = [
+  // ─── F-10 regression test: the bug this whole effort targets ───────────
+  {
+    name: 'F-10 regression — telemetry hook-forwarder.js stop in existing Stop chain is preserved when init template is merged in',
+    fn: () => {
+      // Real-world setup: rh-telemetry setup-hooks.js has set up a Stop chain
+      // with hook-forwarder.js stop FIRST, then the oversight scripts.
+      const existing = {
+        Stop: [entry(null, [
+          'node "/p/telemetry/scripts/hook-forwarder.js" stop "$CLAUDE_SESSION_ID"',
+          'node /home/u/.claude/scripts/rh-scribe-prefilter.js',
+          'node /home/u/.claude/scripts/rh-layer3a-capture.js',
+        ])],
+      };
+      // The oversight template only knows about its own hooks (no telemetry).
+      const template = {
+        Stop: [entry(null, [
+          'node /home/u/.claude/scripts/rh-scribe-prefilter.js',
+          'node /home/u/.claude/scripts/rh-layer3a-capture.js',
+        ])],
+      };
+      const merged = mergeHooksData(existing, template);
+      const cmds = commandsIn(merged, 'Stop');
+      // Critical assertion: the telemetry hook is still there.
+      assert.ok(
+        cmds.some(c => c.includes('hook-forwarder.js') && c.includes('stop')),
+        `hook-forwarder.js stop must be preserved; got: ${JSON.stringify(cmds)}`
+      );
+      // No duplicates of the oversight hooks.
+      const prefilterCount = cmds.filter(c => c.includes('rh-scribe-prefilter.js')).length;
+      const captureCount = cmds.filter(c => c.includes('rh-layer3a-capture.js')).length;
+      assert.strictEqual(prefilterCount, 1, `rh-scribe-prefilter.js should appear once; got ${prefilterCount}`);
+      assert.strictEqual(captureCount, 1, `rh-layer3a-capture.js should appear once; got ${captureCount}`);
+      // One Stop entry total (per-hook merge keeps the chain consolidated).
+      assert.strictEqual(merged.Stop.length, 1, `Stop should have exactly one entry; got ${merged.Stop.length}`);
+    },
+  },
+
+  // ─── Cold-start: empty existing settings ───────────────────────────────
+  {
+    name: 'cold-start — empty existing hooks, template entries added verbatim',
+    fn: () => {
+      const merged = mergeHooksData({}, {
+        Stop: [entry(null, ['node /a.js', 'node /b.js'])],
+      });
+      assert.strictEqual(merged.Stop.length, 1);
+      assert.deepStrictEqual(commandsIn(merged, 'Stop'), ['node /a.js', 'node /b.js']);
+    },
+  },
+
+  // ─── Idempotent re-run: same template applied twice, no duplicates ─────
+  {
+    name: 'idempotent re-run — template applied twice produces same result as once',
+    fn: () => {
+      const template = { Stop: [entry(null, ['node /x.js', 'node /y.js'])] };
+      const once = mergeHooksData({}, template);
+      const twice = mergeHooksData(once, template);
+      assert.deepStrictEqual(commandsIn(once, 'Stop'), commandsIn(twice, 'Stop'));
+      assert.strictEqual(twice.Stop.length, 1);
+    },
+  },
+
+  // ─── Foreign matcher preserved (e.g., user-customized PreToolUse) ──────
+  {
+    name: 'foreign matcher preserved — different-matcher entries do not collide',
+    fn: () => {
+      const existing = {
+        PreToolUse: [entry('CustomTool', ['node /custom.js'])],
+      };
+      const template = {
+        PreToolUse: [entry('Bash', ['node /tool-validator.js'])],
+      };
+      const merged = mergeHooksData(existing, template);
+      assert.strictEqual(merged.PreToolUse.length, 2, 'should have both entries (different matchers)');
+      const customEntry = merged.PreToolUse.find(e => e.matcher === 'CustomTool');
+      const bashEntry = merged.PreToolUse.find(e => e.matcher === 'Bash');
+      assert.ok(customEntry, 'CustomTool entry preserved');
+      assert.ok(bashEntry, 'Bash entry added');
+    },
+  },
+
+  // ─── Multi-phase: each phase merged independently ──────────────────────
+  {
+    name: 'multi-phase — Stop and PostToolUse merged independently',
+    fn: () => {
+      const existing = {
+        Stop: [entry(null, ['node /existing-stop.js'])],
+        PostToolUse: [entry('Read', ['node /existing-read.js'])],
+      };
+      const template = {
+        Stop: [entry(null, ['node /template-stop.js'])],
+        SessionStart: [entry(null, ['node /template-start.js'])],
+      };
+      const merged = mergeHooksData(existing, template);
+      assert.deepStrictEqual(
+        commandsIn(merged, 'Stop'),
+        ['node /existing-stop.js', 'node /template-stop.js'],
+        'Stop merged additively'
+      );
+      assert.deepStrictEqual(
+        commandsIn(merged, 'PostToolUse'),
+        ['node /existing-read.js'],
+        'PostToolUse untouched (template did not specify)'
+      );
+      assert.deepStrictEqual(
+        commandsIn(merged, 'SessionStart'),
+        ['node /template-start.js'],
+        'SessionStart added (existing had none)'
+      );
+    },
+  },
+
+  // ─── Prompt-type hooks dedupe by prompt body ───────────────────────────
+  {
+    name: 'prompt-type hooks deduped by prompt body',
+    fn: () => {
+      const existing = {
+        Stop: [{ hooks: [
+          { type: 'prompt', prompt: 'review the turn' },
+          { type: 'command', command: 'node /a.js' },
+        ] }],
+      };
+      const template = {
+        Stop: [{ hooks: [
+          { type: 'prompt', prompt: 'review the turn' }, // same prompt → dedupe
+          { type: 'command', command: 'node /b.js' },    // new command → add
+        ] }],
+      };
+      const merged = mergeHooksData(existing, template);
+      const stopHooks = merged.Stop[0].hooks;
+      assert.strictEqual(stopHooks.length, 3, `should have 3 hooks (1 prompt + 2 commands); got ${stopHooks.length}`);
+      const promptCount = stopHooks.filter(h => h.type === 'prompt').length;
+      assert.strictEqual(promptCount, 1, `prompt should not be duplicated; got ${promptCount}`);
+    },
+  },
+
+  // ─── Input mutation guard: does not mutate caller objects ──────────────
+  {
+    name: 'mergeHooksData does not mutate input objects',
+    fn: () => {
+      const existing = { Stop: [entry(null, ['node /a.js'])] };
+      const template = { Stop: [entry(null, ['node /b.js'])] };
+      const existingSnapshot = JSON.parse(JSON.stringify(existing));
+      const templateSnapshot = JSON.parse(JSON.stringify(template));
+      mergeHooksData(existing, template);
+      assert.deepStrictEqual(existing, existingSnapshot, 'existing must not be mutated');
+      assert.deepStrictEqual(template, templateSnapshot, 'template must not be mutated');
+    },
+  },
+];
+
+module.exports = { tests };
