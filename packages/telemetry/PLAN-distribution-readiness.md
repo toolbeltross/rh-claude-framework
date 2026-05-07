@@ -34,7 +34,11 @@ Decision needed: which user should own the files going forward?
 
 ---
 
-## Phase 1: Remove Personal Content from Package (BLOCKERS)
+## Phase 1: Remove Personal Content from Package (BLOCKERS) — SUPERSEDED
+
+> The unchecked checkboxes below are the **original 2026-04-18 plan body**, kept verbatim as historical record. The current state is in the STATUS table at the top — every Phase 1 item was already resolved before this plan was written or during the monorepo migration. Ignore the checkboxes when assessing what's outstanding.
+
+
 
 ### 1.1 Remove `docs/` from npm `files` field
 - [ ] Edit `package.json`: remove `"docs/"` from the `"files"` array
