@@ -47,6 +47,10 @@ grep -r "rossb\|C:/Users/rossb\|OneDrive/Workspace\|claude-setup-ross\|toolbeltr
 9. Integration test: spawn `rh-oversight init` against a tmp HOME, then run self-test from the installed location *(Phase A of PLAN-20260504-framework-followups.md performed this manually; codifying it as a repeatable test is still pending)*
 10. ❌ npm link / npm pack testing for global install path — closed 2026-05-06; npm publication is not being pursued (see `packages/telemetry/PLAN-distribution-readiness.md` status header)
 
+### Known issues
+
+11. **`rh-oversight init` overwrites Stop hooks added by `rh-telemetry setup`.** Discovered 2026-05-06: on 2026-05-04, running `rh-oversight init` after `rh-telemetry setup` clobbered `hook-forwarder.js stop` from the Stop chain in `~/.claude/settings.json`. The supervisory log silently went 3 days without entries. The framework's Stop template (`packages/oversight/templates/settings.json.template`) intentionally doesn't include `hook-forwarder.js stop` because not all installs have rh-telemetry — but `lib/init.js`'s merge logic (`existingHooks[phase][existingIdx] = newEntry; // exact match — replace`) ends up replacing the entire Stop chain rather than additively merging telemetry's hooks alongside the oversight ones. Workaround: re-run `rh-telemetry setup` after `rh-oversight init`. Proper fix: change init.js to additively merge Stop hook entries that don't match its own signature, OR document the required ordering. Detection of this class of failure is now covered by the `journal_staleness_alert` probe in `rh-daily-regen-trigger.js` (added 2026-05-06).
+
 ## Key architecture decisions (for pickup context)
 
 - **One repo, two packages** — `packages/oversight` (enforcement) + `packages/telemetry` (dashboard). User decided.
