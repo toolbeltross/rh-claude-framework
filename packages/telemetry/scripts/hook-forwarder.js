@@ -45,6 +45,34 @@ function debugLog(msg) {
   } catch {}
 }
 
+// ─── Oversight event helpers (added 2026-05-08, P2-1) ────────────────────
+// Inline schema matches packages/oversight/scripts/lib/oversight-events.js
+// (cross-package require is fragile in ESM; small enough to duplicate).
+const HOME_DIR = process.env.USERPROFILE || process.env.HOME || '';
+const EVENTS_LOG_PATH = join(HOME_DIR, '.claude', 'oversight-events.jsonl');
+const SUBAGENT_FLAG_DIR = join(HOME_DIR, '.claude');
+
+function emitOversightEvent(eventType, data) {
+  try {
+    const safeData = data || {};
+    const dataStr = JSON.stringify(safeData, Object.keys(safeData).sort());
+    const contentHash = createHash('sha256').update(dataStr).digest('hex');
+    const event = {
+      timestamp: new Date().toISOString(),
+      event_type: eventType,
+      data: safeData,
+      content_hash: contentHash,
+    };
+    appendFileSync(EVENTS_LOG_PATH, JSON.stringify(event) + '\n');
+  } catch (e) {
+    debugLog(`emitOversightEvent error: ${e.message}`);
+  }
+}
+
+function subagentFlagPath(agentId) {
+  return join(SUBAGENT_FLAG_DIR, `subagent-active-${agentId}.flag`);
+}
+
 function post(path, data) {
   return new Promise((resolve) => {
     const body = JSON.stringify(data);
@@ -573,6 +601,12 @@ if (mode === 'status') {
   const promptTag = computePromptTag(prompt);
 
   debugLog(`subagent-start: session=${sessionId?.slice(0, 8)} type=${parsed.agent_type || '?'} id=${agentId} parent=${parsed.parent_agent_id || '-'} prompt=${prompt.length}chars tag=${promptTag} desc=${description.slice(0, 40)}`);
+
+  // P2-1: write start-flag so subagent-stop can detect orphans (stops without
+  // a matching start). Per 2026-05-08 audit, the orphan rate was 71% in 7d
+  // window — until alerts fire we have no way to investigate.
+  try { appendFileSync(subagentFlagPath(agentId), `${Date.now()}\n`); } catch {}
+
   await post('/api/subagent', {
     session_id: sessionId,
     action: 'start',
@@ -656,7 +690,27 @@ if (mode === 'status') {
   // enabling cross-subagent conflict detection without schema-level prompt capture.
   const promptTag = computePromptTag(prompt);
 
-  debugLog(`subagent-stop: session=${sessionId?.slice(0, 8)} id=${parsed.agent_id || '?'} transcript=${transcriptPath ? 'yes' : 'no'} tag=${promptTag} perm=${parsed.permission_mode || '-'}`);
+  // P2-1: orphan detection. If flag exists, this stop is paired with a start.
+  // If not, SubagentStart never fired for this agent_id — emit alert.
+  const orphanAgentId = parsed.agent_id || '';
+  let isOrphan = false;
+  if (orphanAgentId) {
+    const flagPath = subagentFlagPath(orphanAgentId);
+    if (existsSync(flagPath)) {
+      try { unlinkSync(flagPath); } catch {}
+    } else {
+      isOrphan = true;
+      emitOversightEvent('subagent_orphan_alert', {
+        session_id: sessionId,
+        agent_id: orphanAgentId,
+        transcript_status: transcriptMetrics.status || 'unknown',
+        agent_type_from_stop: parsed.agent_type || 'unknown',
+        note: 'SubagentStop fired without matching SubagentStart in this session. SubagentStart hook may not be invoked for this agent type / dispatch path.',
+      });
+    }
+  }
+
+  debugLog(`subagent-stop: session=${sessionId?.slice(0, 8)} id=${parsed.agent_id || '?'} transcript=${transcriptPath ? 'yes' : 'no'} tag=${promptTag} perm=${parsed.permission_mode || '-'}${isOrphan ? ' ORPHAN' : ''}`);
   await post('/api/subagent', {
     session_id: sessionId,
     action: 'stop',
