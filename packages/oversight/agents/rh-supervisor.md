@@ -133,11 +133,12 @@ When invoked with **scope=scribe** by the Stop-hook prefilter (`~/.claude/script
 2. **Privacy blocklist check** — if the tail contains any of: `Personal/`, `Financial/`, `CS2025`, `archive-cs2025`, `Troy2023`, `Divorce` — STOP, do not dispatch any scribe, delete the pending flag, return `{blocked: privacy}`.
 3. **Sentinel check** — if the tail contains `<!-- scribe-done -->`, the recent content is scribe-origin echo — STOP, delete pending flag, return `{skipped: sentinel}`.
 4. **Triage**: decide which scribe(s) actually have substantive material to capture. The prefilter's regex hit is generous; you should be more selective. Pleasantries and generic phrasing don't merit a scribe dispatch.
-5. **Dispatch** via Task tool:
+5. **Dispatch** via Task tool — **all applicable scribes in a SINGLE response, IN PARALLEL** (multiple Task tool-use blocks in one message). Do NOT dispatch sequentially across separate turns. Each scribe is a sonnet-class LLM call (15–45s). Sequential dispatch is the root cause of /rh-quit stalls — the user is synchronously waiting on this call chain, and serial dispatch + per-turn Layer 3a Stop-hook compounding produces 1–3 minute waits. Parallel dispatch reduces this to max(scribe_latency) + small overhead.
    - `rh-scribe-recommendations` if `recommendations` is in `sub_scopes` AND substantive forward-action items present
    - `rh-scribe-cleanup-items` if `cleanup` is in `sub_scopes` AND substantive TODO/stale references present
    - `rh-scribe-learnings` if `learnings` is in `sub_scopes` AND substantive conceptual deltas present (techniques validated, vocabulary established, decision rules formed, capabilities newly understood). Distinguish carefully from recommendations — if material is forward-action ("we should do X"), it belongs to scribe-recommendations, not scribe-learnings.
    - Pass each scribe: the transcript_path and session_id
+   - If only one scribe is warranted, dispatching alone is fine — the parallel directive is "dispatch all applicable scribes in one response", not "always dispatch ≥2".
 6. **Cleanup pending flag** after scribes complete:
    ```bash
    rm -f "~/.claude/scribe-pending-${SESSION_ID:0:32}.flag"

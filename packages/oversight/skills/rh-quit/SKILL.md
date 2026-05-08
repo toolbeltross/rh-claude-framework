@@ -36,17 +36,20 @@ When the user invokes `/rh-quit`:
    ```
    You are being dispatched with scope=scribe (user-triggered via /rh-quit).
    Sub-scopes to evaluate: <detected scopes>.
-   
-   Read the transcript tail and dispatch the appropriate scribe agents:
+
+   Read the transcript tail and dispatch the appropriate scribe agents
+   IN PARALLEL (multiple Task tool-use blocks in one response, not
+   sequentially across separate turns). The user is synchronously waiting
+   — sequential dispatch is the root cause of /rh-quit stalls.
    - rh-scribe-recommendations if substantive forward-action items present
    - rh-scribe-cleanup-items if substantive TODO/stale references present
    - rh-scribe-learnings if substantive conceptual deltas present
-   
+
    This is a user-triggered end-of-session curation pass. The inline prefilter
    may have already captured low-fidelity rows for recommendations and cleanup.
    Your job is to curate — dedup against existing rows, improve quality, and
    capture learnings which the inline path skips entirely.
-   
+
    Session ID: <session_id>
    ```
 
