@@ -299,7 +299,7 @@ function sectionOversightAgents() {
   for (const f of listFiles(agentsDir, ".md")) {
     const fm = extractFrontmatter(f);
     const name = fm.name || path.basename(f, ".md");
-    if (OVERSIGHT_AGENT_NAMES.includes(name)) {
+    if (OVERSIGHT_AGENT_NAMES.includes(name.replace(/^rh-/, ''))) {
       matched.push({
         name,
         model: fm.model || "(default)",

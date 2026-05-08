@@ -47,7 +47,7 @@ const CANONICAL_BLOCK = `
 
 ## Required oversight block (auto-injected by agent-oversight-guard)
 
-1. **Verification tokens**: For each item processed (file, URL, record), return a provable artifact — the literal first line of the file, a line count, or a unique identifying string copied verbatim from the source. Do not paraphrase.
+1. **Verification tokens**: For each item processed, return a provable artifact — the literal first line of the file, a line count, or a unique identifying string copied verbatim from the source. Do not paraphrase.
 
 2. **Self-reported telemetry**: End your response with:
    - Items found / successfully processed / failed or truncated (list any failures by name)
@@ -56,7 +56,7 @@ const CANONICAL_BLOCK = `
 
 3. **Batch overflow rule**: If after processing the first item you can tell the full task will exceed your capacity, STOP and return only the first item's result plus the total count of remaining items. Do not attempt the full set.
 
-4. **Count cross-reference** (when applicable): Report the total number of items found at the source so the parent can verify against an independent count. If counts disagree, the result is suspect.`;
+4. **Count cross-reference**: Report the total number of items found at the source so the parent can verify against an independent count. If counts disagree, the result is suspect.`;
 
 wrapHook('agent-oversight-guard', (input) => {
   const toolInput = input?.tool_input || {};

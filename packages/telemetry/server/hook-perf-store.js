@@ -51,12 +51,12 @@ export class HookPerfStore {
       matcher: record.matcher || '',
     };
 
-    try {
-      mkdirSync(dirname(this.filePath), { recursive: true });
-      appendFileSync(this.filePath, JSON.stringify(normalized) + '\n', 'utf-8');
-    } catch (err) {
-      console.error(`[hook-perf] Write error: ${err.message}`);
-    }
+    // 2026-05-08: server-side appendFileSync removed to fix double-write to
+    // hook-perf.jsonl. The hook itself (lib/hook-timing.js appendPerf) is the
+    // sole disk writer; server holds the in-memory cache and serves API. On
+    // server restart, load() reads from disk to repopulate cache. POST that
+    // doesn't originate from a hook (e.g., manual test) won't persist —
+    // acceptable trade-off; was producing duplicate entries with same ts.
 
     this.cache.push(normalized);
     if (this.cache.length > this.maxCache) {
