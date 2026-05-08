@@ -1,21 +1,21 @@
 ---
 name: rh-quit
-description: User-triggered scribe drain at session end. Reads the current session's transcript tail, dispatches the supervisor agent (scope=scribe) in-process via Task to curate recommendations, cleanup items, and learnings. Use when the user invokes /rh-quit, typically at the end of a session before closing.
+description: User-triggered scribe drain at session end. Dispatches rh-scribe-multiscope directly via the Agent tool to curate recommendations, cleanup items, and learnings in one LLM pass. Use when the user invokes /rh-quit, typically at the end of a session before closing.
 ---
 
 # rh-quit
 
-User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-scribe-prefilter.js`) captures low-fidelity rows to `recommendations.md` and `cleanup.md` on every turn. This skill is the **high-quality LLM path**: it dispatches the supervisor + multi-scope scribe in-process to curate, dedup, and write richer entries — especially learnings, which inline extraction skips entirely.
+User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-scribe-prefilter.js`) captures low-fidelity rows to `recommendations.md` and `cleanup.md` on every turn. This skill is the **high-quality LLM path**: it dispatches `rh-scribe-multiscope` directly to curate, dedup, and write richer entries — especially learnings, which inline extraction skips entirely.
 
-As of 2026-05-08 (P1-4), the supervisor dispatches a SINGLE `rh-scribe-multiscope` Task call that handles all three sub-scopes in one LLM pass, replacing the prior 3-way fan-out. This eliminates the sequential-dispatch stall that produced 1–3 minute waits.
+**Architecture (rev 2026-05-08, P1-4 follow-up):** the skill dispatches `rh-scribe-multiscope` DIRECTLY via the Agent tool. The supervisor agent is no longer in the path for `/rh-quit`. Prior architecture (skill → supervisor → multiscope) added 400+s of supervisor latency with no value-add — the multiscope agent already handles privacy, sentinel, and triage internally. The supervisor's failure-pattern / advisory roles are unrelated to scribe drain and don't belong on this critical path.
 
 ## What this skill does
 
-1. **Read the transcript tail** — same 10K-char tail the prefilter uses, but fed to the supervisor for LLM-grade triage instead of regex.
+1. **Read the transcript tail** — same 10K-char tail the prefilter uses, fed directly to the multi-scope scribe.
 
-2. **Detect scribe-worthy content** — apply the same marker regexes from `rh-scribe-prefilter.js` (recommendations, cleanup, learnings) to decide which sub-scopes to request.
+2. **Detect scribe-worthy content** — apply the same marker regexes from `rh-scribe-prefilter.js` (recommendations, cleanup, learnings) to decide whether to dispatch at all.
 
-3. **Dispatch supervisor in-process** — use the **Agent tool** (foreground, NOT background) with `subagent_type: rh-supervisor`. The supervisor dispatches a single `rh-scribe-multiscope` Task call (one LLM pass covering all three sub-scopes). This is synchronous — the user is waiting.
+3. **Dispatch rh-scribe-multiscope in-process** — use the **Agent tool** (foreground, NOT background) with `subagent_type: rh-scribe-multiscope`. The agent does its own privacy/sentinel checks, categorizes each candidate into recommendations/cleanup/learnings, and writes to all relevant targets in one LLM pass. This is synchronous — the user is waiting. Target completion: <30s if nothing substantive after the agent's own re-triage; <90s for the full write pass.
 
 4. **Report what was captured** — print a summary listing files written, items appended, and confirm "safe to close session."
 
@@ -33,34 +33,30 @@ When the user invokes `/rh-quit`:
 
 2. **If no markers found:** print "No scribe-worthy content detected this session. Safe to close." and stop.
 
-3. **If markers found, dispatch supervisor:**
-   Use the Agent tool (foreground) with `subagent_type: rh-supervisor`. Prompt:
+3. **If markers found, dispatch rh-scribe-multiscope directly:**
+   Use the Agent tool (foreground) with `subagent_type: rh-scribe-multiscope`. Prompt:
    ```
-   You are being dispatched with scope=scribe (user-triggered via /rh-quit).
-   Sub-scopes to evaluate: <detected scopes>.
+   User-triggered scribe drain via /rh-quit. Sub-scopes with substantive
+   content detected: <detected scopes>.
 
-   Read the transcript tail. Apply the privacy + sentinel checks. Triage
-   which buckets (recommendations, cleanup, learnings) have substantive
-   material. Then dispatch a SINGLE `rh-scribe-multiscope` Task call —
-   one LLM pass that handles all sub-scopes in one round-trip. Do NOT
-   dispatch the legacy 3-way fan-out (rh-scribe-recommendations /
-   rh-scribe-cleanup-items / rh-scribe-learnings) — that pattern caused
-   the /rh-quit stall the multi-scope agent replaces.
-
-   If NO buckets have substantive material, do not dispatch the scribe;
-   clear the pending flag and return {scribe_skipped: no_substantive_content}.
-
-   This is a user-triggered end-of-session curation pass. The inline prefilter
-   may have already captured low-fidelity rows for recommendations and cleanup.
-   Your job is to curate — dedup against existing rows, improve quality, and
-   capture learnings which the inline path skips entirely.
+   Read the transcript tail at <transcript_path>. Run your standard
+   single-pass workflow:
+     1. Privacy blocklist check (Personal/, Financial/, CS2025, Troy2023, Divorce)
+     2. Self-loop sentinel check (<!-- scribe-done --> in tail)
+     3. Categorize each substantive candidate into one of: recommendations,
+        cleanup, learnings (tie-break order: cleanup > recommendations > learnings)
+     4. Run the per-bucket write phase ONLY for buckets with ≥1 candidate
+     5. Cleanup the pending flag
 
    Session ID: <session_id>
+   Inline prefilter may have already captured low-fidelity rows; your job
+   is to dedup and add high-quality entries the regex path missed
+   (especially learnings).
    ```
 
 4. **Print summary:**
-   - Scribe agents invoked: list
-   - Files modified: list (recommendations.md, cleanup.md, learnings/*.md)
+   - Items appended per scope (recommendations / cleanup / learnings)
+   - Files modified
    - Confirm **"Safe to close session."**
 
 ## What was removed (do not recreate)
@@ -71,7 +67,9 @@ The prior architecture used an async queue + detached drain:
 - `~/.claude/rh-scribe-queue/` directory — **deleted**
 - SessionStart drain-startup hook entry — **removed from settings.json**
 
-These had multiple Windows failure modes (OneDrive cwd ENOENT, detached spawn ENOENT, child claude STATUS_CONTROL_C_EXIT). The replacement is inline regex extraction in the Stop hook + this in-process LLM curation skill.
+These had multiple Windows failure modes (OneDrive cwd ENOENT, detached spawn ENOENT, child claude STATUS_CONTROL_C_EXIT). The replacement is inline regex extraction in the Stop hook + this direct-dispatch curation skill.
+
+The prior architecture (rev 2026-05-08 morning) routed `/rh-quit` through the supervisor agent which was supposed to dispatch `rh-scribe-multiscope` via Task. Runtime testing (2026-05-08 afternoon) showed the supervisor inlined the work instead of dispatching, took 416s for a single scribe run, and falsely reported "Task tool not available" despite Task being in its frontmatter and not gated. **Do NOT route /rh-quit through the supervisor.** The supervisor's failure-analysis / session-start-advisory / task-completion-checkpoint roles are valid; scribe orchestration is not its job.
 
 ## When to use
 
@@ -86,5 +84,5 @@ These had multiple Windows failure modes (OneDrive cwd ENOENT, detached spawn EN
 ## Edge cases
 
 - **No markers detected** — print "no scribe-worthy content this session" and exit
-- **Supervisor finds nothing substantive** — the supervisor may decline to dispatch any scribes if the markers were false positives (e.g., "should" in a code comment). That's fine — report "supervisor found no substantive items" and confirm safe to close.
-- **Privacy blocklist hits** — the supervisor and scribe agents enforce their own privacy checks (Personal/, Financial/, CS2025, Troy2023, Divorce). Don't duplicate the check here.
+- **Multi-scope scribe finds nothing substantive after its own re-triage** — agent returns `{items_extracted: 0}` for all buckets. Report "scribe found no substantive items" and confirm safe to close.
+- **Privacy blocklist hits** — the multi-scope scribe enforces its own privacy check (Personal/, Financial/, CS2025, Troy2023, Divorce). Don't duplicate the check here.

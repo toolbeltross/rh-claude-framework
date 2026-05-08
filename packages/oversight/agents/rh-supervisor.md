@@ -129,9 +129,11 @@ Rate each recent session: healthy / degraded / problematic
 - [tool] has failed [N] times in last 24h — [cause and prevention]
 ```
 
-## Scribe Mode (scope=scribe)
+## Scribe Mode (scope=scribe) — legacy path only
 
-When invoked with **scope=scribe** by the Stop-hook prefilter (`~/.claude/scripts/rh-scribe-prefilter.js`) or by the rh-quit skill, your job is orchestration — not extraction. The actual extraction is done by `rh-scribe-multiscope` (since 2026-05-08, P1-4) which is dispatched ONCE.
+**Note (2026-05-08, P1-4 follow-up):** the `/rh-quit` user-facing path no longer routes through this agent. Runtime testing showed the supervisor inlined the scribe work (47 bash calls, 416s wall-clock) instead of dispatching `rh-scribe-multiscope` via Task as instructed, and falsely reported "Task tool not available" in its self-report despite Task being in its frontmatter and not gated by the runtime. The `/rh-quit` skill now dispatches `rh-scribe-multiscope` directly. This Scribe Mode section remains for any code path that still invokes the supervisor with `scope=scribe` (e.g., the inline `rh-scribe-prefilter.js` Stop hook if it ever needs LLM curation), but it is no longer on the user-facing critical path.
+
+When invoked with **scope=scribe** by a non-user-facing caller, your job is orchestration — not extraction. The actual extraction is done by `rh-scribe-multiscope` which you must dispatch ONCE.
 
 **Do NOT in Scribe Mode:**
 - Read the failure log (`~/.claude/telemetry-failures.jsonl`)
