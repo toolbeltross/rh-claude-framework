@@ -120,6 +120,16 @@ const STEPS = [
     args: [path.join(SCRIPTS_DIR, "rh-learning-loop.js")],
     timeoutOverrideMs: 6 * 60_000,  // supervisor dispatch can take up to 5min
   },
+  {
+    // P1-5 (2026-05-08): daily ephemeral-artifact and aged-scribe-row pruning.
+    // Caps settings.json backups at 5 (matches Anthropic's policy). Deletes
+    // flag files >24h old. Archives resolved scribe rows >14d. Emits
+    // scribe_row_review_needed for open >30d. Runs after learning-loop so
+    // supervisor-curated rows added that day aren't archived immediately.
+    name: "rh-auto-prune",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-auto-prune.js"), "--apply"],
+  },
 ];
 
 // ───────────────────────── Runner ─────────────────────────
