@@ -772,4 +772,29 @@ if (mode === 'status') {
     task_description: parsed.task_description || '',
     status: parsed.status || 'completed',
   });
+} else if (mode === 'instructions-loaded') {
+  // InstructionsLoaded hook (P2-3, 2026-05-08): Anthropic-recommended for
+  // audit/compliance per code.claude.com/docs/en/hooks. Fires when CLAUDE.md
+  // or workspace rules are loaded. Persisted to oversight-events.jsonl so
+  // the supervisor can detect drift across machines/projects (when CLAUDE.md
+  // content shifts between sessions, this stream answers "did anything in
+  // the loaded instructions change between session A and session B").
+  const raw = await readStdin();
+  let parsed = {};
+  try { parsed = JSON.parse(raw); } catch {}
+  const sessionId = parsed.session_id || process.argv[3] || '';
+  const sources = Array.isArray(parsed.sources) ? parsed.sources :
+                  (parsed.path ? [parsed.path] : []);
+  // Hash the loaded content if provided so we can detect drift without
+  // persisting full CLAUDE.md text in the events log.
+  let contentHash = '';
+  const content = parsed.content || parsed.text || '';
+  if (content) contentHash = createHash('sha256').update(content).digest('hex').slice(0, 16);
+  debugLog(`instructions-loaded: session=${sessionId?.slice(0, 8)} sources=${sources.length} content_hash=${contentHash || '-'}`);
+  emitOversightEvent('instructions_loaded', {
+    session_id: sessionId,
+    source_count: sources.length,
+    sources: sources.slice(0, 10),  // cap to keep event small
+    content_hash: contentHash,
+  });
 }

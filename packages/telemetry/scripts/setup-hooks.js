@@ -174,6 +174,15 @@ Do NOT flag violations from prior turns — acknowledging a past violation in th
     { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" task-completed "$CLAUDE_SESSION_ID"` }] },
   ];
 
+  // --- InstructionsLoaded: Anthropic-recommended audit/compliance hook ---
+  // Fires when CLAUDE.md or workspace rules are loaded. Persisted to
+  // oversight-events.jsonl so the supervisor sweep can detect cross-session
+  // CLAUDE.md drift. Added 2026-05-08 (P2-3).
+  settings.hooks.InstructionsLoaded = [
+    ...filterOurEntries(settings.hooks.InstructionsLoaded || [], 'hook-forwarder'),
+    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" instructions-loaded "$CLAUDE_SESSION_ID"` }] },
+  ];
+
   // StatusLine is handled separately via repairStatusLine() in main() — do NOT
   // touch settings.statusLine here. Preserving whatever the existing settings
   // have is correct; repairStatusLine runs after the hooks write and will
@@ -252,6 +261,7 @@ async function main() {
   console.log('    UserPromptSubmit     — capture current prompt');
   console.log('    ConfigChange         — log settings modifications');
   console.log('    TaskCompleted        — log task completions');
+  console.log('    InstructionsLoaded   — audit log when CLAUDE.md / rules load');
   console.log('    statusLine           — live session data (cost, context, model)');
   console.log('');
 
