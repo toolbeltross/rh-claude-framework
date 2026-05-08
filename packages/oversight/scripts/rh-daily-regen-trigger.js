@@ -27,107 +27,26 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-// ─── Journal staleness probe (added 2026-05-06) ──────────────────────────
+// ─── Journal staleness probes — config-driven (refactored 2026-05-08) ────
 //
-// PROBLEM THIS CATCHES:
-// On 2026-05-04 the Stop hook chain in ~/.claude/settings.json was
-// rewritten and `hook-forwarder.js stop` (the only call site for
-// appendProgressEntry) silently fell out of the chain. The supervisory
-// log went 3 days without any new entries before the gap was noticed.
-// Layer 3a was still firing, oversight-events.jsonl was still being
-// written — only the human-readable journal channel went dark, and
-// nothing monitored that channel for liveness.
+// ORIGINAL PROBLEM (2026-05-04 → 2026-05-07): supervisory log silently went
+// 3 days without entries because hook-forwarder.js stop fell out of the Stop
+// chain. Generalized lesson: any system journal can silently stop being
+// written because something upstream was rewired. Each channel needs a
+// liveness probe. Two probes shipped 2026-05-06 (supervisory-log + daily-regen
+// marker). 2026-05-08 refactor: extract to lib/journal-probe.js + read
+// channel manifest from ~/.claude/journals.json so adding a third probe is
+// a config change, not a code change.
 //
-// META-PATTERN: a system journal silently stops being written because
-// something upstream was rewired. The fix in any one channel doesn't
-// generalize — this probe generalizes the *detection* of any future
-// occurrence in this channel. The supervisor explicitly framed this
-// as the same shape as protocol-compliance theater: every individual
-// rule is satisfied while the observable system output is broken.
-//
-// WHAT THE PROBE DOES:
-//   - stat() the supervisory log
-//   - if mtime is >24h ago, emit a journal_staleness_alert event
-//   - if the log doesn't exist, do nothing (cold-start case — the first
-//     hook-forwarder.js stop write will create it)
-//
-// CONSTRAINTS:
-//   - Must NOT block session start. Wrapped in try/catch, all failures
-//     swallowed. Worst case: the probe silently doesn't fire, and the
-//     user discovers the gap manually like they did this time.
-//   - Must NOT do meaningful I/O — one stat() and one appendFile() at
-//     most.
-//   - Idempotent: emits on every session start while the log is stale.
-//     Don't dedupe here — let downstream tooling aggregate / decide
-//     when to alert the user. Each event is cheap to write.
+// CONSTRAINTS (preserved from original):
+//   - Must NOT block session start; all errors swallowed.
+//   - Idempotent: emits on every session start while a log is stale.
+//     Downstream aggregation decides when to alert the user.
+//   - Cold-start: missing files don't alert by default (alert_on_missing flag).
 try {
-  const SUPERVISORY_LOG = path.join(
-    os.homedir(),
-    ".claude",
-    "telemetry-supervisory-log.md"
-  );
-  const STALENESS_MS = 24 * 60 * 60 * 1000;
-
-  const stat = fs.statSync(SUPERVISORY_LOG, { throwIfNoEntry: false });
-  if (stat) {
-    const ageMs = Date.now() - stat.mtimeMs;
-    if (ageMs > STALENESS_MS) {
-      const { appendOversightEvent } = require("./lib/oversight-events");
-      appendOversightEvent("journal_staleness_alert", {
-        log_path: SUPERVISORY_LOG,
-        last_mtime: new Date(stat.mtimeMs).toISOString(),
-        age_hours: Math.round(ageMs / 3_600_000),
-        threshold_hours: 24,
-        note: "Supervisory log unwritten for >24h. Stop-hook progress logging may be broken — verify hook-forwarder.js stop is in the Stop hook chain.",
-      });
-    }
-  }
-} catch {
-  // Probe must never block session start; swallow any error.
-}
-
-// ─── Daily-regen marker probe (added 2026-05-06) ─────────────────────────
-//
-// PARALLEL TO THE SUPERVISORY-LOG PROBE ABOVE — same shape, different target.
-// Catches the case where the SessionStart-trigger pathway silently fails to
-// produce a successful daily-regen run. The trigger script (this file) spawns
-// daily-regen.js detached + stdio:ignored; on Windows the detached child can
-// be killed when the parent shell exits, especially for long-running steps
-// (rh-learning-loop ~5 min). The Windows Task Scheduler is the documented
-// primary trigger; this SessionStart trigger is best-effort.
-//
-// Without this probe, a 3-day gap (2026-05-04 → 2026-05-07) went unnoticed —
-// workspace HTML renders, ENVIRONMENT.md, OVERSIGHT_STATE.md all stale.
-//
-// 48h threshold (vs 24h for the supervisory-log probe) because daily-regen is
-// expected to skip same-day re-runs via --skip-if-today-done; a 24h threshold
-// would false-positive on every-other-day usage patterns.
-try {
-  const REGEN_MARKER = path.join(
-    os.homedir(),
-    ".claude",
-    "scripts",
-    "daily-regen.last-run"
-  );
-  const REGEN_STALENESS_MS = 48 * 60 * 60 * 1000;
-
-  const stat = fs.statSync(REGEN_MARKER, { throwIfNoEntry: false });
-  if (stat) {
-    const ageMs = Date.now() - stat.mtimeMs;
-    if (ageMs > REGEN_STALENESS_MS) {
-      const { appendOversightEvent } = require("./lib/oversight-events");
-      appendOversightEvent("daily_regen_stale_alert", {
-        marker_path: REGEN_MARKER,
-        last_mtime: new Date(stat.mtimeMs).toISOString(),
-        age_hours: Math.round(ageMs / 3_600_000),
-        threshold_hours: 48,
-        note: "daily-regen marker unwritten for >48h. SessionStart-trigger pathway may not be reliably producing successful runs on Windows; check Windows Task Scheduler 'Claude Code Daily Regen' task as the documented primary trigger.",
-      });
-    }
-  }
-  // Note: missing marker is NOT alerted on — first install / fresh user has
-  // no marker until daily-regen completes once. Different from the supervisory
-  // log which is incrementally append-only.
+  const { runProbes } = require("./lib/journal-probe");
+  const { appendOversightEvent } = require("./lib/oversight-events");
+  runProbes({ emit: (type, data) => appendOversightEvent(type, data) });
 } catch {
   // Probe must never block session start; swallow any error.
 }
