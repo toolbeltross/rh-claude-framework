@@ -191,14 +191,22 @@ function buildRow(id, sessionId, snippet) {
   return `| ${id} | ${ts} | ${sid} | ${snippet} | open |\n`;
 }
 
-// Insert rows into a target file before the trailing scribe-done sentinel if
-// present, otherwise append at end.
+// Insert rows into a target file with sentinel-correct positioning.
 //
 // CRITICAL: the read-modify-write must happen INSIDE the lock. Reading outside
 // the lock creates a TOCTOU race — multiple writers can each capture stale
 // pre-modification state and then take turns writing back stale-plus-their-row,
 // overwriting each other's work. Verified empirically (8-way stress test
 // observed all 16 rows lost AND prior content deleted before the fix).
+//
+// Sentinel handling (revised 2026-05-08, P1-7): strip ALL sentinel occurrences
+// from existing content, then append rows + a single sentinel at EOF. This
+// closes the deterministic mid-file-sentinel bug where the prior logic's
+// `else` branch (sentinel exists but has trailing content) added a NEW sentinel
+// without removing the existing mid-file one — accumulating duplicate
+// sentinels across runs and leaving the first one stranded mid-file forever.
+// Also identical to the rh-scribe-table-write.js CLI helper used by the
+// multiscope scribe agent — both writers now produce the same on-disk shape.
 function appendRowsToFile(filePath, rows) {
   if (!rows.length) return 0;
   // Lock pattern extracted to ./lib/file-lock.js (Phase 1 C1, 2026-05-02).
@@ -207,18 +215,18 @@ function appendRowsToFile(filePath, rows) {
   const result = withLock(filePath, () => {
     try {
       const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-      const sentinelIdx = content.lastIndexOf(SENTINEL);
-      const trailingAfterSentinel = sentinelIdx >= 0 ? content.slice(sentinelIdx + SENTINEL.length).trim() : '';
-      let newContent;
-      if (sentinelIdx >= 0 && trailingAfterSentinel === '') {
-        // Insert rows before the sentinel
-        const head = content.slice(0, sentinelIdx).replace(/\n+$/, '\n');
-        newContent = head + rows.join('') + SENTINEL + '\n';
-      } else {
-        // No trailing sentinel — append rows + a fresh sentinel
-        const tail = content.endsWith('\n') ? '' : '\n';
-        newContent = content + tail + rows.join('') + SENTINEL + '\n';
-      }
+
+      // Strip ALL sentinel occurrences (interior + EOF). One sentinel will
+      // be re-added at EOF below.
+      const stripped = content
+        .split('\n')
+        .filter(l => l.trim() !== SENTINEL)
+        .join('\n');
+
+      let body = stripped;
+      if (body.length > 0 && !body.endsWith('\n')) body += '\n';
+
+      const newContent = body + rows.join('') + SENTINEL + '\n';
       fs.writeFileSync(filePath, newContent, 'utf8');
       return rows.length;
     } catch {

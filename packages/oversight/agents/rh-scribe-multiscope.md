@@ -80,105 +80,89 @@ Skip the write phase entirely for buckets with zero candidates — don't open th
 
 #### 5a — Recommendations write phase
 
-1. Read existing `<workspace>/recommendations.md`.
-2. For each candidate, compute `id = sha256(text.toLowerCase().trim()).slice(0,10)`. Skip if `id` already appears.
-3. Sentinel hygiene (B8): read last 5 lines.
-   - `<!-- scribe-done -->` at EOF (last non-empty line) → remove it; you'll re-add at end.
-   - `<!-- scribe-done -->` at INTERIOR (non-last position) → move to end:
-     ```bash
-     grep -v '<!-- scribe-done -->' recommendations.md > recommendations.md.tmp && mv recommendations.md.tmp recommendations.md
-     ```
-   - Absent → just append, add sentinel at end.
-4. Append each new item as one row:
-   ```
-   | <id> | <ISO ts> | <session_id 8-char> | <text, pipes escaped, single line ≤ 400 chars> | open |
-   ```
-5. After all rows, append `<!-- scribe-done -->` as final non-empty line.
-6. Verify by reading last 3 lines — confirm sentinel is final.
+Use the `rh-scribe-table-write.js` CLI helper. ONE bash call per file. The helper handles sentinel position, dedup-safe appends, and lock acquisition — you do not need to do sentinel hygiene yourself.
 
-If the file doesn't exist, create with header:
-```markdown
+1. Read existing `<workspace>/recommendations.md` ONCE for dedup. For each candidate, compute `id = sha256(text.toLowerCase().trim()).slice(0,10)`. Skip if `id` already appears.
+
+2. Build a JSON array of the surviving (non-deduped) rows:
+   ```json
+   [
+     {"id":"<id>","ts":"<ISO>","session":"<8-char session>","text":"<≤400 chars, pipes escaped>","status":"open"},
+     ...
+   ]
+   ```
+
+3. Pipe the JSON to the helper in a single bash call:
+   ```bash
+   echo '<json-array>' | node ~/.claude/scripts/rh-scribe-table-write.js \
+     --target "$WORKSPACE/recommendations.md"
+   ```
+   The helper outputs `{ok, wrote, target, sentinelPosition: "eof"}` on success.
+   Capture the output for your final summary. **Do NOT issue any other bash command for this file** — no sentinel hygiene, no `>>` appends, no `grep -v` cleanup. The helper is atomic and sentinel-correct.
+
+If the file doesn't exist, the helper creates the parent dir but expects the standard header to exist OR be added in a prior bash call. If absent, run this ONCE before the helper call:
+```bash
+cat > "$WORKSPACE/recommendations.md" <<'EOF'
 # Recommendations (cross-session scribe log)
 
 Schema: `id | ts | session | text | status`. Status is `open` by default.
 
 | id | ts | session | text | status |
 |---|---|---|---|---|
+EOF
 ```
 
 #### 5b — Cleanup write phase
 
-Same structure as recommendations, but target is `<workspace>/cleanup.md`. Use the cleanup-specific signals from Step 4. If file doesn't exist, create with header:
-```markdown
+Same structure as recommendations — use `rh-scribe-table-write.js` with `--target "$WORKSPACE/cleanup.md"`. Use the cleanup-specific signals from Step 4. If file doesn't exist, create with header:
+```bash
+cat > "$WORKSPACE/cleanup.md" <<'EOF'
 # Cleanup items (cross-session scribe log)
 
 Schema: `id | ts | session | text | status`. Forward-looking — capture what needs follow-up, not historical mentions of things already cleaned up in the same conversation.
 
 | id | ts | session | text | status |
 |---|---|---|---|---|
+EOF
 ```
 
 #### 5c — Learnings write phase
 
-Different mechanism — per-topic files instead of a single shared file.
+Use the `rh-learnings-write.js` CLI helper for ALL writes. The helper handles locking, sentinel hygiene, and YAML frontmatter generation. ONE bash invocation per write operation.
 
 1. **Topic identification.** For each learning candidate, assign a kebab-case topic (1–4 words, no extension). Examples: `memory-architecture`, `model-selection`, `scribe-pattern`, `vector-search`. The topic IS the filename.
 
 2. **Dedup against existing topic files** under `~/.claude/memory-shared/learnings/`:
-   - File exists for this topic → APPEND a new observation row (do not duplicate the file).
-   - File doesn't exist → create new file with frontmatter (template below).
+   - Use `Glob` to list existing topic files.
+   - File exists for this topic → use `--mode append-observation`.
+   - File doesn't exist → use `--mode create`.
 
-3. **New topic file template:**
-   ```markdown
-   ---
-   name: <human-readable name>
-   description: <one-sentence summary>
-   type: project
-   originSessionId: <session_id>
-   created: <ISO date>
-   ---
-
-   ## Learning
-
-   <2-6 sentence narrative. Quote substantive lines verbatim where possible.>
-
-   ## Trigger / context
-
-   <When did this come up? What problem prompted it?>
-
-   ## Decision rule (if applicable)
-
-   <"Use X when Y, Z when W" rules as bulleted list.>
-
-   ## Source
-
-   - Session: <session_id>
-   - Date: <ISO date>
-   - Transcript reference: <approximate location in tail>
+3. **New topic file** — pipe payload via stdin:
+   ```bash
+   echo '{"topicFile":"~/.claude/memory-shared/learnings/<topic>.md","name":"<...>","description":"<...>","type":"project","originSessionId":"<sid>","created":"<ISO date>","learning":"<narrative>","trigger":"<context>","decisionRule":"<bulleted list or empty string>","sourceSession":"<sid>","sourceDate":"<ISO date>","transcriptRef":"<location hint>"}' \
+     | node ~/.claude/scripts/rh-learnings-write.js --mode create
    ```
 
 4. **Existing topic — append observation:**
-   - Read the file.
-   - Insert under `## Observations` section (create if absent).
-   - Format: `- <ISO date> (session <8-char id>): <observation, ≤300 chars>`
-   - Do NOT rewrite the original Learning narrative.
+   ```bash
+   echo '{"topicFile":"~/.claude/memory-shared/learnings/<topic>.md","dateIso":"<YYYY-MM-DD>","sessionShort":"<8-char sid>","observation":"<≤300 chars>"}' \
+     | node ~/.claude/scripts/rh-learnings-write.js --mode append-observation
+   ```
 
 5. **Update learnings sub-index** at `~/.claude/memory-shared/learnings/MEMORY.md`:
-   - If absent, create with header + table:
-     ```markdown
-     # Learnings sub-index
+   ```bash
+   echo '{"indexFile":"~/.claude/memory-shared/learnings/MEMORY.md","topic":"<kebab-case>","name":"<human-readable>","lastUpdated":"<ISO date>"}' \
+     | node ~/.claude/scripts/rh-learnings-write.js --mode update-sub-index
+   ```
+   The helper applies sentinel-hygiene automatically (strips ALL sentinel occurrences, re-adds one at EOF).
 
-     One entry per topic file. Auto-populated by scribe-multiscope agent.
+6. **Update memory-shared root index** at `~/.claude/memory-shared/MEMORY.md` — if topic count changed:
+   ```bash
+   echo '{"indexFile":"~/.claude/memory-shared/MEMORY.md","topicCount":<N>}' \
+     | node ~/.claude/scripts/rh-learnings-write.js --mode update-root-index
+   ```
 
-     | topic | name | last-updated |
-     |---|---|---|
-     ```
-   - Add or update a row for each touched topic.
-   - Apply sentinel-hygiene check (same B8 logic — sentinel at EOF).
-
-6. **Update memory-shared root index** at `~/.claude/memory-shared/MEMORY.md`:
-   - Ensure entry exists: `- [Learnings index](learnings/MEMORY.md) — N topics; capability deltas captured per session`
-   - Update N to current topic count.
+**Do NOT use the `Write` tool, `Edit` tool, or bash `>>` redirects for any of these files.** All writes go through the CLI helper to maintain atomic + lock-protected semantics.
 
 ### Step 6 — Cleanup the pending flag
 After all write phases finish (regardless of which buckets had content):
