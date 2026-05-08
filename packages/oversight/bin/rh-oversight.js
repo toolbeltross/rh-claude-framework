@@ -10,6 +10,11 @@ const commands = {
   'self-test':    () => require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-oversight-self-test.js')], { stdio: 'inherit' }),
   'generate-state': () => require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-generate-state-md.js')], { stdio: 'inherit' }),
   'generate-env':   () => require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-generate-env-md.js')], { stdio: 'inherit' }),
+  health:         () => {
+    const args = process.argv.slice(3);
+    const r = require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-oversight-health.js'), ...args], { stdio: 'inherit' });
+    process.exit(r.status ?? 0);
+  },
 };
 
 if (!command || command === '--help' || command === '-h') {
@@ -24,6 +29,8 @@ Commands:
   self-test         Run oversight self-test suite
   generate-state    Regenerate OVERSIGHT_STATE.md
   generate-env      Regenerate ENVIRONMENT.md
+  health [--json]   One-screen health aggregator (regen + journals + telemetry +
+                    alerts + scribe backlog + subagent orphans). Exit 0/1/2.
 
 Options for init/reset:
   --workspace <path>      Workspace root directory (auto-detected if omitted)
