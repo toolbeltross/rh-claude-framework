@@ -12,7 +12,12 @@
  *   3. ~/.claude/subagent-active-*.flag pruning — delete files >24h old.
  *      (Pair-flag introduced 2026-05-08 by P2-1; cleanup needed per
  *      sub-bullet 2 of that PR.)
- *   4. Workspace/cleanup.md + recommendations.md — rows with status:resolved
+ *   4. ~/.claude/session-marker-*.json pruning — delete files where
+ *      startedAt is >30d old (or mtime >30d if startedAt unparseable).
+ *      Markers are written by rh-agents-loaded-marker.js on SessionStart;
+ *      the file's own docstring documented the 30d stale-age policy as
+ *      "until that's wired, manual cleanup is fine." This wires it.
+ *   5. Workspace/cleanup.md + recommendations.md — rows with status:resolved
  *      older than 14 days move to Workspace/Archive/scribe-archive-<MONTH>.md.
  *      Rows with status:open older than 30 days emit
  *      scribe_row_review_needed oversight event for the supervisor sweep
@@ -42,6 +47,7 @@ const ARCHIVE_RESOLVED_DAYS = 14;
 const ALERT_OPEN_DAYS = 30;
 const SETTINGS_BACKUP_KEEP = 5;
 const FLAG_AGE_DAYS = 1;
+const SESSION_MARKER_AGE_DAYS = 30;
 
 function safeStat(p) { try { return fs.statSync(p); } catch { return null; } }
 
@@ -91,7 +97,35 @@ function pruneFlags(prefix) {
   };
 }
 
-// ─── 4. Scribe rows ──────────────────────────────────────────────────────
+// ─── 4. Session markers ──────────────────────────────────────────────────
+
+function pruneSessionMarkers() {
+  const cutoff = Date.now() - SESSION_MARKER_AGE_DAYS * DAY_MS;
+  const candidates = listMatching(config.claudeDir, f =>
+    /^session-marker-.*\.json$/.test(f)
+  );
+  const stale = [];
+  for (const m of candidates) {
+    let startedAtMs = NaN;
+    try {
+      const j = JSON.parse(fs.readFileSync(m.path, 'utf8'));
+      if (j?.startedAt) startedAtMs = Date.parse(j.startedAt);
+    } catch {}
+    const ageRef = isNaN(startedAtMs) ? m.mtime : startedAtMs;
+    if (ageRef < cutoff) stale.push({ ...m, startedAtMs });
+  }
+  let removed = 0;
+  for (const m of stale) {
+    if (APPLY) { try { fs.unlinkSync(m.path); removed++; } catch {} }
+  }
+  return {
+    candidates: stale.length,
+    removed: APPLY ? removed : 0,
+    files: stale.map(m => m.name).slice(0, 20),
+  };
+}
+
+// ─── 5. Scribe rows ──────────────────────────────────────────────────────
 
 function pruneScribeFile(filePath) {
   if (!fs.existsSync(filePath)) return { archived: 0, staleOpen: 0, file: filePath };
@@ -167,6 +201,7 @@ function main() {
     settings_backups: pruneSettingsBackups(),
     scribe_pending_flags: pruneFlags('scribe-pending-'),
     subagent_active_flags: pruneFlags('subagent-active-'),
+    session_markers: pruneSessionMarkers(),
     scribe_files: [
       pruneScribeFile(path.join(config.workspace, 'cleanup.md')),
       pruneScribeFile(path.join(config.workspace, 'recommendations.md')),
@@ -182,6 +217,7 @@ function main() {
   console.log(`  settings backups: kept ${result.settings_backups.kept}, ${APPLY ? 'removed' : 'would remove'} ${result.settings_backups.candidates}`);
   console.log(`  scribe-pending flags: ${APPLY ? 'removed' : 'would remove'} ${result.scribe_pending_flags.candidates}`);
   console.log(`  subagent-active flags: ${APPLY ? 'removed' : 'would remove'} ${result.subagent_active_flags.candidates}`);
+  console.log(`  session markers (>${SESSION_MARKER_AGE_DAYS}d): ${APPLY ? 'removed' : 'would remove'} ${result.session_markers.candidates}`);
   for (const sf of result.scribe_files) {
     console.log(`  ${sf.file}: ${APPLY ? 'archived' : 'would archive'} ${sf.archived_count} resolved>${ARCHIVE_RESOLVED_DAYS}d, ${sf.stale_open_count} open>${ALERT_OPEN_DAYS}d ${APPLY ? 'alerted' : 'would alert'}`);
   }
