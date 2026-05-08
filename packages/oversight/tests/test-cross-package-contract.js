@@ -104,13 +104,23 @@ const tests = [
     },
   },
   {
-    name: 'oversight-first: at least one Layer 3a prompt is present',
+    name: 'oversight-first: exactly one Layer 3a prompt (no duplication across packages)',
     fn: () => {
       const { hooks } = runScenario('oversight-first');
-      assertContains(hooks, 'Stop',
+      assertExactlyOnce(hooks, 'Stop',
         h => h.type === 'prompt' && h.prompt?.includes('ADDITIVE ONLY') && h.prompt?.includes('Layer 3a'),
         'a Layer 3a supervisory prompt',
         'oversight-first');
+    },
+  },
+  {
+    name: 'telemetry-first: exactly one Layer 3a prompt (no duplication across packages)',
+    fn: () => {
+      const { hooks } = runScenario('telemetry-first');
+      assertExactlyOnce(hooks, 'Stop',
+        h => h.type === 'prompt' && h.prompt?.includes('ADDITIVE ONLY') && h.prompt?.includes('Layer 3a'),
+        'a Layer 3a supervisory prompt',
+        'telemetry-first');
     },
   },
 

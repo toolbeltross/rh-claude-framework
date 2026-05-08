@@ -78,10 +78,26 @@ function resolveTemplate(templateContent, vars) {
 function mergeHooksData(existingHooks, templateHooks) {
   // Identity for an individual hook within a chain — based on what makes it
   // observably the same. Two hooks with the same command string are treated
-  // as the same hook regardless of the type field. Prompt-type hooks fall
-  // back to the prompt body (long but content-stable).
+  // as the same hook regardless of the type field.
+  //
+  // Special case: Layer 3a supervisory prompts. rh-oversight and rh-telemetry
+  // both add a Stop-phase prompt-type hook whose body begins
+  // "ADDITIVE ONLY — Layer 3a narrow supervisory review". The exact wording
+  // can drift between packages over time (rule edits, comment tweaks). Hashing
+  // the full prompt body would treat those two near-identical prompts as
+  // distinct hooks, producing TWO Layer 3a prompt firings per Stop in some
+  // install orderings (telemetry-first followed by oversight init). That
+  // doubles the per-turn cost and gives the model two judgments to reconcile.
+  //
+  // Detect Layer 3a prompts by signature ("ADDITIVE ONLY" + "Layer 3a") and
+  // collapse them to a single synthetic key. Other prompt-type hooks still
+  // dedupe by body, preserving the existing per-turn-prompt behavior.
   function hookKey(h) {
     if (!h) return '';
+    if (h.type === 'prompt' && typeof h.prompt === 'string' &&
+        h.prompt.includes('ADDITIVE ONLY') && h.prompt.includes('Layer 3a')) {
+      return '__layer3a_supervisory_prompt__';
+    }
     return h.command || h.prompt || JSON.stringify(h);
   }
   // Identity for an entry — the matcher (or '*' for matcherless entries).

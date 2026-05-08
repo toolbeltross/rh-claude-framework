@@ -161,6 +161,71 @@ const tests = [
     },
   },
 
+  // ─── Layer 3a prompt-signature dedupe ──────────────────────────────────
+  // Surfaced 2026-05-08 by P2-2 cross-package contract test. Telemetry and
+  // oversight both ship a Stop-phase Layer 3a supervisory prompt. The two
+  // prompt bodies drift over time (rule edits) but represent the same role.
+  // Plain prompt-body hashing would keep both, doubling per-turn cost.
+  {
+    name: 'two Layer 3a prompts with different bodies dedupe to one (signature-based key)',
+    fn: () => {
+      const existing = {
+        Stop: [{ hooks: [
+          { type: 'prompt', prompt: 'ADDITIVE ONLY — Layer 3a narrow supervisory review.\n\nBody A: shorter wording.' },
+          { type: 'command', command: 'node /a.js' },
+        ] }],
+      };
+      const template = {
+        Stop: [{ hooks: [
+          { type: 'prompt', prompt: 'ADDITIVE ONLY — Layer 3a narrow supervisory review.\n\nBody B: different (longer) wording.\nMore details about rules.' },
+          { type: 'command', command: 'node /b.js' },
+        ] }],
+      };
+      const merged = mergeHooksData(existing, template);
+      const stopHooks = merged.Stop[0].hooks;
+      const layer3aPromptCount = stopHooks.filter(h =>
+        h.type === 'prompt' && h.prompt?.includes('ADDITIVE ONLY') && h.prompt?.includes('Layer 3a')
+      ).length;
+      assert.strictEqual(layer3aPromptCount, 1,
+        `should dedupe Layer 3a prompts to one regardless of body wording; got ${layer3aPromptCount}`);
+      // The first one (existing) wins — template's prompt is dropped.
+      const layer3aPrompt = stopHooks.find(h => h.type === 'prompt' && h.prompt?.includes('Layer 3a'));
+      assert.ok(layer3aPrompt.prompt.includes('Body A'),
+        'existing Layer 3a prompt should be preserved over template (first-write wins)');
+      // Both commands still present.
+      assert.ok(stopHooks.some(h => h.command === 'node /a.js'), 'existing command preserved');
+      assert.ok(stopHooks.some(h => h.command === 'node /b.js'), 'template command added');
+    },
+  },
+  {
+    name: 'non-Layer-3a prompts still dedupe by full body (existing behavior preserved)',
+    fn: () => {
+      const existing = {
+        Stop: [{ hooks: [{ type: 'prompt', prompt: 'Custom review prompt' }] }],
+      };
+      const template = {
+        Stop: [{ hooks: [{ type: 'prompt', prompt: 'Custom review prompt' }] }], // identical
+      };
+      const merged = mergeHooksData(existing, template);
+      const promptCount = merged.Stop[0].hooks.filter(h => h.type === 'prompt').length;
+      assert.strictEqual(promptCount, 1, 'identical custom prompts still dedupe');
+    },
+  },
+  {
+    name: 'two distinct non-Layer-3a prompts both kept (signature dedup is targeted, not blanket)',
+    fn: () => {
+      const existing = {
+        Stop: [{ hooks: [{ type: 'prompt', prompt: 'Prompt one' }] }],
+      };
+      const template = {
+        Stop: [{ hooks: [{ type: 'prompt', prompt: 'Prompt two' }] }],
+      };
+      const merged = mergeHooksData(existing, template);
+      const promptCount = merged.Stop[0].hooks.filter(h => h.type === 'prompt').length;
+      assert.strictEqual(promptCount, 2, 'distinct non-signature prompts both kept');
+    },
+  },
+
   // ─── Input mutation guard: does not mutate caller objects ──────────────
   {
     name: 'mergeHooksData does not mutate input objects',
