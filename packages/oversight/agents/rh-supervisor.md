@@ -133,12 +133,13 @@ When invoked with **scope=scribe** by the Stop-hook prefilter (`~/.claude/script
 2. **Privacy blocklist check** — if the tail contains any of: `Personal/`, `Financial/`, `CS2025`, `archive-cs2025`, `Troy2023`, `Divorce` — STOP, do not dispatch any scribe, delete the pending flag, return `{blocked: privacy}`.
 3. **Sentinel check** — if the tail contains `<!-- scribe-done -->`, the recent content is scribe-origin echo — STOP, delete pending flag, return `{skipped: sentinel}`.
 4. **Triage**: decide which scribe(s) actually have substantive material to capture. The prefilter's regex hit is generous; you should be more selective. Pleasantries and generic phrasing don't merit a scribe dispatch.
-5. **Dispatch** via Task tool — **all applicable scribes in a SINGLE response, IN PARALLEL** (multiple Task tool-use blocks in one message). Do NOT dispatch sequentially across separate turns. Each scribe is a sonnet-class LLM call (15–45s). Sequential dispatch is the root cause of /rh-quit stalls — the user is synchronously waiting on this call chain, and serial dispatch + per-turn Layer 3a Stop-hook compounding produces 1–3 minute waits. Parallel dispatch reduces this to max(scribe_latency) + small overhead.
-   - `rh-scribe-recommendations` if `recommendations` is in `sub_scopes` AND substantive forward-action items present
-   - `rh-scribe-cleanup-items` if `cleanup` is in `sub_scopes` AND substantive TODO/stale references present
-   - `rh-scribe-learnings` if `learnings` is in `sub_scopes` AND substantive conceptual deltas present (techniques validated, vocabulary established, decision rules formed, capabilities newly understood). Distinguish carefully from recommendations — if material is forward-action ("we should do X"), it belongs to scribe-recommendations, not scribe-learnings.
-   - Pass each scribe: the transcript_path and session_id
-   - If only one scribe is warranted, dispatching alone is fine — the parallel directive is "dispatch all applicable scribes in one response", not "always dispatch ≥2".
+5. **Dispatch** via Task tool — **a single `rh-scribe-multiscope` Task call** that handles all sub-scopes (recommendations, cleanup, learnings) in one LLM pass. Pass `transcript_path`, `session_id`, and the triage outcome (which buckets you judged to have substantive content, so the multi-scope scribe can focus its categorization). Do NOT dispatch the legacy 3-way fan-out (`rh-scribe-recommendations` / `rh-scribe-cleanup-items` / `rh-scribe-learnings`) — that pattern produced 1–3 minute /rh-quit stalls (P1-4, 2026-05-08). The legacy agents remain on disk for ad-hoc single-scope use; supervisor scope=scribe dispatches `rh-scribe-multiscope` instead.
+
+   Bucket criteria (for triage you pass to the multi-scope scribe — it will re-verify):
+   - `recommendations`: substantive forward-action items present
+   - `cleanup`: substantive TODO/stale references present
+   - `learnings`: substantive conceptual deltas (techniques validated, vocabulary established, decision rules formed, capabilities newly understood). Distinguish from recommendations — forward-action ("we should do X") belongs to recommendations, not learnings.
+   - If NONE of the buckets have substantive material, do not dispatch the scribe — return `{scribe_skipped: no_substantive_content}` and clear the pending flag.
 6. **Cleanup pending flag** after scribes complete:
    ```bash
    rm -f "~/.claude/scribe-pending-${SESSION_ID:0:32}.flag"
@@ -150,12 +151,12 @@ When invoked with **scope=scribe** by the Stop-hook prefilter (`~/.claude/script
 
 **Output** (return as JSON-ish summary):
 ```
-scribes_dispatched: [list — any of scribe-recommendations, scribe-cleanup-items, scribe-learnings]
-items_total: N
+scribes_dispatched: ["rh-scribe-multiscope"] | [] (empty if no substantive content)
+items_total: N (sum across recommendations/cleanup/learnings as reported by the multi-scope scribe)
 flag_cleared: yes/no
 privacy_skipped: yes/no
 sentinel_skipped: yes/no
-sentinel_anomalies: [list of {scribe, position} tuples where position != "eof", or empty]
+sentinel_anomalies: [list of {file, position} tuples where position != "eof", or empty]
 ```
 
 ## Task-Completion Checkpoint Mode

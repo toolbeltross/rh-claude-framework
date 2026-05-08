@@ -5,7 +5,9 @@ description: User-triggered scribe drain at session end. Reads the current sessi
 
 # rh-quit
 
-User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-scribe-prefilter.js`) captures low-fidelity rows to `recommendations.md` and `cleanup.md` on every turn. This skill is the **high-quality LLM path**: it dispatches the supervisor + scribe agents in-process to curate, dedup, and write richer entries — especially learnings, which inline extraction skips entirely.
+User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-scribe-prefilter.js`) captures low-fidelity rows to `recommendations.md` and `cleanup.md` on every turn. This skill is the **high-quality LLM path**: it dispatches the supervisor + multi-scope scribe in-process to curate, dedup, and write richer entries — especially learnings, which inline extraction skips entirely.
+
+As of 2026-05-08 (P1-4), the supervisor dispatches a SINGLE `rh-scribe-multiscope` Task call that handles all three sub-scopes in one LLM pass, replacing the prior 3-way fan-out. This eliminates the sequential-dispatch stall that produced 1–3 minute waits.
 
 ## What this skill does
 
@@ -13,7 +15,7 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 2. **Detect scribe-worthy content** — apply the same marker regexes from `rh-scribe-prefilter.js` (recommendations, cleanup, learnings) to decide which sub-scopes to request.
 
-3. **Dispatch supervisor in-process** — use the **Agent tool** (foreground, NOT background) with `subagent_type: rh-supervisor`. The supervisor fans out to `rh-scribe-recommendations`, `rh-scribe-cleanup-items`, and/or `rh-scribe-learnings` via Task as appropriate. This is synchronous — the user is waiting.
+3. **Dispatch supervisor in-process** — use the **Agent tool** (foreground, NOT background) with `subagent_type: rh-supervisor`. The supervisor dispatches a single `rh-scribe-multiscope` Task call (one LLM pass covering all three sub-scopes). This is synchronous — the user is waiting.
 
 4. **Report what was captured** — print a summary listing files written, items appended, and confirm "safe to close session."
 
@@ -37,13 +39,16 @@ When the user invokes `/rh-quit`:
    You are being dispatched with scope=scribe (user-triggered via /rh-quit).
    Sub-scopes to evaluate: <detected scopes>.
 
-   Read the transcript tail and dispatch the appropriate scribe agents
-   IN PARALLEL (multiple Task tool-use blocks in one response, not
-   sequentially across separate turns). The user is synchronously waiting
-   — sequential dispatch is the root cause of /rh-quit stalls.
-   - rh-scribe-recommendations if substantive forward-action items present
-   - rh-scribe-cleanup-items if substantive TODO/stale references present
-   - rh-scribe-learnings if substantive conceptual deltas present
+   Read the transcript tail. Apply the privacy + sentinel checks. Triage
+   which buckets (recommendations, cleanup, learnings) have substantive
+   material. Then dispatch a SINGLE `rh-scribe-multiscope` Task call —
+   one LLM pass that handles all sub-scopes in one round-trip. Do NOT
+   dispatch the legacy 3-way fan-out (rh-scribe-recommendations /
+   rh-scribe-cleanup-items / rh-scribe-learnings) — that pattern caused
+   the /rh-quit stall the multi-scope agent replaces.
+
+   If NO buckets have substantive material, do not dispatch the scribe;
+   clear the pending flag and return {scribe_skipped: no_substantive_content}.
 
    This is a user-triggered end-of-session curation pass. The inline prefilter
    may have already captured low-fidelity rows for recommendations and cleanup.
