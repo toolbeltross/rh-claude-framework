@@ -41,7 +41,7 @@ When the user invokes `/rh-quit`:
 
    Read the transcript tail at <transcript_path>. Run your standard
    single-pass workflow:
-     1. Privacy blocklist check (Personal/, Financial/, CS2025, Troy2023, Divorce)
+     1. Privacy blocklist check — structural patterns (Personal/, Financial/, Divorce) + user-specific entity names from ~/.claude/private-blocklist.json
      2. Self-loop sentinel check (<!-- scribe-done --> in tail)
      3. Categorize each substantive candidate into one of: recommendations,
         cleanup, learnings (tie-break order: cleanup > recommendations > learnings)
@@ -85,4 +85,4 @@ The prior architecture (rev 2026-05-08 morning) routed `/rh-quit` through the su
 
 - **No markers detected** — print "no scribe-worthy content this session" and exit
 - **Multi-scope scribe finds nothing substantive after its own re-triage** — agent returns `{items_extracted: 0}` for all buckets. Report "scribe found no substantive items" and confirm safe to close.
-- **Privacy blocklist hits** — the multi-scope scribe enforces its own privacy check (Personal/, Financial/, CS2025, Troy2023, Divorce). Don't duplicate the check here.
+- **Privacy blocklist hits** — the multi-scope scribe enforces its own privacy check (structural patterns + user-specific patterns loaded from `~/.claude/private-blocklist.json`). Don't duplicate the check here.

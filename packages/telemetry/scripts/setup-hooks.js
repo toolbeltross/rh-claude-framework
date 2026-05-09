@@ -98,7 +98,7 @@ export function buildHookConfig(existingSettings) {
   ];
 
   // --- Stop: turn boundary telemetry + Layer 3 supervisory review ---
-  // Layer 3a (prompt) — ACTIVE: narrow 3-rule review targeting Troy2023 failure modes.
+  // Layer 3a (prompt) — ACTIVE: narrow 3-rule review targeting subagent-attribution failure modes (one specific incident motivated re-enabling, kept private).
   // Layer 3b (agent)  — Schema now supported by Claude Code per settings.json validator (2026-04-19).
   //                    NOT wired: firing both prompt+agent on every Stop would double the cost.
   //                    To add: insert a third { type: 'agent', prompt: '...verify instructions...' }
@@ -128,7 +128,7 @@ Otherwise, proceed with the 3 rules below:
 
 Evaluate the MOST RECENT TURN only. If all 3 rules pass for that turn, respond: {"ok": true}
 If any rule is violated IN THE MOST RECENT TURN, respond: {"ok": false, "reason": "[Rule N] — [specific description of what went wrong in the most recent turn]"}
-Do NOT flag violations from prior turns — acknowledging a past violation in the current turn is sufficient to close it. Be strict on rule 2 — the Troy2023 $9,876 misattribution was exactly this failure.`,
+Do NOT flag violations from prior turns — acknowledging a past violation in the current turn is sufficient to close it. Be strict on rule 2 — a prior incident where a specific dollar-amount subagent attribution reached the user unverified was exactly this failure.`,
         },
       ],
     },

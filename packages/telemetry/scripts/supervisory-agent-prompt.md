@@ -12,11 +12,11 @@ Reference documentation for the Stop-hook supervisory review. The live prompt bo
 
 The original Layer 3a prompt evaluated 5 rules covering additive-only, no-deviation, correct-tools, no-flip-flop, and priority-order. It was removed 2026-03 for cost reasons, with the rationale that `CLAUDE.md` conventions were adequate.
 
-Re-enabled 2026-04-19 with a narrower 3-rule scope targeting the specific failure modes that leaked through during a Troy2023 tax-review session:
+Re-enabled 2026-04-19 with a narrower 3-rule scope targeting a specific class of failure that leaked through unverified during a domain-review session:
 
-- A subagent reported a $9,876 income attribution as belonging to the Ross Barbieri Irrevocable Trust. Claude passed the attribution to the user without reading the underlying Schedule E Part III page. The value was actually attributable to the Estate of Ladye Kathryn Christian (a different row). The pre-existing CLAUDE.md conventions did not catch this because the failure wasn't a rule-of-thumb violation — it was an unverified extrapolation from subagent output.
+- A subagent reported a numeric attribution as belonging to entity A. Claude passed the attribution to the user without reading the underlying source document. The value was actually attributable to entity B (a different row in a multi-entity table). The pre-existing CLAUDE.md conventions did not catch this because the failure wasn't a rule-of-thumb violation — it was an unverified extrapolation from subagent output.
 
-The 3 rules are designed to intercept that specific class of failure without the cost of evaluating the full 5-rule set on every turn.
+The 3 rules are designed to intercept that specific class of failure without the cost of evaluating the full 5-rule set on every turn. Specific entity names and dollar amounts from the originating incident are kept private and intentionally not reproduced here.
 
 ### The 3 rules
 

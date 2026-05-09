@@ -230,7 +230,7 @@ Event-driven (not timer-based):
 - Saved $1.68-3.72 per session + 2-5s latency per Bash command.
 
 **Layer 3a — Re-enabled 2026-04-19** (narrow 3-rule Stop prompt hook):
-- Was Removed 2026-03 (5-rule variant: $6.30-13.95/session + 3-15s latency) — conventions-only enforcement proved insufficient when a Troy2023 subagent-result misattribution reached the user unverified.
+- Was Removed 2026-03 (5-rule variant: $6.30-13.95/session + 3-15s latency) — conventions-only enforcement proved insufficient when a private-domain subagent-result misattribution reached the user unverified.
 - Re-enabled with a narrower 3-rule scope targeting that failure class: (1) verify-before-declaring-done, (2) subagent-cross-check, (3) no-unverified-extrapolation. Roughly 30-40% of the 5-rule cost.
 - Prompt body inlined in `scripts/setup-hooks.js`. Reference doc in `scripts/supervisory-agent-prompt.md`.
 - Returns `{"ok": false, "reason": "..."}` to force Claude to address the violation.

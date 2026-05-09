@@ -41,7 +41,7 @@ The supervisor passes `transcript_path` and `session_id`. Read the last ~10,000 
 **Verification token:** include the literal first line of the tail you read in your final output (or note "tail starts mid-message").
 
 ### Step 2 — Privacy blocklist check
-If the tail contains any of: `Personal/`, `Financial/`, `CS2025`, `archive-cs2025`, `Troy2023`, `Divorce` — STOP, write nothing, return `{blocked: privacy}`. Privacy boundary is non-negotiable. Do NOT explain what was redacted.
+Privacy blocklist = structural patterns (`Personal/`, `Financial/`, `Divorce`) PLUS any user-specific entity names listed in `~/.claude/private-blocklist.json` (`patterns` array). Read that JSON file before checking — its contents are user-private and intentionally NOT in framework code. If ANY pattern matches in the tail, STOP, write nothing, return `{blocked: privacy}`. Privacy boundary is non-negotiable. Do NOT explain what was redacted.
 
 ### Step 3 — Self-loop sentinel check
 If the tail contains the literal string `<!-- scribe-done -->`, the recent content is scribe-origin echo. STOP, return `{skipped: sentinel}`.

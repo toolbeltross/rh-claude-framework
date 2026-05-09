@@ -27,7 +27,11 @@
 // Constraints carried forward from oversight-steward APPROVE-WITH-CONDITIONS (v1):
 //   C-1 tail cap: 10,000 chars before regex
 //   C-2 self-loop skip: SENTINEL marks scribe-generated content
-//   C-3 privacy blocklist: Personal/, Financial/, CS2025, Troy2023, Divorce
+//   C-3 privacy blocklist: structural patterns hardcoded (Personal/, Financial/);
+//       user-specific entity names are loaded from ~/.claude/private-blocklist.json
+//       (user-private, gitignored). The framework code does NOT contain user-
+//       specific names by design — adding them here would put private tokens
+//       in the public framework repo.
 //   C-4 concurrency: now handled in this hook via lockfile-with-jitter (was the
 //        scribe agents' responsibility under the prior async design)
 //   C-5 hook order: still BEFORE Layer 3a prompt
@@ -74,13 +78,45 @@ const BACKOFF_SUPPRESS_MS = 30 * 60_000;   // 30 minutes
 const STATE_FILE = path.join(config.claudeDir, 'scribe-session-state.json');
 
 // Privacy blocklist (C-3). If any pattern appears in the tail, skip silently.
+//
+// Two-layer design:
+//   1. Structural patterns (hardcoded below) — directory names that are
+//      universal markers of private content (Personal/, Financial/) plus
+//      a generic "Divorce" word-token.
+//   2. User-specific patterns — entity names like a tax-year project name
+//      that vary per user. Loaded at module-load time from
+//      ~/.claude/private-blocklist.json (a user-private, gitignored file).
+//      The framework code does NOT contain user-specific entity names —
+//      keeping them out of the public repo is the whole point of the
+//      external file.
+//
+// Schema for ~/.claude/private-blocklist.json:
+//   {
+//     "patterns": ["RegexLiteralWithoutSlashes", "AnotherEntityName", ...]
+//   }
+// Each entry is wrapped as /\b<entry>\b/i at load time. Invalid entries
+// are skipped silently. File missing is fine — only structural patterns apply.
 const PRIVACY_PATTERNS = [
   /Personal[\\/]/i,
   /Financial[\\/]/i,
-  /\b(CS2025|archive-cs2025)\b/i,
-  /\bTroy2023\b/i,
   /\bDivorce\b/i,
 ];
+
+(function loadUserBlocklist() {
+  try {
+    const userBlocklistPath = path.join(config.claudeDir, 'private-blocklist.json');
+    if (!fs.existsSync(userBlocklistPath)) return;
+    const raw = fs.readFileSync(userBlocklistPath, 'utf8');
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.patterns)) return;
+    for (const entry of data.patterns) {
+      if (typeof entry !== 'string' || !entry.trim()) continue;
+      try {
+        PRIVACY_PATTERNS.push(new RegExp(`\\b${entry}\\b`, 'i'));
+      } catch {}
+    }
+  } catch {}
+})();
 
 const REC_MARKERS = /\b(recommend(?:ation|s|ed)?|should|consider|would be better|improve|suggest(?:ion)?)\b/i;
 const CLEANUP_MARKERS = /\b(TODO|FIXME|leftover|stale|cleanup|temporary|orphan|dead code|remove later)\b/i;
