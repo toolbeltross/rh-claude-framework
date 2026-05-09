@@ -1,8 +1,99 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-04
+**Last session:** 2026-05-08 (long session covering P0/P1/P2/P4 + privacy scrub)
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` — 3 commits (initial `9c3455f`, rename `85c82ab`, merge `8745c69`)
+**Branch:** `main` — clean, all commits pushed to `origin/main`
+
+---
+
+## 2026-05-08 session — what landed
+
+**9 commits pushed to `origin/main`** (oldest → newest):
+
+| Commit | Item | Summary |
+|---|---|---|
+| `b7c969f` | P0-6 wrap | rh-auto-prune session-marker pruning (>30d cutoff) |
+| `a54ac79` | P2-2 | cross-package contract test for Stop hook chain |
+| `fc799e3` | follow-up to P2-2 | dedupe Layer 3a prompts across packages by signature |
+| `dec50b5` | P1-4 step 1 | prompt directive "dispatch in parallel" (superseded) |
+| `4fa3d74` | P1-4 step 2 | new `rh-scribe-multiscope` agent — single-pass scribe |
+| `1391918` | P1-4 step 3 | scope=scribe fast-path block in rh-supervisor |
+| `676c668` | P1-4 step 4 | /rh-quit dispatches rh-scribe-multiscope DIRECTLY (supervisor removed from path) |
+| `8e7b6c6` | P1-6 + P1-7 | atomic sentinel-aware table writes (rh-scribe-table-write.js helper + prefilter strip-all-sentinels) |
+| `533d61e` | privacy scrub | externalized user-specific privacy blocklist; framework no longer carries entity names |
+
+**Plan checkboxes** (`claude-setup-ross/oversight-system/PLAN-2026-05-08-reliability-hardening.md`):
+- Phase 0 (P0-1..P0-7) ✅
+- Phase 1: P1-1, P1-2, P1-4, P1-5, P1-7 ✅; P1-6 `[~]` partial (helper-swap landed, latency outer-seam test pending); P1-3 open
+- Phase 2: P2-1, P2-2, P2-3 ✅; P2-4 open
+- Phase 3: P3-1, P3-2 open
+- Phase 4 ✅
+- Phase 5: P5-1 open (gated on Phase 1-3)
+
+**Other work this session (separate from the numbered plan):**
+- 22 stale `session-marker-*.json` bulk-deleted from `~/.claude/`
+- 6 scribe rows marked resolved in `cleanup.md` + `recommendations.md` for items closed by recent commits
+- 3 stale duplicate docs archived to `claude-setup-ross/Archive/` with closing notes (P4-2)
+- 28 unprefixed rule references in OVERSIGHT_SYSTEM.md bulk-replaced (P4-1, all 35 occurrences across 13 distinct patterns)
+- Privacy scrub: 7 heavy-reference docs moved from `claude-setup-ross/` → `Personal/Financial/Troy2023/archive/`; 9 light-reference docs edited in place; framework code 100% clean of user-specific entity names
+- Global gitignore configured at `~/.config/git/ignore` with `Personal/`, `**/Personal/`, `Personal/**`, `**/.claude/private-blocklist.json`
+- `~/.claude/private-blocklist.json` seeded with the 3 user-specific tokens (gitignored, runtime privacy fully restored — verified via 6/6 smoke-test)
+
+---
+
+## Pickup checklist for next session
+
+### IMMEDIATE — drain this session's markers
+This session contains substantive content across all 3 sub-scopes (recommendations, cleanup, learnings) that was NEVER drained because `rh-scribe-multiscope` is not in this session's subagent registry (loaded before commit `4fa3d74`). When you start the next session:
+
+```
+/rh-quit
+```
+
+The fresh session will have the multiscope agent loaded. It should: dispatch a single Task call to `rh-scribe-multiscope`, write to `recommendations.md` / `cleanup.md` / `~/.claude/memory-shared/learnings/<topic>.md`, and confirm "safe to close session." Wall-clock should be measurably faster than the 286s observed in the 2026-05-08 test #3 (target <90s).
+
+### Outer-seam test prompts pending verification
+
+**P1-6 latency drop** — after running `/rh-quit` above, confirm:
+- `bashCount` in multiscope's toolStats: should drop from 25 (test #3, pre-helper-swap) to ~3-5 (one helper call per file)
+- Wall-clock < 90s
+- Multiscope invokes `rh-scribe-table-write.js` and/or `rh-learnings-write.js` per its bash trace (NOT bare `>>` redirects or `grep -v` cleanup)
+
+If those signals confirm, mark P1-6 ✅ in plan.
+
+### Open queue (priority order)
+1. **P1-3** Replace 10K-char tail with per-turn staging file + /rh-quit true-up — risky scope, plan calls for staged migration via env-var switch alongside existing prefilter
+2. **P2-4** settings.json safety rails — needs design call: git-track in private repo? validation pre-write hook? merge-aware `rh-oversight-settings` CLI? Different implications.
+3. **P3-1** Cross-session supervisor sweep — weekly trend doc; depends on accumulated P2-1 orphan + P2-3 InstructionsLoaded events
+4. **P3-2** Dashboard "Trends" tab — frontend work in `packages/telemetry/src/`
+5. **P5-1** Anthropic deliverable — `docs/PATTERNS.md` + framework README pitch + 2-page summary; gated on Phase 1-3 stability
+
+### Useful commands
+
+```bash
+cd C:/Users/rossb/OneDrive/Workspace/toolbeltross/toolbeltross-public/rh-claude-framework
+
+# tests
+node packages/oversight/tests/run.js              # 45/45 expected
+
+# health snapshot
+node packages/oversight/scripts/rh-oversight-health.js
+
+# verify tree clean (it is, as of session-end)
+git status
+git log origin/main..HEAD --oneline               # should be empty
+
+# verify privacy is clean (no user-specific names in framework)
+grep -rc "Troy2023\|CS2025" packages/ | grep -v ":0" | head    # should be empty
+
+# verify global gitignore working
+git check-ignore -v Personal/file.md              # from any repo dir
+```
+
+### Known leftover state
+- `~/.claude/scribe-pending-*.flag` — 3 flags exist (<24h old at session-end); auto-prune will sweep them after their 24h cutoff
+- `Workspace/.claude/settings.local.json` — earlier in session removed one Bash() permission entry that referenced the private path; if you need that permission back, add it without the literal entity name in the path
+- This session's transcript JSONL still contains conversational mentions of the entity names (in messages I wrote when discussing the scrub itself); the file is at `~/.claude/projects/...57f01915.jsonl` and isn't gitignored, but the directory `~/.claude/` is per-user so it's not at risk of being committed
 
 ## What exists
 
