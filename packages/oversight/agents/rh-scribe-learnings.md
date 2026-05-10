@@ -161,7 +161,7 @@ End every response with:
 
 ## Rules
 
-- Verification token: include the literal first line of the transcript tail you read (or note "tail starts mid-message")
+- Verification token: include the literal last line of the transcript tail you read (proves you read through to the most recent message)
 - Never re-paraphrase user/assistant text on load-bearing claims — copy the substantive line verbatim
 - Never invent learnings not present in the source text
 - Privacy blocklist trips → return `{items_written: 0, blocked: privacy}` — do NOT explain what was redacted

@@ -8,7 +8,7 @@ When dispatching any subagent that reads multiple items (files, URLs, records), 
 
 ## Required in agent prompt
 
-1. **Verification tokens**: For each item processed, return a provable artifact — the literal first line of the file, a line count, or a unique identifying string copied verbatim from the source. Do not paraphrase.
+1. **Verification tokens**: For each item processed, return a provable artifact that demonstrates completeness — for files: the literal **last line** of the file plus total line count and the line range actually read (e.g., "lines 1–639 of 639"); for non-file sources (URLs, records, API responses): a unique identifying string copied verbatim from a section near the end of the source. Do not paraphrase.
 
 2. **Self-reported telemetry**: End your response with:
    - Items found / successfully processed / failed or truncated (list any failures)
@@ -44,10 +44,20 @@ This rule applies specifically to:
 
 Never silently pick one subagent's answer over another when they disagree. Never average them. Never omit the conflict from your status to the user.
 
+## Scope note — ScheduleWakeup
+
+ScheduleWakeup resumes the same conversation thread; it is **not** a subagent dispatch. The four-item protocol (verification tokens, self-reported telemetry, batch overflow rule, count cross-reference) does not apply to ScheduleWakeup payloads.
+
+However, resumed turns must still:
+- Disclose context pressure per `rh-context-discipline.md` (>70% inform, >85% stop, >95% halt).
+- Surface between-cycle improvement signals per `~/.claude/memory-shared/feedback_iterate_between_pipeline_cycles.md` — don't run cycle N+1 with stale params; explicit between-cycle improvement step required.
+
+Also note: the `rh-agent-oversight-guard.js` PreToolUse hook matches the `Agent` tool only. ScheduleWakeup invocations are not policed by it.
+
 ## Scope: Direct Reads in Main Context
 
 These same standards apply when reading files directly (not via subagent) in any consolidation or source-attribution task:
 
 - Files > 800 lines MUST be dispatched to a subagent with the oversight protocol — do not Read them directly in main context
 - Before using any Read result in synthesis, confirm the read was complete: did the file have more lines than were returned?
-- A file read in main context still requires a verification token (literal first line) and line count before it can appear in a source registry
+- A file read in main context still requires a verification token (literal last line) plus total line count and line range actually read before it can appear in a source registry

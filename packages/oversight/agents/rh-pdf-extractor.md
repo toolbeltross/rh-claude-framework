@@ -46,7 +46,7 @@ For every PDF processed, also include in `notes`:
 - Total page count of the source file
 - Which page ranges were actually read
 - Which tool was used (Read vs. pdf-reader)
-- Verification token: the literal first line of the first page read, verbatim
+- Verification token: the literal last line of the last page read, verbatim (proves the read reached the end of the page range; pair with the page-range-read note above)
 
 If the document is not a financial document, return {type: "non-financial", summary: "..."}.
 

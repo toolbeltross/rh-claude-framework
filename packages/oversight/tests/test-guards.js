@@ -47,7 +47,7 @@ const tests = [
       const r = runHook('rh-consolidation-guard.js', {
         tool_input: {
           file_path: '/tmp/MASTER_DOC.md',
-          content: '# Source Registry\n| file | verification token | first line |\n|---|---|---|'
+          content: '# Source Registry\n| file | verification token | last line |\n|---|---|---|'
         }
       });
       const out = parseOutput(r);
@@ -70,7 +70,7 @@ const tests = [
     fn: () => {
       const r = runHook('rh-agent-oversight-guard.js', {
         tool_input: {
-          prompt: 'verification token first line verbatim. compactions and % used. batch overflow STOP and return remaining count.',
+          prompt: 'verification token last line verbatim. compactions and % used. batch overflow STOP and return remaining count.',
           description: 'test', subagent_type: 'general-purpose'
         }
       });
@@ -107,7 +107,7 @@ const tests = [
         session_id: 'test-protocol-violation',
         tool_input: {
           description: 'protocol test',
-          prompt: 'Process N files. Return verification token (literal first line) for each. End with telemetry: compaction count and % used.'
+          prompt: 'Process N files. Return verification token (literal last line) for each. End with telemetry: compaction count and % used.'
         },
         tool_output: 'I read the files and the analysis is complete. The findings are consistent across all sources and no anomalies were detected. The work has been finished successfully without any issues whatsoever and I am providing this longer summary so the length-gate on the protocol check is exceeded.'
       });
@@ -121,9 +121,9 @@ const tests = [
         session_id: 'test-compliant',
         tool_input: {
           description: 'compliant test',
-          prompt: 'Process files. Return verification token (literal first line). End with telemetry including compaction and % used.'
+          prompt: 'Process files. Return verification token (literal last line). End with telemetry including compaction and % used.'
         },
-        tool_output: "File 1 first line: '# Header'\nFile 2 first line: '---\\nname: x'\n\nItems found: 2 / Items processed: 2 / Items failed: 0\nContext usage: 0 compactions, 23% used"
+        tool_output: "File 1 last line: '# Footer'\nFile 2 last line: '---\\nend: x'\nlines read: 1-50 of 50\n\nItems found: 2 / Items processed: 2 / Items failed: 0\nContext usage: 0 compactions, 23% used"
       });
       assert.ok(!/Protocol violation/.test(r.stderr), 'stderr should be clean for compliant output');
     },

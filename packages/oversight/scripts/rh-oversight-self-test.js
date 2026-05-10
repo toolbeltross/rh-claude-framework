@@ -113,7 +113,7 @@ const BEHAVIOR_TESTS = [
     run: () => {
       const r = runHook(path.join(SCRIPTS_DIR, "rh-agent-oversight-guard.js"), {
         tool_input: {
-          prompt: "Read a file. Required: verification token (first line verbatim), telemetry with #compactions and % used, batch overflow rule (STOP and return remaining count).",
+          prompt: "Read a file. Required: verification token (last line verbatim plus total line count and lines read), telemetry with #compactions and % used, batch overflow rule (STOP and return remaining count).",
           description: "test",
           subagent_type: "general-purpose",
         }

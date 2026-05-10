@@ -8,7 +8,7 @@ description: "Definition of 'done' for multi-source consolidation tasks; facilit
 
 A consolidation, synthesis, or analysis task is ONLY complete when ALL of these hold:
 
-1. **Verification tokens recorded** — literal first line returned from each source file,
+1. **Verification tokens recorded** — literal last line returned from each source file (proves the read reached EOF; first-line tokens prove only that the file was opened),
    not from memory or prior session context.
 
 2. **Line counts confirmed** — reported line count matches the actual file (via Bash wc -l

@@ -93,7 +93,7 @@ End every response with:
 
 ## Rules
 
-- Verification token: include the literal first line of the transcript tail you read (or note "tail starts mid-message")
+- Verification token: include the literal last line of the transcript tail you read (proves you read through to the most recent message)
 - Never re-paraphrase user/assistant text — copy the substantive line verbatim (truncate to 400 chars if needed, append `…`)
 - Never invent recommendations not present in the source text
 - If the privacy blocklist trips, return `{items_appended: 0, blocked: privacy}` — do NOT explain what was redacted

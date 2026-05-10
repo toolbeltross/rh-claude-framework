@@ -1,8 +1,27 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-08 (long session covering P0/P1/P2/P4 + privacy scrub)
+**Last session:** 2026-05-09 (verification-token wording: first → last line)
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` — clean, all commits pushed to `origin/main`
+**Branch:** `main` — see latest commit for verification-token wording change
+
+---
+
+## 2026-05-09 session — what landed
+
+**Verification-token wording change (Option A hard cutover):** rules now require the literal **last line** of a source file (proves read reached EOF) plus total line count and line range read. First-line tokens prove only that the file was opened — they don't catch silent Read-tool truncation at ~10K tokens, which is the failure mode the rule exists to mitigate.
+
+15 files modified in `packages/oversight/`:
+- 3 rules: `rh-subagent-oversight.md` (lines 11, 53; also added missing ScheduleWakeup section that had drifted to workspace-only), `rh-read-integrity.md` (line 21), `rh-completion-standards.md` (line 11)
+- 5 scripts: `rh-agent-oversight-guard.js` (regex + inlined CANONICAL_BLOCK), `rh-agent-result-guard.js` (2 regexes), `rh-consolidation-guard.js` (regex + error msg), `rh-learning-loop.js` (instruction text + comment), `rh-oversight-self-test.js` (test fixture)
+- 6 agents: `rh-source-verifier.md` (2), `rh-pdf-extractor.md`, `rh-scribe-multiscope.md` (2), `rh-scribe-cleanup-items.md`, `rh-scribe-learnings.md`, `rh-scribe-recommendations.md`
+- 1 test: `tests/test-guards.js` (5 fixture updates)
+
+Also synced `claude-setup-ross/oversight-system/OVERSIGHT_SYSTEM.md` (6 stale references at lines 123, 199, 288, 295, 347, 401, 409).
+
+**Outer-seam verification:**
+- `node packages/oversight/tests/run.js` → 45/45 passing
+- `node ~/.claude/scripts/rh-oversight-self-test.js` → 37/37 hard passed
+- Re-ran `rh-oversight init` to propagate canonical → installed copies after edits
 
 ---
 
@@ -60,6 +79,10 @@ The fresh session will have the multiscope agent loaded. It should: dispatch a s
 - Multiscope invokes `rh-scribe-table-write.js` and/or `rh-learnings-write.js` per its bash trace (NOT bare `>>` redirects or `grep -v` cleanup)
 
 If those signals confirm, mark P1-6 ✅ in plan.
+
+### Soft follow-up (low urgency)
+
+**Doc-sync probe path-resolution** — `rh-oversight-self-test.js` `runDocSyncProbe()` (line 277) reads `OVERSIGHT_SYSTEM.md` from `config.oversightDir`, which defaults to `~/.claude/oversight/`. Ross's hand-authored design doc actually lives at `claude-setup-ross/oversight-system/OVERSIGHT_SYSTEM.md`. `~/.claude/oversight.json` doesn't override the path, so the probe always reports "OVERSIGHT_SYSTEM.md not found — skipped." Result: the soft sync warning never fires for Ross's environment, even when the design doc is genuinely stale. Fix is one of: (a) add `oversightDir` override to `~/.claude/oversight.json` pointing at `claude-setup-ross/oversight-system/` (user-config only, no framework change), or (b) make the probe also look in a `<workspace>/claude-setup-ross/oversight-system/` fallback. (a) is simpler and stays out of framework code.
 
 ### Open queue (priority order)
 1. **P1-3** Replace 10K-char tail with per-turn staging file + /rh-quit true-up — risky scope, plan calls for staged migration via env-var switch alongside existing prefilter

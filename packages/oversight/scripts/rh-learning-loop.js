@@ -153,7 +153,7 @@ function dispatchSupervisor(groups) {
   // rh-agent-oversight-guard.js does NOT auto-inject (saves a round-trip
   // and prevents the next weekly run from learning about itself).
   // The three regex checks in agent-oversight-guard.js are:
-  //   /verification token|literal first line|first line verbatim/i
+  //   /verification token|literal last line|last line verbatim/i
   //   /compaction/i AND /% used/i
   //   /batch overflow|STOP and return|stop.*remaining count/i
   const prompt = [
@@ -163,7 +163,7 @@ function dispatchSupervisor(groups) {
     `recommendations_path=${RECS_PATH}`,
     `groups=${JSON.stringify(groups)}`,
     '',
-    'Verification token: when proposing a rule wording change, return the literal first line of the target rule file as proof you read it.',
+    'Verification token: when proposing a rule wording change, return the literal last line of the target rule file plus its total line count as proof you read it to completion.',
     'Self-reported telemetry: end with #compactions and % of context window used.',
     'Batch overflow rule: if groups exceed your processing capacity, STOP and return remaining count rather than processing partial.',
     '',

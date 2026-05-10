@@ -44,13 +44,13 @@ wrapHook('consolidation-guard', (input) => {
 
   const isConsolidation = /MASTER_|CONSOLIDATED|_master\./i.test(filename);
   const hasRegistry     = /Source Registry/i.test(content);
-  const hasTokens       = /verification token|first line/i.test(content);
+  const hasTokens       = /verification token|last line/i.test(content);
 
   if (isConsolidation && (!hasRegistry || !hasTokens)) {
     const reason =
       'Consolidation document rejected: missing Source Registry with verification tokens.\n' +
-      'Add a "Source Registry" section listing each source file\'s first line verbatim\n' +
-      'and which lines were read before this file will be written.';
+      'Add a "Source Registry" section listing each source file\'s last line verbatim\n' +
+      'plus total line count and which lines were read before this file will be written.';
 
     notifyTelemetry('consolidation_blocked',
       `[BLOCK] Missing Source Registry / tokens for ${filename}`,

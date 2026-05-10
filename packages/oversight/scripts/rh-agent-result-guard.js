@@ -100,7 +100,7 @@ wrapHook('agent-result-guard', (input) => {
   // the false-positive rate is understood.
   const promptText = (input?.tool_input?.prompt || '').toString();
   const promptRequiredProtocol =
-    /verification token|literal first line|first line verbatim/i.test(promptText) &&
+    /verification token|literal last line|last line verbatim/i.test(promptText) &&
     /compaction/i.test(promptText) &&
     /% used/i.test(promptText);
 
@@ -109,7 +109,7 @@ wrapHook('agent-result-guard', (input) => {
       /items?\s*(found|processed|successful|failed)/i.test(output) &&
       (/context\s*usage|%\s*used|compaction/i.test(output));
     const hasVerificationArtifact =
-      /first line[:\s]|verification token|line count[:\s]/i.test(output);
+      /last line[:\s]|verification token|line count[:\s]|lines? read/i.test(output);
 
     const protocolMissing = [];
     if (!hasTelemetryBlock) protocolMissing.push('telemetry-block');

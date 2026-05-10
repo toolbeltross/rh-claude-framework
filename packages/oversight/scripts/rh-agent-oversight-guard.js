@@ -47,7 +47,7 @@ const CANONICAL_BLOCK = `
 
 ## Required oversight block (auto-injected by agent-oversight-guard)
 
-1. **Verification tokens**: For each item processed, return a provable artifact — the literal first line of the file, a line count, or a unique identifying string copied verbatim from the source. Do not paraphrase.
+1. **Verification tokens**: For each item processed, return a provable artifact that demonstrates completeness — for files: the literal **last line** of the file plus total line count and the line range actually read (e.g., "lines 1–639 of 639"); for non-file sources (URLs, records, API responses): a unique identifying string copied verbatim from a section near the end of the source. Do not paraphrase.
 
 2. **Self-reported telemetry**: End your response with:
    - Items found / successfully processed / failed or truncated (list any failures by name)
@@ -64,7 +64,7 @@ wrapHook('agent-oversight-guard', (input) => {
   const sessionId = input?.session_id || '';
 
   const checks = {
-    verificationToken: /verification token|literal first line|first line verbatim/i.test(prompt),
+    verificationToken: /verification token|literal last line|last line verbatim/i.test(prompt),
     contextReport:     /compaction/i.test(prompt) && /% used/i.test(prompt),
     batchOverflow:     /batch overflow|STOP and return|stop.*remaining count/i.test(prompt),
   };

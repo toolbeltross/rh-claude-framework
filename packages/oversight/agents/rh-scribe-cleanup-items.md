@@ -92,7 +92,7 @@ End every response with:
 
 ## Rules
 
-- Verification token: literal first line of the transcript tail you read
+- Verification token: literal last line of the transcript tail you read (proves you read through to the most recent message)
 - Copy substantive lines verbatim — never paraphrase
 - If the privacy blocklist trips, return `{items_appended: 0, blocked: privacy}` — do NOT describe what was redacted
 - Cleanup items are forward-looking — don't capture historical mentions of things that were already cleaned up in the same conversation

@@ -18,7 +18,7 @@ A partial read MUST be treated as a failure unless explicitly handled.
 ## Verification Tokens on Direct Reads
 
 For any consolidation, synthesis, or source-attribution task, record for every file:
-- Literal first line (verbatim) — the verification token
+- Literal **last line** (verbatim) — the verification token (proves the read reached EOF; first-line tokens prove only that the file was opened)
 - Total line count of the file
 - Which lines were actually read (e.g., "lines 1–200 of 639")
 

@@ -38,7 +38,7 @@ If a candidate could fit multiple buckets, prefer in this order: cleanup > recom
 ### Step 1 — Read the transcript tail
 The supervisor passes `transcript_path` and `session_id`. Read the last ~10,000 chars of the JSONL file. Focus on the most recent assistant turn(s) — older content was likely already scribed.
 
-**Verification token:** include the literal first line of the tail you read in your final output (or note "tail starts mid-message").
+**Verification token:** include the literal last line of the tail you read in your final output (proves you read through to the most recent message).
 
 ### Step 2 — Privacy blocklist check
 Privacy blocklist = structural patterns (`Personal/`, `Financial/`, `Divorce`) PLUS any user-specific entity names listed in `~/.claude/private-blocklist.json` (`patterns` array). Read that JSON file before checking — its contents are user-private and intentionally NOT in framework code. If ANY pattern matches in the tail, STOP, write nothing, return `{blocked: privacy}`. Privacy boundary is non-negotiable. Do NOT explain what was redacted.
@@ -196,7 +196,7 @@ For each bucket where `items_extracted: 0`, the rest of that bucket's fields can
 - Sentinel skip: yes/no
 - Sentinel positions per touched file
 - Context usage: low / medium / high / critical (per `rh-subagent-oversight.md`)
-- Verification token: literal first line of transcript tail
+- Verification token: literal last line of transcript tail
 
 ## Rules
 
