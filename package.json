@@ -4,6 +4,7 @@
   "private": true,
   "description": "Monorepo for Claude Code oversight framework and telemetry dashboard",
   "workspaces": [
+    "packages/shared",
     "packages/oversight",
     "packages/telemetry"
   ],
