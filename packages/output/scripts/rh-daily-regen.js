@@ -19,6 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { config } = require('./lib/config');
+const { withLock } = require('./lib/file-lock');
 
 const SCRIPTS_DIR = path.join(config.claudeDir, "scripts");
 const LOG_PATH = path.join(SCRIPTS_DIR, "daily-regen.log");
@@ -35,7 +36,13 @@ function alreadyRanToday() {
   } catch { return false; }
 }
 function markRanToday() {
-  try { fs.writeFileSync(LAST_RUN_MARKER, todayStamp(), "utf8"); } catch { /* ignore */ }
+  // Cross-process lock — two SessionStart-triggered regens racing on this
+  // marker would both pass the alreadyRanToday check and double-run.
+  try {
+    withLock(LAST_RUN_MARKER, () => {
+      fs.writeFileSync(LAST_RUN_MARKER, todayStamp(), "utf8");
+    });
+  } catch { /* ignore */ }
 }
 
 // ───────────────────────── Step definitions ─────────────────────────
