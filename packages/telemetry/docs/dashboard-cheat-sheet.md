@@ -2,7 +2,11 @@
 
 Quick reference for every section in the Session tab, what it shows, and why it matters.
 
+> For the visual system itself (tokens, type, badges, formatting rules), see [`STYLEGUIDE.md`](STYLEGUIDE.md). This file covers *what each section means* — the styleguide covers *how it looks*.
+
 ---
+
+> **Session-tab layout note.** The five tabbed subpanels are **Agents · Tools · Turns · Failures · Details**. Rows: Context Window + Models (Row 1) → Turn Heartbeat (Row 1b) → Tabbed subpanel (Row 2). Tools / Turn Cost / Agents are full-width inside their tab — not a 12-column grid split.
 
 ## Context Window (Row 1, 9 columns)
 **What:** Fill gauge showing how much of the model's 200K token context window is used.

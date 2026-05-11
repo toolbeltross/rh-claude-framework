@@ -45,14 +45,6 @@ export default function TurnsTab({ liveSession }) {
   const history = liveSession?._turnHistory || [];
   const turns = history.filter(t => !t.compact);
 
-  if (turns.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-8 text-xs text-gray-500">
-        No turns recorded yet
-      </div>
-    );
-  }
-
   const infoContent = (
     <div className="space-y-1.5">
       <p>Per-turn breakdown: wall-clock duration, tool execution time, model thinking time, and cost. Click a turn to see its full tool timeline.</p>
@@ -64,6 +56,22 @@ export default function TurnsTab({ liveSession }) {
       </div>
     </div>
   );
+
+  if (turns.length === 0) {
+    return (
+      <div className="p-2">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Turn History
+          </span>
+          <InfoIcon>{infoContent}</InfoIcon>
+        </div>
+        <div className="flex items-center justify-center py-6 text-xs text-gray-500">
+          No turns recorded yet
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-2">

@@ -12,22 +12,25 @@ export default function OverviewTab({ stats, sessions, onSelectSession, displayM
   const isTokenMode = displayMode === 'tokens';
   const totalSessions = stats?.totalSessions ?? '—';
   const totalMessages = stats?.totalMessages ?? '—';
+  // ISO YYYY-MM-DD matches the chart x-axis style and avoids locale ambiguity
   const firstDate = stats?.firstSessionDate
-    ? new Date(stats.firstSessionDate).toLocaleDateString()
+    ? new Date(stats.firstSessionDate).toISOString().slice(0, 10)
     : '—';
   const totalCost = sessions?.reduce((sum, s) => sum + (s.cost || 0), 0) ?? 0;
   const totalTokens = sessions?.reduce((sum, s) => sum + (s.tokens?.total || 0), 0) ?? 0;
 
   return (
     <div className="grid grid-cols-12 gap-3">
-      {/* Summary Cards */}
+      {/* Summary Cards — neutral text-gray-100 for non-categorical metrics;
+          model-family colors (purple/blue/cyan) are reserved for model attribution.
+          Red is reserved for failure/alert states. */}
       <div className="col-span-3 bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col justify-center gap-4">
-        <MetricCard label="Total Sessions" value={totalSessions} color="text-accent" tooltip="Cumulative number of Claude Code sessions across all projects" />
-        <MetricCard label="Total Messages" value={totalMessages} color="text-blue" tooltip="Total conversation messages exchanged across all sessions" />
+        <MetricCard label="Total Sessions" value={totalSessions} color="text-gray-100" tooltip="Cumulative number of Claude Code sessions across all projects" />
+        <MetricCard label="Total Messages" value={totalMessages} color="text-gray-100" tooltip="Total conversation messages exchanged across all sessions" />
         {isTokenMode ? (
-          <MetricCard label="Total Tokens" value={formatTokens(totalTokens)} color="text-green" tooltip="Sum of tokens consumed across all tracked sessions" />
+          <MetricCard label="Total Tokens" value={formatTokens(totalTokens)} color="text-gray-100" tooltip="Sum of tokens consumed across all tracked sessions" />
         ) : (
-          <MetricCard label="Total Cost" value={`$${totalCost.toFixed(2)}`} color="text-green" tooltip="Sum of API costs across all tracked sessions" />
+          <MetricCard label="Total Cost" value={`$${totalCost.toFixed(2)}`} color="text-gray-100" tooltip="Sum of API costs across all tracked sessions" />
         )}
         <MetricCard label="First Session" value={firstDate} color="text-gray-100" tooltip="Date of the earliest recorded Claude Code session" />
         {failurePatterns?.total > 0 && (
@@ -81,8 +84,19 @@ export default function OverviewTab({ stats, sessions, onSelectSession, displayM
                     <td className="py-2 text-gray-200 font-medium">{s.projectName}</td>
                     <td className="py-2 text-gray-400 font-mono text-xs">{s.sessionId.slice(0, 8)}</td>
                     <td className="py-2 text-gray-300">{s.primaryModel}</td>
-                    <td className="py-2 text-right text-green font-mono">
-                      {isTokenMode ? formatTokens(s.tokens?.total || 0) : `$${s.cost.toFixed(4)}`}
+                    <td className="py-2 text-right font-mono">
+                      {(() => {
+                        const tokens = s.tokens?.total || 0;
+                        const cost = s.cost || 0;
+                        if (isTokenMode) {
+                          return tokens > 0
+                            ? <span className="text-green">{formatTokens(tokens)}</span>
+                            : <span className="text-gray-600">—</span>;
+                        }
+                        return cost > 0
+                          ? <span className="text-green">{`$${cost.toFixed(4)}`}</span>
+                          : <span className="text-gray-600">—</span>;
+                      })()}
                     </td>
                     <td className="py-2 text-right text-gray-400">{s.duration}</td>
                   </tr>
