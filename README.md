@@ -4,19 +4,25 @@ Portable Claude Code oversight framework + telemetry dashboard, packaged as a mo
 
 ## Packages
 
-| Package | npm name | Purpose | Status |
-|---|---|---|---|
-| [`packages/oversight`](packages/oversight/) | `rh-claude-oversight` | Enforcement scripts, agents, rules, and the `rh-oversight` setup CLI | Working — installed via `rh-oversight init` |
-| [`packages/telemetry`](packages/telemetry/) | `rh-telemetry` | Real-time monitoring dashboard for Claude Code sessions | Stub — migration tracked in `PROGRESS.md` item #5 |
+| Package | npm name | Purpose |
+|---|---|---|
+| [`packages/shared`](packages/shared/) | `@rh/shared` | Canonical config + cross-process file lock + env helpers |
+| [`packages/oversight`](packages/oversight/) | `rh-claude-oversight` | Enforcement scripts, agents, workspace rules |
+| [`packages/output`](packages/output/) | `@rh/output` | Rendered artifacts (HTML dashboards, scribe writers, daily-regen) |
+| [`packages/skills`](packages/skills/) | `@rh/skills` | User-invocable skills (`/rh-quit`, `/rh-session`) |
+| [`packages/cli`](packages/cli/) | `@rh/cli` | Meta-installer + `rh-oversight` CLI + settings tooling |
+| [`packages/telemetry`](packages/telemetry/) | `rh-telemetry` | Real-time monitoring dashboard for Claude Code sessions |
 
-## Install (oversight package)
+The 5-package reorg landed 2026-05-11 (PRs #21–23). Install logic, output rendering, skills, and shared infrastructure live in their own peer packages alongside `oversight` and `telemetry`.
+
+## Install
 
 ```bash
 # From a checkout
-node packages/oversight/bin/rh-oversight.js init [--workspace <path>] [--oversight-dir <path>] [--private-dirs <comma,list>]
+node packages/cli/bin/rh-oversight.js init [--workspace <path>] [--oversight-dir <path>] [--private-dirs <comma,list>]
 
 # Or via npm (after publish)
-npm install -g rh-claude-oversight
+npm install -g @rh/cli
 rh-oversight init
 ```
 
@@ -74,23 +80,26 @@ Removes installed `rh-*` scripts and reinstalls. Preserves `oversight.json`.
 
 ## Architecture
 
-- **Monorepo** — npm workspaces; root `package.json` declares `packages/oversight` + `packages/telemetry`.
-- **Zero hardcoded user paths** — all references parameterized through `packages/oversight/scripts/lib/config.js`. Verified via `grep -r "rossb\|C:/Users/rossb\|OneDrive" packages/` returning no matches.
-- **CommonJS** throughout (`require()`).
+- **Monorepo** — npm workspaces with 6 packages: `shared`, `oversight`, `output`, `skills`, `cli`, `telemetry`.
+- **Zero hardcoded user paths** — all references parameterized through `@rh/shared/config`. Verified via `grep -r "rossb\|C:/Users/rossb\|OneDrive" packages/` returning no matches.
+- **CommonJS** throughout (`require()`); telemetry is the single ESM exception.
 - **Config priority**: env var > `~/.claude/oversight.json` > auto-detect (walk up from CWD looking for `.claude/rules/`).
 - **Security split**: `rh-security.md` (framework base) + `rh-security-local.md.template` (user's private dirs, gitignored at install time).
+- **Cross-process file locking**: `@rh/shared/file-lock` provides atomic O_EXCL lockfiles with PID stamping + 5s stale recovery. Used by all output writers and scribe table writes.
 
 ## Development
 
 ```bash
-# Tests (oversight package)
-node packages/oversight/tests/run.js
+# Tests by package
+node packages/oversight/tests/run.js   # 76 tests
+node packages/cli/tests/run.js         # 43 tests
+node packages/output/tests/run.js      # 1 test (16-way concurrent stress)
 
-# Or via the workspace script
-npm run test:oversight
+# All workspaces
+npm test
 
 # Dry-run install
-node packages/oversight/bin/rh-oversight.js init --dry-run
+node packages/cli/bin/rh-oversight.js init --dry-run
 ```
 
 See [`PROGRESS.md`](PROGRESS.md) for the current state of each component and outstanding work.

@@ -1,8 +1,50 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-09 (verification-token wording: first → last line)
+**Last session:** 2026-05-11 (5-package reorg landed: shared / oversight / output / skills / cli / telemetry)
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` — see latest commit for verification-token wording change
+**Branch:** `main` — at merge of PR #23 (Phase 4 cli extraction) + PR #20 (telemetry UI)
+
+---
+
+## 2026-05-11 session — 5-package reorg + telemetry UI fixes
+
+**6 PRs merged to main** in this session:
+
+| PR | Title | Merge commit |
+|---|---|---|
+| #20 | telemetry: dashboard visual audit fixes + STYLEGUIDE.md | `6a614f5` |
+| #21 | framework: 5-package reorg Phases 1+2 (shared/ + output/) | `fe0b15f` |
+| #22 | framework: extract packages/skills/ (Phase 3) | `76e17a5` |
+| #23 | framework: extract packages/cli/ meta-installer (Phase 4) | `25bdbd4` |
+
+**Reorg layout** — all 6 packages now peers under `packages/`:
+
+- `shared/` — canonical config + cross-process file-lock + env helpers
+- `oversight/` — enforcement scripts/agents/rules only (no install logic, no skills, no output writers)
+- `output/` — HTML renderers + scribe writers + daily-regen orchestrator + 3 hardened withLock-wrapped writers
+- `skills/` — `/rh-quit` + `/rh-session`
+- `cli/` — `rh-oversight` bin + init.js + settings-cli.js + templates + cross-package contract test
+- `telemetry/` — unchanged
+
+**Concurrency hardening** (Phase 2):
+- `rh-generate-state-md.js`, `rh-render-md-html.js`, `rh-daily-regen.js markRanToday()` wrapped in `withLock`
+- New 16-way bash-parallel concurrent-write stress test in `packages/output/tests/`
+- Documented exception: `rh-daily-regen.js` LOG_PATH append stays unlocked (JSONL atomic-append assumption + same-day guard)
+
+**Test counts** post-reorg:
+- oversight: 76 (down from 119; 43 moved to cli)
+- cli: 43 (init-merge + cross-package-contract + settings-cli)
+- output: 1 (concurrent stress)
+- **total: 120 — matches pre-reorg + 1 new concurrency test**
+
+**Outer-seam verification** done in-session:
+- Tmp-HOME install via `node packages/cli/bin/rh-oversight.js init`: 25 oversight + 10 output + 3 shared + 19 agent + 3 skill + 12 rule files
+- Self-test from installed location: 37/37 hard pass
+- `diff -rq` of installed `~/.claude/` between cli-install and main-install at each phase: byte-identical (modulo expected tmp-path noise in oversight.json/settings.json)
+
+**Deferred to follow-up PR**: Phase 4b — per-package `install.json` manifest decomposition. The cli installer still aggregates a monolithic settings.json.template and hardcodes which packages it reads from. A manifest would let each sibling declare its own install fragment.
+
+**Plan reference**: `plans/do-some-analysis-on-iridescent-clock.md`.
 
 ---
 
@@ -120,19 +162,21 @@ git check-ignore -v Personal/file.md              # from any repo dir
 
 ## What exists
 
-| Component | Location | Status | Tested |
-|---|---|---|---|
-| Root package.json (npm workspaces) | `package.json` | Done | n/a |
-| Config module | `packages/oversight/scripts/lib/config.js` | Done | 6 unit tests passing |
-| Shared libs (oversight-events, hook-timing, hook-perf-audit) | `packages/oversight/scripts/lib/` | Done | Syntax-checked |
-| 16 enforcement scripts | `packages/oversight/scripts/rh-*.js` | Done — all refactored from `~/.claude/scripts/` | 10 guard tests passing + all 16 syntax-checked |
-| 18 agent definitions | `packages/oversight/agents/rh-*.md` | Done — all hardcoded paths replaced | Grep-verified clean |
-| 2 skill definitions (session, quit) | `packages/oversight/skills/rh-*/` | Done — paths parameterized | session-inventory.js syntax-checked |
-| 12 workspace rules | `packages/oversight/rules/` | Done — security split into base + local template | Grep-verified: zero user-specific paths |
-| Templates (CLAUDE.md, settings.json) | `packages/oversight/templates/` | Done | settings.json template used by init dry-run |
-| Init CLI (`rh-oversight init/reset/self-test`) | `packages/oversight/bin/rh-oversight.js` + `lib/init.js` | Done | **Dry-run only** — write path NOT tested |
-| Test suite | `packages/oversight/tests/` | Done — 16/16 passing | Runner + config + guard suites |
-| packages/telemetry/ | Migrated 2026-05-04 (chore/migrate-telemetry-to-monorepo, `f91cc47`) | Done — full project copy | Tests pass; install-skills.js hardened 2026-05-06 (DECISIONS.md entry) |
+_Updated 2026-05-11 to reflect 5-package reorg (PRs #21–23)._
+
+| Component | Location | Status |
+|---|---|---|
+| Root package.json (6 npm workspaces) | `package.json` | Done |
+| Canonical config + file-lock + env helpers | `packages/shared/` | Done — config has `scribeStaging` flag (P1-3) |
+| Source-tree shims (config, file-lock) | `packages/oversight/scripts/lib/` | Done — installer overwrites with shared canonical |
+| 25 enforcement scripts (incl. supervisor-sweep, scribe-staging-read, settings-validator) | `packages/oversight/scripts/` | Done |
+| 19 agent definitions | `packages/oversight/agents/` | Done |
+| 2 skill definitions (rh-quit, rh-session) | `packages/skills/` | Done — moved Phase 3 |
+| 12 workspace rules | `packages/oversight/rules/` | Done |
+| 8 output writers (HTML render, scribe table, learnings, daily-regen, etc.) | `packages/output/scripts/` | Done — 3 unlocked writers wrapped in withLock |
+| Init CLI + bin + templates + cross-package contract test | `packages/cli/` | Done — Phase 4 |
+| Test suite | 76 oversight + 43 cli + 1 output = 120 passing | Done |
+| `packages/telemetry/` | Migrated 2026-05-04 (`f91cc47`) | Working; UI fixes + STYLEGUIDE.md merged 2026-05-11 (PR #20) |
 
 ## Zero hardcoded paths verified
 
@@ -179,11 +223,13 @@ grep -r "rossb\|C:/Users/rossb\|OneDrive/Workspace\|claude-setup-ross\|toolbeltr
 ```bash
 cd C:/Users/rossb/OneDrive/Workspace/toolbeltross/toolbeltross-public/rh-claude-framework
 
-# Run tests
+# Run tests (76 + 43 + 1 = 120 expected)
 node packages/oversight/tests/run.js
+node packages/cli/tests/run.js
+node packages/output/tests/run.js
 
-# Dry-run install
-node packages/oversight/bin/rh-oversight.js init --dry-run
+# Dry-run install (cli is the new home for the bin)
+node packages/cli/bin/rh-oversight.js init --dry-run
 
 # Check for stale hardcoded paths
 grep -r "rossb\|C:/Users/rossb" --include="*.js" --include="*.md" packages/
