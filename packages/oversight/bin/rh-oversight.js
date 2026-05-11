@@ -20,6 +20,11 @@ const commands = {
     const code = require('../lib/settings-cli').run(args);
     process.exit(code);
   },
+  'supervisor-sweep': () => {
+    const args = process.argv.slice(3);
+    const code = require('../scripts/rh-supervisor-sweep').run(args);
+    process.exit(code);
+  },
 };
 
 if (!command || command === '--help' || command === '-h') {
@@ -39,6 +44,10 @@ Commands:
   settings <sub>    Merge-aware CLI for settings.json. Subcommands:
                     validate / show / diff / merge / backup / restore.
                     Run 'rh-oversight settings --help' for details.
+  supervisor-sweep  Cross-session/project trend doc (default 7-day window).
+                    Reads oversight-events.jsonl + supervisory-log.md;
+                    writes ~/.claude/memory-shared/supervisor-trends.md.
+                    Flags: --days N --out <path> --json --dry-run.
 
 Options for init/reset:
   --workspace <path>      Workspace root directory (auto-detected if omitted)
