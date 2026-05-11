@@ -15,6 +15,11 @@ const commands = {
     const r = require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-oversight-health.js'), ...args], { stdio: 'inherit' });
     process.exit(r.status ?? 0);
   },
+  settings:       () => {
+    const args = process.argv.slice(3);
+    const code = require('../lib/settings-cli').run(args);
+    process.exit(code);
+  },
 };
 
 if (!command || command === '--help' || command === '-h') {
@@ -31,6 +36,9 @@ Commands:
   generate-env      Regenerate ENVIRONMENT.md
   health [--json]   One-screen health aggregator (regen + journals + telemetry +
                     alerts + scribe backlog + subagent orphans). Exit 0/1/2.
+  settings <sub>    Merge-aware CLI for settings.json. Subcommands:
+                    validate / show / diff / merge / backup / restore.
+                    Run 'rh-oversight settings --help' for details.
 
 Options for init/reset:
   --workspace <path>      Workspace root directory (auto-detected if omitted)

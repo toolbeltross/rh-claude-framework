@@ -44,7 +44,7 @@ Also synced `claude-setup-ross/oversight-system/OVERSIGHT_SYSTEM.md` (6 stale re
 **Plan checkboxes** (`claude-setup-ross/oversight-system/PLAN-2026-05-08-reliability-hardening.md`):
 - Phase 0 (P0-1..P0-7) ✅
 - Phase 1: P1-1, P1-2, P1-4, P1-5, P1-7 ✅; P1-6 `[~]` partial (helper-swap landed, latency outer-seam test pending); P1-3 `[~]` code landed 2026-05-10, awaiting production-flag flip + first /rh-quit consumption
-- Phase 2: P2-1, P2-2, P2-3 ✅; P2-4 open
+- Phase 2: P2-1, P2-2, P2-3, P2-4 ✅ (P2-4 landed 2026-05-10 — both (a) pre-write validator gate and (c) merge-aware CLI)
 - Phase 3: P3-1, P3-2 open
 - Phase 4 ✅
 - Phase 5: P5-1 open (gated on Phase 1-3)
@@ -86,7 +86,7 @@ If those signals confirm, mark P1-6 ✅ in plan.
 
 ### Open queue (priority order)
 1. ~~**P1-3** Replace 10K-char tail with per-turn staging file + /rh-quit true-up~~ — **code landed 2026-05-10, default-off.** New `lib/scribe-staging.js` (offset-delta JSONL per session, 7-day TTL), prefilter wired additively behind env `RH_SCRIBE_STAGING=1` / `oversight.json: scribeStaging:true`, CLI reader `rh-scribe-staging-read.js`, `/rh-quit` SKILL updated, auto-prune sweeps stale staging. 12 new unit tests + outer-seam helper at `packages/oversight/tests/helpers/p1-3-outer-seam.js` (18/18). Suite: 57/57 passing. **Before flipping flag to ON:** verify multiscope agent uses the reader CLI per updated SKILL.md, then set env var in `~/.claude/settings.json` or `scribeStaging:true` in `~/.claude/oversight.json`
-2. **P2-4** settings.json safety rails — needs design call: git-track in private repo? validation pre-write hook? merge-aware `rh-oversight-settings` CLI? Different implications.
+2. ~~**P2-4** settings.json safety rails~~ — **landed 2026-05-10**. Both (a) pre-write validator gate and (c) merge-aware CLI; (b) git-tracking was not pursued (caller can use the `backup`/`restore` subcommands instead, or wrap them with their own VCS). New `packages/oversight/scripts/lib/settings-validator.js` (pure function returning structured `{ok, errors, warnings}` with stable codes like `hooks.item.command.missing`). Validator is wired into `lib/init.js` as a pre-write gate on the FULLY MERGED object — errors abort without writing, warnings surface but allow. New `lib/settings-cli.js` exposes `rh-oversight settings <validate|show|diff|merge|backup|restore>` with dry-run-by-default for `merge` (requires `--apply` to write), validation gate on `merge`/`restore`, automatic timestamped backup on `merge --apply`. 26 unit tests in `test-settings-validator.js` + 17 CLI integration tests in `test-settings-cli.js`; outer-seam helper at `packages/oversight/tests/helpers/p2-4-outer-seam.js` invokes real `rh-oversight settings ...` + `rh-oversight init` subprocesses (20/20 assertions including the init-refuses-to-write-bad-settings F-10-prevention check). Suite: 100/100.
 3. **P3-1** Cross-session supervisor sweep — weekly trend doc; depends on accumulated P2-1 orphan + P2-3 InstructionsLoaded events
 4. **P3-2** Dashboard "Trends" tab — frontend work in `packages/telemetry/src/`
 5. **P5-1** Anthropic deliverable — `docs/PATTERNS.md` + framework README pitch + 2-page summary; gated on Phase 1-3 stability

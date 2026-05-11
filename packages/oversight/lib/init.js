@@ -166,9 +166,31 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
   // Merge hooks via the pure mergeHooksData function (per-hook additive merge).
   existing.hooks = mergeHooksData(existing.hooks || {}, templateSettings.hooks || {});
 
+  // P2-4 pre-write validation gate. Runs on the FULLY MERGED settings object,
+  // not the template, so the gate catches issues introduced by the merge
+  // itself (e.g., shape-bad existing entries that survived the merge). Errors
+  // block the write; warnings are surfaced but allow the write so the gate
+  // doesn't refuse to install on a soft inconsistency the user already has.
+  const { validateSettings, formatIssues } = require(path.join(PKG_ROOT, 'scripts', 'lib', 'settings-validator'));
+  const validation = validateSettings(existing);
+  if (validation.errors.length > 0) {
+    console.error(`  ERROR: merged settings.json failed validation — refusing to write`);
+    console.error(formatIssues(validation).split('\n').map(l => '    ' + l).join('\n'));
+    console.error(`  Aborted. No file written. Existing settings.json at ${settingsPath} is unchanged.`);
+    return;
+  }
+  if (validation.warnings.length > 0 && !opts.dryRun) {
+    console.log(`  Validation passed with ${validation.warnings.length} warning(s):`);
+    for (const w of validation.warnings) console.log(`    ⚠ [${w.code}] ${w.path}: ${w.message}`);
+  }
+
   if (opts.dryRun) {
     console.log(`  [dry-run] would write merged hooks to ${settingsPath}`);
     console.log(`  [dry-run] hook phases: ${Object.keys(existing.hooks).join(', ')}`);
+    if (validation.warnings.length > 0) {
+      console.log(`  [dry-run] ${validation.warnings.length} validation warning(s):`);
+      for (const w of validation.warnings) console.log(`    ⚠ [${w.code}] ${w.path}: ${w.message}`);
+    }
   } else {
     fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + '\n', 'utf8');
     console.log(`  Merged hooks into ${settingsPath}`);
