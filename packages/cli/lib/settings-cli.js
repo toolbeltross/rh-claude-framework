@@ -25,7 +25,8 @@ const os = require('os');
 const HOME = process.env.HOME || process.env.USERPROFILE || os.homedir();
 const DEFAULT_SETTINGS = path.join(HOME, '.claude', 'settings.json');
 
-const { validateFile, validateSettings, formatIssues } = require('../scripts/lib/settings-validator');
+// settings-validator lives in the oversight package; cli is a sibling.
+const { validateFile, validateSettings, formatIssues } = require('../../oversight/scripts/lib/settings-validator');
 const { mergeHooksData } = require('./init');
 
 function parseArgs(argv) {

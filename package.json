@@ -8,11 +8,13 @@
     "packages/oversight",
     "packages/output",
     "packages/skills",
+    "packages/cli",
     "packages/telemetry"
   ],
   "scripts": {
     "test": "npm run test --workspaces",
     "test:oversight": "npm run test -w packages/oversight",
+    "test:cli": "npm run test -w packages/cli",
     "test:telemetry": "npm run test -w packages/telemetry"
   },
   "license": "MIT",
