@@ -10,6 +10,7 @@ import { startBroadcaster } from './broadcaster.js';
 import { startPlanDetector } from './plan-detector.js';
 import { startStatusLineWatcher } from './statusline-watcher.js';
 import hookReceiver from './hook-receiver.js';
+import trendsRouter from './trends-router.js';
 
 import { PORT, VITE_DEV_PORT } from './config.js';
 
@@ -24,6 +25,7 @@ app.use(express.json());
 
 // API routes
 app.use('/api', hookReceiver);
+app.use(trendsRouter);
 
 app.get('/api/snapshot', (_req, res) => {
   res.json(store.getSnapshot());

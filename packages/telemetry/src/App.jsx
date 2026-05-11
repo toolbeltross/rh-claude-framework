@@ -4,6 +4,7 @@ import { useDashboardData } from './hooks/useDashboardData';
 import { usePictureInPicture } from './hooks/usePictureInPicture';
 import OverviewTab from './components/OverviewTab';
 import SessionTab from './components/SessionTab';
+import TrendsTab from './components/TrendsTab';
 import SessionList from './components/SessionList';
 import SessionMetaStrip from './components/SessionMetaStrip';
 import MicroDashboard from './components/MicroDashboard';
@@ -293,7 +294,7 @@ export default function App() {
 
   // Reset to first live or overview if active session disappears
   useEffect(() => {
-    if (activeTab && activeTab !== 'overview' && !sessionIds.includes(activeTab) && !fileSessions[activeTab]) {
+    if (activeTab && activeTab !== 'overview' && activeTab !== 'trends' && !sessionIds.includes(activeTab) && !fileSessions[activeTab]) {
       setActiveTab(sessionIds.length > 0 ? sessionIds[0] : 'overview');
     }
   }, [activeTab, sessionIds, fileSessions]);
@@ -599,6 +600,22 @@ export default function App() {
                     Overview
                   </button>
 
+                  {/* Trends (P3-2) */}
+                  <button
+                    onClick={() => { setActiveTab('trends'); setShowOverflow(false); }}
+                    data-testid="trends-tab-button"
+                    className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${
+                      activeTab === 'trends' ? 'text-gray-100 bg-gray-800' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+                    }`}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="1,9 4,5 7,7 11,2" />
+                      <polyline points="11,2 11,5" />
+                      <polyline points="11,2 8,2" />
+                    </svg>
+                    Trends
+                  </button>
+
                   {/* File sessions */}
                   {fileSessionIds.length > 0 && (
                     <div className="border-t border-gray-800 mt-1 pt-1">
@@ -673,6 +690,8 @@ export default function App() {
       <div className="mt-0">
         {activeTab === 'overview' ? (
           <OverviewTab stats={stats} sessions={data.sessions} onSelectSession={handleFileSessionSelect} displayMode={data.planInfo?.displayMode || 'cost'} failurePatterns={data.failurePatterns} />
+        ) : activeTab === 'trends' ? (
+          <TrendsTab />
         ) : (
           <SessionTab
             sessionId={activeTab}
