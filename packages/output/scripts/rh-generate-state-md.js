@@ -18,6 +18,7 @@
 const fs = require("fs");
 const path = require("path");
 const { config } = require("./lib/config");
+const { withLock } = require("./lib/file-lock");
 
 const CLAUDE_DIR = config.claudeDir;
 const OUTPUT_PATH = path.join(config.oversightDir, "OVERSIGHT_STATE.md");
@@ -486,7 +487,10 @@ function main() {
   ];
   const output = sections.join("\n");
   fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-  fs.writeFileSync(OUTPUT_PATH, output, "utf8");
+  // Cross-process lock — concurrent sessions may both trigger daily-regen → state-md.
+  withLock(OUTPUT_PATH, () => {
+    fs.writeFileSync(OUTPUT_PATH, output, "utf8");
+  });
   console.log(`[generate-state-md] Wrote ${OUTPUT_PATH} (${output.length} bytes)`);
 }
 

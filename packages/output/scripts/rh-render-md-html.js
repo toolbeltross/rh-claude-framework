@@ -18,6 +18,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { withLock } = require("./lib/file-lock");
 
 // ───────────────────────── Arg parsing ─────────────────────────
 
@@ -423,7 +424,11 @@ function main() {
   const banner = stalenessBanner(args.in);
   const html = htmlShell(args.title, bodyHtml, args.in.replace(/\\/g, "/"), banner);
   fs.mkdirSync(path.dirname(args.out), { recursive: true });
-  fs.writeFileSync(args.out, html, "utf8");
+  // Cross-process lock — daily-regen renders 3 HTMLs back-to-back, but two
+  // sessions could trigger overlapping daily-regens (SessionStart hook).
+  withLock(args.out, () => {
+    fs.writeFileSync(args.out, html, "utf8");
+  });
   console.log(`[render-md-html] Wrote ${args.out} (${html.length} bytes) from ${args.in}`);
 }
 

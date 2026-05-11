@@ -248,7 +248,36 @@ function run(extraOpts = {}) {
     console.log(`  [reset] Removed ${existing.length} existing rh-* scripts`);
   }
   const scriptCount = copyDir(path.join(PKG_ROOT, 'scripts'), scriptsDir, opts);
-  console.log(`  Copied ${scriptCount} script files → ${scriptsDir}`);
+  console.log(`  Copied ${scriptCount} oversight script files → ${scriptsDir}`);
+
+  // 2a. Copy output package scripts (renderers, scribe writers, daily-regen).
+  // All sibling packages' scripts go to the SAME flat ~/.claude/scripts/ dir
+  // so the {{SCRIPTS_DIR}} hook template substitution stays trivial.
+  const outputScriptsSrc = path.join(PKG_ROOT, '..', 'output', 'scripts');
+  const outputScriptCount = fs.existsSync(outputScriptsSrc)
+    ? copyDir(outputScriptsSrc, scriptsDir, opts) : 0;
+  if (outputScriptCount > 0) console.log(`  Copied ${outputScriptCount} output script files → ${scriptsDir}`);
+
+  // 2b. Copy shared lib files OVER the shims that came from packages/oversight/scripts/lib/.
+  // Source-tree shims at oversight/scripts/lib/{config,file-lock}.js re-export from
+  // packages/shared/. Those shims must NOT ship to ~/.claude/scripts/lib/ — instead
+  // we overwrite them with the canonical files from packages/shared/ so post-install
+  // require('./lib/config') resolves to a self-contained module with no relative
+  // ../../../shared/ dependency (which wouldn't exist post-install).
+  const sharedDir = path.join(PKG_ROOT, '..', 'shared');
+  const libDir = path.join(scriptsDir, 'lib');
+  if (!opts.dryRun && !fs.existsSync(libDir)) fs.mkdirSync(libDir, { recursive: true });
+  const sharedFiles = ['config.js', 'file-lock.js', 'env.js'];
+  let sharedCount = 0;
+  for (const f of sharedFiles) {
+    const src = path.join(sharedDir, f);
+    const dest = path.join(libDir, f);
+    if (!fs.existsSync(src)) continue;
+    if (opts.dryRun) console.log(`  [dry-run] copy ${src} → ${dest}`);
+    else fs.copyFileSync(src, dest);
+    sharedCount++;
+  }
+  console.log(`  Copied ${sharedCount} shared lib files → ${libDir}`);
 
   // 3. Copy agents
   const agentCount = copyDir(path.join(PKG_ROOT, 'agents'), agentsDir, opts);
