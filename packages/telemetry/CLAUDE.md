@@ -119,15 +119,18 @@ Runtime-written artifacts (not in the repo; user-scoped):
 
 ```
 Row 1:  ContextWindow (9col) + ModelBreakdownMini (3col) — always visible, most important
-Row 2:  PlanUsage (full width, conditional) — Max plan utilization gauges
-Row 3:  Tabbed subpanel — four tabs:
+Row 1b: TurnHeartbeat (full width) — live tool activity strip for the current turn
+Row 2:  Tabbed subpanel — five tabs:
   [Agents]   AgentActivity (full width) — unified table with header stats strip
   [Tools]    ToolActivity (full width, expanded scroll) — live tool event feed
+  [Turns]    TurnsTab (full width) — per-turn breakdown with Lollipop/Swimlane/List timelines
   [Failures] FailureHistory (full width, expanded scroll) — persistent failure tracking
-  [Details]  TurnTracker + TurnCostChart, PerformanceMetrics, CurrentSession, CurrentPrompt
+  [Details]  TurnTracker + TurnCostChart, PerformanceMetrics, CurrentPrompt, TaskCompletions
 ```
 
-Default tab: Agents (when active agents exist), otherwise Tools. Tab badges: active agent count (cyan), tool event count, failure count (red).
+(PlanUsage gauges render in the global header strip, not inside SessionTab.)
+
+Default tab: Agents (when active agents exist), otherwise Tools. Tab badges: active agent count (cyan), tool event count (gray), turn count (accent), failure count (red).
 
 ### Agents Tab (v2) Layout
 
@@ -150,7 +153,9 @@ Consistent color language for model families, defined in `src/lib/model-colors.j
 - **Sonnet** = blue (#60a5fa, `text-blue`)
 - **Haiku** = cyan (#22d3ee, `text-cyan`)
 
-Legend shown in the header. Used in: AgentActivity (model pills, cost table), ModelBreakdownMini (pie chart), CurrentSession (model stat). Import from `model-colors.js` — do not duplicate hex values.
+Legend shown in the header. Used in: AgentActivity (model pills, cost table), ModelBreakdownMini (pie chart), CurrentSession (model stat), DailyActivity (token chart in token mode). Import from `model-colors.js` — do not duplicate hex values.
+
+**Reserve these three colors for actual model attribution.** Non-categorical metrics (counts, totals, dates) use `text-gray-100`. See [`docs/STYLEGUIDE.md`](docs/STYLEGUIDE.md) §2 for the full color-usage rules.
 
 ## Key Data Shapes
 
@@ -244,6 +249,8 @@ Event-driven (not timer-based):
 - Can be added as a third hook entry when deeper multi-turn review is warranted (e.g., gated via `if` clause on specific turn classes). See `scripts/supervisory-agent-prompt.md` for rationale.
 
 ## UI Conventions
+
+> Full visual contract lives in [`docs/STYLEGUIDE.md`](docs/STYLEGUIDE.md). The section below summarizes the most-touched conventions for quick reference; the styleguide is authoritative when they disagree.
 
 ### Tooltips
 All interactive elements use native `title` attributes — no custom tooltip components. Tooltips are on:
@@ -359,13 +366,9 @@ $4.28 | Opus | 15m                             ← least important
 
 ## Theme
 
-Dark theme with monospace fonts. Key Tailwind colors:
-- `accent` (#8b5cf6 purple) — Opus, primary highlights, agents
-- `blue` (#60a5fa) — Sonnet, input tokens, idle sessions
-- `cyan` (#22d3ee) — Haiku, cache tokens, active agent count
-- `green` (#34d399) — live/processing indicators, output tokens, success dots
-- `amber` (#fbbf24) — cache write, lines changed, validation blocks, warnings
-- `red` (#f87171) — errors, p99 latency, high context usage, failures
+Dark theme with monospace fonts. Token source of truth: `@theme` block in [`src/index.css`](src/index.css) (theme colors) + [`src/lib/model-colors.js`](src/lib/model-colors.js) (model trio) + [`src/lib/style-tokens.js`](src/lib/style-tokens.js) (tool/agent identity).
+
+Full color-usage rules, type scale, badge/dot/row conventions, and number/date formatting → see [`docs/STYLEGUIDE.md`](docs/STYLEGUIDE.md).
 
 ## Project Rules (IMPORTANT)
 

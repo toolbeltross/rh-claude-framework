@@ -79,7 +79,7 @@ export default function ContextWindow({ session, liveSession }) {
           <div className="flex-1 min-w-0">
             <div className="h-4 rounded-full bg-gray-800 overflow-hidden relative">
               {compactPct > 0 && fillPct !== null ? (
-                <div className="h-full flex" style={{ width: `${fillPct}%` }}>
+                <div className="h-full flex" style={{ width: `${fillPct}%`, minWidth: fillPct > 0 ? '4px' : 0 }}>
                   <div
                     className="h-full context-compacted-bar transition-all duration-500"
                     style={{ width: `${(compactPct / fillPct) * 100}%` }}
@@ -94,7 +94,7 @@ export default function ContextWindow({ session, liveSession }) {
               ) : (
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-                  style={{ width: fillPct !== null ? `${fillPct}%` : '0%' }}
+                  style={{ width: fillPct !== null ? `${fillPct}%` : '0%', minWidth: fillPct > 0 ? '4px' : 0 }}
                 />
               )}
               <span
@@ -166,7 +166,7 @@ export default function ContextWindow({ session, liveSession }) {
           <div className="h-4 rounded-full bg-gray-800 overflow-hidden relative">
             <div
               className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-              style={{ width: fillPct !== null ? `${fillPct}%` : '0%' }}
+              style={{ width: fillPct !== null ? `${fillPct}%` : '0%', minWidth: fillPct > 0 ? '4px' : 0 }}
             />
             <span
               className="absolute top-0 bottom-0 w-px bg-amber/50"

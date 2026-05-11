@@ -7,23 +7,16 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-
-const MODEL_COLORS = {
-  'opus': '#8b5cf6',
-  'sonnet': '#60a5fa',
-  'haiku': '#22d3ee',
-};
+import { MODEL_HEX, getModelFamily } from '../lib/model-colors';
 
 function friendlyModel(modelId) {
-  if (modelId.includes('opus')) return 'Opus';
-  if (modelId.includes('sonnet')) return 'Sonnet';
-  if (modelId.includes('haiku')) return 'Haiku';
+  const fam = getModelFamily(modelId);
+  if (fam === 'Opus' || fam === 'Sonnet' || fam === 'Haiku') return fam;
   return modelId.replace('claude-', '').split('-').slice(0, 2).join(' ');
 }
 
 function modelColor(friendlyName) {
-  const key = friendlyName.toLowerCase();
-  return MODEL_COLORS[key] || '#a78bfa';
+  return MODEL_HEX[friendlyName] || '#a78bfa';
 }
 
 function formatTokenTick(v) {
@@ -43,17 +36,26 @@ export default function DailyActivity({ stats, displayMode = 'cost' }) {
 
   // Token mode: show daily token consumption by model
   if (isTokenMode && stats?.dailyModelTokens?.length) {
-    const allModels = new Set();
+    // Group raw model IDs by friendly family name (Opus/Sonnet/Haiku) so multiple
+    // variants (e.g. claude-sonnet-4-5 + claude-sonnet-4-6) collapse into one
+    // legend entry instead of producing duplicate bars with the same dataKey.
+    const familyToIds = new Map();
     stats.dailyModelTokens.forEach(d =>
-      Object.keys(d.tokensByModel || {}).forEach(m => allModels.add(m))
+      Object.keys(d.tokensByModel || {}).forEach(id => {
+        const fam = friendlyModel(id);
+        if (!familyToIds.has(fam)) familyToIds.set(fam, []);
+        familyToIds.get(fam).push(id);
+      })
     );
-
-    const modelNames = [...allModels].map(id => ({ id, name: friendlyModel(id) }));
+    const families = [...familyToIds.keys()].map(name => ({
+      name,
+      ids: [...new Set(familyToIds.get(name))],
+    }));
 
     const data = stats.dailyModelTokens.map(d => {
       const row = { date: d.date.slice(5) };
-      modelNames.forEach(({ id, name }) => {
-        row[name] = d.tokensByModel?.[id] || 0;
+      families.forEach(({ name, ids }) => {
+        row[name] = ids.reduce((sum, id) => sum + (d.tokensByModel?.[id] || 0), 0);
       });
       return row;
     });
@@ -89,7 +91,7 @@ export default function DailyActivity({ stats, displayMode = 'cost' }) {
               iconSize={8}
               wrapperStyle={{ fontSize: 11, color: '#8888a0' }}
             />
-            {modelNames.map(({ name }) => (
+            {families.map(({ name }) => (
               <Bar key={name} dataKey={name} stackId="tokens" fill={modelColor(name)} radius={[2, 2, 0, 0]} />
             ))}
           </BarChart>

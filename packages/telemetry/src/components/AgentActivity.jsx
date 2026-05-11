@@ -391,7 +391,7 @@ function ActiveAgentRow({ agentId, agent, expanded, onToggle }) {
           )}
           {failureCount > 0 && (
             <span data-testid="agent-failure-count" className="ml-1 text-[10px] px-1.5 py-0 rounded-full border bg-red/10 text-red border-red/40 font-mono" title={`${failureCount} tool failure${failureCount > 1 ? 's' : ''}${agent._lastError ? ` — last: ${String(agent._lastError).slice(0, 120)}` : ''}`}>
-              {failureCount} fails
+              {failureCount === 1 ? '1 fail' : `${failureCount} fails`}
             </span>
           )}
           {validationBlockCount > 0 && (
@@ -484,7 +484,7 @@ function CompletedAgentRow({ agent, expanded, onToggle }) {
           )}
           {failureCount > 0 && (
             <span data-testid="completed-agent-failure-count" className="ml-1 text-[10px] px-1.5 py-0 rounded-full border bg-red/10 text-red border-red/40 font-mono" title={`${failureCount} tool failure${failureCount > 1 ? 's' : ''}${agent.lastError ? ` — last: ${String(agent.lastError).slice(0, 120)}` : ''}`}>
-              {failureCount} fails
+              {failureCount === 1 ? '1 fail' : `${failureCount} fails`}
             </span>
           )}
           {validationBlockCount > 0 && (

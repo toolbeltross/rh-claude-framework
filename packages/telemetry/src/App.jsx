@@ -543,7 +543,7 @@ export default function App() {
                   active={activeTab === id}
                   onClick={() => handleSessionTab(id)}
                 >
-                  <span className="inline-flex items-center gap-1.5 max-w-[160px]" title={projName}>
+                  <span className="inline-flex items-center gap-1.5 max-w-[180px]" title={projName}>
                     <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotClass}`} title={dotTitle} />
                     <span className="truncate">{projName}</span>
                   </span>
