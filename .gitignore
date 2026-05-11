@@ -3,3 +3,9 @@ dist/
 *.log
 .DS_Store
 *.lock
+
+# Session-local scribe artifacts (the prefilter writes here when this repo
+# happens to be the active workspace). Never belongs in the framework repo.
+/cleanup.md
+/recommendations.md
+/.claude/

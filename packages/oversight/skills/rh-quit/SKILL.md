@@ -11,7 +11,7 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 ## What this skill does
 
-1. **Read the transcript tail** — same 10K-char tail the prefilter uses, fed directly to the multi-scope scribe.
+1. **Read the full session text** — if per-turn staging is enabled (P1-3; env `RH_SCRIBE_STAGING=1` or `oversight.json: scribeStaging:true`), the multiscope agent should consume the staging file via `node ~/.claude/scripts/rh-scribe-staging-read.js <session-id>` for full-session coverage. Otherwise fall back to the 10K-char transcript tail (legacy path; misses content from long sessions).
 
 2. **Detect scribe-worthy content** — apply the same marker regexes from `rh-scribe-prefilter.js` (recommendations, cleanup, learnings) to decide whether to dispatch at all.
 
@@ -39,8 +39,17 @@ When the user invokes `/rh-quit`:
    User-triggered scribe drain via /rh-quit. Sub-scopes with substantive
    content detected: <detected scopes>.
 
-   Read the transcript tail at <transcript_path>. Run your standard
-   single-pass workflow:
+   Read the full session text. First try the staging file:
+     node ~/.claude/scripts/rh-scribe-staging-read.js <session_id> --stats
+   If `turns > 0`, read the full session text via:
+     node ~/.claude/scripts/rh-scribe-staging-read.js <session_id>
+   Otherwise fall back to the transcript tail at <transcript_path> (legacy
+   10K-char window — only captures the last ~1-2 turns of a long session).
+
+   After successfully writing rows, clear the staging file:
+     node ~/.claude/scripts/rh-scribe-staging-read.js <session_id> --clear > /dev/null
+
+   Run your standard single-pass workflow:
      1. Privacy blocklist check — structural patterns (Personal/, Financial/, Divorce) + user-specific entity names from ~/.claude/private-blocklist.json
      2. Self-loop sentinel check (<!-- scribe-done --> in tail)
      3. Categorize each substantive candidate into one of: recommendations,

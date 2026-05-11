@@ -43,6 +43,7 @@ const crypto = require('crypto');
 const { wrapHook } = require('./lib/hook-timing');
 const { withLock } = require('./lib/file-lock');
 const { config } = require('./lib/config');
+const staging = require('./lib/scribe-staging');
 
 const TAIL_CAP = 10_000;
 const SENTINEL = '<!-- scribe-done -->';
@@ -396,6 +397,48 @@ function backoffCheck(sessionId) {
 wrapHook('scribe-prefilter', (input) => {
   const transcriptPath = input?.transcript_path;
   const sessionId = input?.session_id || '';
+
+  // P1-3 staging (additive, default-off). When enabled, capture the bytes
+  // appended to the transcript since the previous Stop and write the extracted
+  // assistant text to a per-session JSONL staging file. /rh-quit's multiscope
+  // agent then reads the full staging file at session end for true-up.
+  //
+  // Runs BEFORE the inline-extraction return paths so even turns that bail
+  // out of inline extraction (privacy / sentinel / back-off / no markers)
+  // still get staged. The inline path's gates are about WHAT to extract NOW;
+  // staging is about WHAT was seen this turn for later curation.
+  if (staging.isEnabled() && sessionId && transcriptPath) {
+    try {
+      const delta = staging.readDelta(transcriptPath, sessionId);
+      if (delta.advanced) {
+        const assistantText = staging.extractAssistantText(delta.text);
+        // Lower minimum than the inline path (50): staging is for full-session
+        // true-up, so we want short turns too. 10 chars filters tool-only turns
+        // with no text content.
+        if (assistantText && assistantText.length >= 10) {
+          // Re-apply the same privacy + sentinel checks the inline path uses,
+          // so staged content does not contain private patterns or scribe
+          // self-output. Keeps the staging file safe to feed back into the
+          // multiscope agent.
+          const safe =
+            !assistantText.includes(SENTINEL) &&
+            !PRIVACY_PATTERNS.some(re => re.test(assistantText));
+          if (safe) {
+            staging.appendTurn(sessionId, assistantText, {
+              transcriptPath,
+              hasRec: REC_MARKERS.test(assistantText),
+              hasCleanup: CLEANUP_MARKERS.test(assistantText),
+              hasLearnings: LEARNINGS_MARKERS.test(assistantText),
+            });
+          }
+        }
+        // Always advance the offset on any successful delta read — including
+        // the unsafe / too-short cases. Otherwise we'd re-read the same
+        // privacy-blocked bytes every Stop forever.
+        staging.writeOffset(sessionId, delta.newOffset, transcriptPath);
+      }
+    } catch {}
+  }
 
   const raw = readTranscriptTail(transcriptPath);
   if (!raw) return {};

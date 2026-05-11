@@ -125,6 +125,42 @@ function pruneSessionMarkers() {
   };
 }
 
+// ─── 4b. Scribe staging files (P1-3) ─────────────────────────────────────
+
+function pruneScribeStaging() {
+  // Wraps lib/scribe-staging.pruneStale. TTL is owned by the staging lib
+  // (7 days); we just trigger the sweep here. Always runs in apply mode —
+  // staging files are append-only and ephemeral by design, never user-edited.
+  if (!APPLY) {
+    // Dry-run: count what would be removed without deleting.
+    const fs2 = require('fs');
+    const path2 = require('path');
+    const staging = require('./lib/scribe-staging');
+    const dir = staging.stagingDir();
+    let candidates = 0;
+    try {
+      const now = Date.now();
+      for (const name of fs2.readdirSync(dir)) {
+        if (!name.startsWith('staging-') && !name.startsWith('offset-')) continue;
+        const fp = path2.join(dir, name);
+        try {
+          const st = fs2.statSync(fp);
+          if (now - st.mtimeMs > staging.STAGING_TTL_MS) candidates++;
+        } catch {}
+      }
+    } catch {}
+    return { candidates, removed: 0 };
+  }
+  const staging = require('./lib/scribe-staging');
+  const { stagingRemoved, offsetRemoved } = staging.pruneStale();
+  return {
+    candidates: stagingRemoved + offsetRemoved,
+    removed: stagingRemoved + offsetRemoved,
+    staging_files: stagingRemoved,
+    offset_files: offsetRemoved,
+  };
+}
+
 // ─── 5. Scribe rows ──────────────────────────────────────────────────────
 
 function pruneScribeFile(filePath) {
@@ -202,6 +238,7 @@ function main() {
     scribe_pending_flags: pruneFlags('scribe-pending-'),
     subagent_active_flags: pruneFlags('subagent-active-'),
     session_markers: pruneSessionMarkers(),
+    scribe_staging: pruneScribeStaging(),
     scribe_files: [
       pruneScribeFile(path.join(config.workspace, 'cleanup.md')),
       pruneScribeFile(path.join(config.workspace, 'recommendations.md')),
@@ -218,6 +255,7 @@ function main() {
   console.log(`  scribe-pending flags: ${APPLY ? 'removed' : 'would remove'} ${result.scribe_pending_flags.candidates}`);
   console.log(`  subagent-active flags: ${APPLY ? 'removed' : 'would remove'} ${result.subagent_active_flags.candidates}`);
   console.log(`  session markers (>${SESSION_MARKER_AGE_DAYS}d): ${APPLY ? 'removed' : 'would remove'} ${result.session_markers.candidates}`);
+  console.log(`  scribe staging (>7d): ${APPLY ? 'removed' : 'would remove'} ${result.scribe_staging.candidates}`);
   for (const sf of result.scribe_files) {
     console.log(`  ${sf.file}: ${APPLY ? 'archived' : 'would archive'} ${sf.archived_count} resolved>${ARCHIVE_RESOLVED_DAYS}d, ${sf.stale_open_count} open>${ALERT_OPEN_DAYS}d ${APPLY ? 'alerted' : 'would alert'}`);
   }

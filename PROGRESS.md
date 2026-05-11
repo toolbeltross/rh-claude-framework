@@ -43,7 +43,7 @@ Also synced `claude-setup-ross/oversight-system/OVERSIGHT_SYSTEM.md` (6 stale re
 
 **Plan checkboxes** (`claude-setup-ross/oversight-system/PLAN-2026-05-08-reliability-hardening.md`):
 - Phase 0 (P0-1..P0-7) ✅
-- Phase 1: P1-1, P1-2, P1-4, P1-5, P1-7 ✅; P1-6 `[~]` partial (helper-swap landed, latency outer-seam test pending); P1-3 open
+- Phase 1: P1-1, P1-2, P1-4, P1-5, P1-7 ✅; P1-6 `[~]` partial (helper-swap landed, latency outer-seam test pending); P1-3 `[~]` code landed 2026-05-10, awaiting production-flag flip + first /rh-quit consumption
 - Phase 2: P2-1, P2-2, P2-3 ✅; P2-4 open
 - Phase 3: P3-1, P3-2 open
 - Phase 4 ✅
@@ -85,7 +85,7 @@ If those signals confirm, mark P1-6 ✅ in plan.
 **Doc-sync probe path-resolution** — `rh-oversight-self-test.js` `runDocSyncProbe()` (line 277) reads `OVERSIGHT_SYSTEM.md` from `config.oversightDir`, which defaults to `~/.claude/oversight/`. Ross's hand-authored design doc actually lives at `claude-setup-ross/oversight-system/OVERSIGHT_SYSTEM.md`. `~/.claude/oversight.json` doesn't override the path, so the probe always reports "OVERSIGHT_SYSTEM.md not found — skipped." Result: the soft sync warning never fires for Ross's environment, even when the design doc is genuinely stale. Fix is one of: (a) add `oversightDir` override to `~/.claude/oversight.json` pointing at `claude-setup-ross/oversight-system/` (user-config only, no framework change), or (b) make the probe also look in a `<workspace>/claude-setup-ross/oversight-system/` fallback. (a) is simpler and stays out of framework code.
 
 ### Open queue (priority order)
-1. **P1-3** Replace 10K-char tail with per-turn staging file + /rh-quit true-up — risky scope, plan calls for staged migration via env-var switch alongside existing prefilter
+1. ~~**P1-3** Replace 10K-char tail with per-turn staging file + /rh-quit true-up~~ — **code landed 2026-05-10, default-off.** New `lib/scribe-staging.js` (offset-delta JSONL per session, 7-day TTL), prefilter wired additively behind env `RH_SCRIBE_STAGING=1` / `oversight.json: scribeStaging:true`, CLI reader `rh-scribe-staging-read.js`, `/rh-quit` SKILL updated, auto-prune sweeps stale staging. 12 new unit tests + outer-seam helper at `packages/oversight/tests/helpers/p1-3-outer-seam.js` (18/18). Suite: 57/57 passing. **Before flipping flag to ON:** verify multiscope agent uses the reader CLI per updated SKILL.md, then set env var in `~/.claude/settings.json` or `scribeStaging:true` in `~/.claude/oversight.json`
 2. **P2-4** settings.json safety rails — needs design call: git-track in private repo? validation pre-write hook? merge-aware `rh-oversight-settings` CLI? Different implications.
 3. **P3-1** Cross-session supervisor sweep — weekly trend doc; depends on accumulated P2-1 orphan + P2-3 InstructionsLoaded events
 4. **P3-2** Dashboard "Trends" tab — frontend work in `packages/telemetry/src/`

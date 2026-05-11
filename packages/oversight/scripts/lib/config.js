@@ -63,6 +63,10 @@ function resolveConfig() {
     userName: process.env.USER || process.env.USERNAME || file.userName || path.basename(HOME),
     privateDirs: file.privateDirs || [],
 
+    // P1-3: per-turn scribe staging file. Off by default; env var
+    // RH_SCRIBE_STAGING overrides. See lib/scribe-staging.js.
+    scribeStaging: file.scribeStaging === true,
+
     configPath: CONFIG_PATH,
   };
 
