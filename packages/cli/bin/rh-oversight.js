@@ -1,18 +1,25 @@
 #!/usr/bin/env node
 // rh-oversight CLI — init, reset, self-test, generate-state
+//
+// Lives in packages/cli/ (Phase 4 of 5-package reorg). Sibling-package
+// scripts (oversight, output) are resolved via PACKAGES_ROOT.
 
 const path = require('path');
 const command = process.argv[2];
 
+const PACKAGES_ROOT = path.join(__dirname, '..', '..');
+const OVERSIGHT_SCRIPTS = path.join(PACKAGES_ROOT, 'oversight', 'scripts');
+const OUTPUT_SCRIPTS = path.join(PACKAGES_ROOT, 'output', 'scripts');
+
 const commands = {
   init:           () => require('../lib/init').run(),
   reset:          () => require('../lib/init').run({ reset: true }),
-  'self-test':    () => require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-oversight-self-test.js')], { stdio: 'inherit' }),
-  'generate-state': () => require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-generate-state-md.js')], { stdio: 'inherit' }),
-  'generate-env':   () => require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-generate-env-md.js')], { stdio: 'inherit' }),
+  'self-test':    () => require('child_process').spawnSync('node', [path.join(OVERSIGHT_SCRIPTS, 'rh-oversight-self-test.js')], { stdio: 'inherit' }),
+  'generate-state': () => require('child_process').spawnSync('node', [path.join(OUTPUT_SCRIPTS, 'rh-generate-state-md.js')], { stdio: 'inherit' }),
+  'generate-env':   () => require('child_process').spawnSync('node', [path.join(OUTPUT_SCRIPTS, 'rh-generate-env-md.js')], { stdio: 'inherit' }),
   health:         () => {
     const args = process.argv.slice(3);
-    const r = require('child_process').spawnSync('node', [path.join(__dirname, '..', 'scripts', 'rh-oversight-health.js'), ...args], { stdio: 'inherit' });
+    const r = require('child_process').spawnSync('node', [path.join(OVERSIGHT_SCRIPTS, 'rh-oversight-health.js'), ...args], { stdio: 'inherit' });
     process.exit(r.status ?? 0);
   },
   settings:       () => {
@@ -22,7 +29,7 @@ const commands = {
   },
   'supervisor-sweep': () => {
     const args = process.argv.slice(3);
-    const code = require('../scripts/rh-supervisor-sweep').run(args);
+    const code = require(path.join(OVERSIGHT_SCRIPTS, 'rh-supervisor-sweep')).run(args);
     process.exit(code);
   },
 };

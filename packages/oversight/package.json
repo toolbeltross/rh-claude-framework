@@ -1,21 +1,14 @@
 {
   "name": "rh-claude-oversight",
   "version": "0.1.0",
-  "description": "Claude Code oversight framework — enforcement scripts, agents, rules, and setup CLI",
+  "description": "Claude Code oversight framework — enforcement scripts, agents, rules. CLI lives in @rh/cli (peer package).",
   "main": "scripts/lib/config.js",
-  "bin": {
-    "rh-oversight": "bin/rh-oversight.js"
-  },
   "scripts": {
     "test": "node tests/run.js",
     "test:unit": "node tests/run.js unit",
-    "self-test": "node scripts/rh-oversight-self-test.js",
-    "generate-state": "node scripts/rh-generate-state-md.js",
-    "generate-env": "node scripts/rh-generate-env-md.js"
+    "self-test": "node scripts/rh-oversight-self-test.js"
   },
   "files": [
-    "lib/",
-    "bin/",
     "scripts/",
     "agents/",
     "rules/",

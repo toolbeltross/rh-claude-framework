@@ -1,4 +1,8 @@
-// init.js — installs the oversight framework to ~/.claude/ and merges hooks into settings.json.
+// init.js — installs the rh-claude-framework to ~/.claude/ and merges hooks
+// into settings.json.
+//
+// Lives in packages/cli/ (Phase 4 of 5-package reorg). Reads from sibling
+// packages (oversight, output, shared, skills) via PACKAGES_ROOT.
 
 const fs = require('fs');
 const path = require('path');
@@ -6,7 +10,15 @@ const os = require('os');
 
 const HOME = process.env.HOME || process.env.USERPROFILE || os.homedir();
 const CLAUDE_DIR = path.join(HOME, '.claude');
+
+// PKG_ROOT is packages/cli (this package's templates live here).
+// Sibling packages are resolved via PACKAGES_ROOT.
 const PKG_ROOT = path.join(__dirname, '..');
+const PACKAGES_ROOT = path.join(__dirname, '..', '..');
+const OVERSIGHT_PKG = path.join(PACKAGES_ROOT, 'oversight');
+const OUTPUT_PKG = path.join(PACKAGES_ROOT, 'output');
+const SHARED_PKG = path.join(PACKAGES_ROOT, 'shared');
+const SKILLS_PKG = path.join(PACKAGES_ROOT, 'skills');
 
 function parseArgs() {
   const args = process.argv.slice(3);
@@ -171,7 +183,7 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
   // itself (e.g., shape-bad existing entries that survived the merge). Errors
   // block the write; warnings are surfaced but allow the write so the gate
   // doesn't refuse to install on a soft inconsistency the user already has.
-  const { validateSettings, formatIssues } = require(path.join(PKG_ROOT, 'scripts', 'lib', 'settings-validator'));
+  const { validateSettings, formatIssues } = require(path.join(OVERSIGHT_PKG, 'scripts', 'lib', 'settings-validator'));
   const validation = validateSettings(existing);
   if (validation.errors.length > 0) {
     console.error(`  ERROR: merged settings.json failed validation — refusing to write`);
@@ -199,7 +211,7 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
 
 function run(extraOpts = {}) {
   const opts = { ...parseArgs(), ...extraOpts };
-  const configModule = require(path.join(PKG_ROOT, 'scripts', 'lib', 'config'));
+  const configModule = require(path.join(SHARED_PKG, 'config'));
 
   console.log('\nrh-oversight init');
   console.log('─'.repeat(40));
@@ -247,13 +259,13 @@ function run(extraOpts = {}) {
     if (!opts.dryRun) for (const f of existing) fs.unlinkSync(path.join(scriptsDir, f));
     console.log(`  [reset] Removed ${existing.length} existing rh-* scripts`);
   }
-  const scriptCount = copyDir(path.join(PKG_ROOT, 'scripts'), scriptsDir, opts);
+  const scriptCount = copyDir(path.join(OVERSIGHT_PKG, 'scripts'), scriptsDir, opts);
   console.log(`  Copied ${scriptCount} oversight script files → ${scriptsDir}`);
 
   // 2a. Copy output package scripts (renderers, scribe writers, daily-regen).
   // All sibling packages' scripts go to the SAME flat ~/.claude/scripts/ dir
   // so the {{SCRIPTS_DIR}} hook template substitution stays trivial.
-  const outputScriptsSrc = path.join(PKG_ROOT, '..', 'output', 'scripts');
+  const outputScriptsSrc = path.join(OUTPUT_PKG, 'scripts');
   const outputScriptCount = fs.existsSync(outputScriptsSrc)
     ? copyDir(outputScriptsSrc, scriptsDir, opts) : 0;
   if (outputScriptCount > 0) console.log(`  Copied ${outputScriptCount} output script files → ${scriptsDir}`);
@@ -264,7 +276,7 @@ function run(extraOpts = {}) {
   // we overwrite them with the canonical files from packages/shared/ so post-install
   // require('./lib/config') resolves to a self-contained module with no relative
   // ../../../shared/ dependency (which wouldn't exist post-install).
-  const sharedDir = path.join(PKG_ROOT, '..', 'shared');
+  const sharedDir = SHARED_PKG;
   const libDir = path.join(scriptsDir, 'lib');
   if (!opts.dryRun && !fs.existsSync(libDir)) fs.mkdirSync(libDir, { recursive: true });
   const sharedFiles = ['config.js', 'file-lock.js', 'env.js'];
@@ -280,7 +292,7 @@ function run(extraOpts = {}) {
   console.log(`  Copied ${sharedCount} shared lib files → ${libDir}`);
 
   // 3. Copy agents
-  const agentCount = copyDir(path.join(PKG_ROOT, 'agents'), agentsDir, opts);
+  const agentCount = copyDir(path.join(OVERSIGHT_PKG, 'agents'), agentsDir, opts);
   console.log(`  Copied ${agentCount} agent files → ${agentsDir}`);
 
   // 4. Copy skills from packages/skills/ (Phase 3 of 5-package reorg —
@@ -288,7 +300,7 @@ function run(extraOpts = {}) {
   // Only copy subdirectories (each skill is a dir like rh-quit/, rh-session/);
   // top-level files like package.json belong to the npm workspace, not the
   // installed skill set.
-  const skillsSrc = path.join(PKG_ROOT, '..', 'skills');
+  const skillsSrc = SKILLS_PKG;
   let skillCount = 0;
   if (fs.existsSync(skillsSrc)) {
     if (!opts.dryRun && !fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
@@ -304,7 +316,7 @@ function run(extraOpts = {}) {
   console.log(`  Copied ${skillCount} skill files → ${skillsDir}`);
 
   // 5. Copy rules
-  const ruleCount = copyDir(path.join(PKG_ROOT, 'rules'), rulesDir, opts);
+  const ruleCount = copyDir(path.join(OVERSIGHT_PKG, 'rules'), rulesDir, opts);
   console.log(`  Copied ${ruleCount} rule files → ${rulesDir}`);
 
   // 6. Create oversight dir
