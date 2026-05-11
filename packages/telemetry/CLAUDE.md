@@ -206,8 +206,11 @@ Legend shown in the header. Used in: AgentActivity (model pills, cost table), Mo
 ## Tab System
 
 - **Overview tab**: Always visible. Shows aggregate stats, charts, and recent sessions table.
+- **Trends tab** (P3-2): Cross-session oversight-event aggregations from `rh-supervisor-sweep`. Day-range selector (1/7/14/30), summary cards with prior-window deltas, daily-cadence BarChart, event-type table, top missing oversight elements, top subagent-failure patterns, top sessions by event count. Component: `src/components/TrendsTab.jsx`. Data: `GET /api/trends?days=N` (`server/trends-router.js`) which wraps the oversight package's `rh-supervisor-sweep.js` aggregation via `createRequire` cross-package import.
 - **Live session tabs**: From Claude Code hooks. Green pulsing dot = processing (tool events flowing), blue solid dot = idle (turn ended). Pruned after 2 hours of no events.
 - **File session tabs** (gray dot): From `.claude.json` parser. Auto-populated on load. Also openable by clicking rows in the Recent Sessions table.
+
+The `'trends'` value is whitelisted in the App.jsx unknown-tab guard (line ~297) — without that whitelist, `setActiveTab('trends')` is auto-reset to `'overview'` on the next render.
 
 ## Idle Detection
 
@@ -310,6 +313,7 @@ GET  /api/snapshot   — Full state snapshot (used by CLI)
 GET  /api/failures          — Query failure history (session, tool, time range)
 GET  /api/failures/patterns — Failure frequency analysis (by tool, by error, by session)
 GET  /api/failures/digest   — Failure summary for time period (default: 24h)
+GET  /api/trends?days=N     — Cross-session/project trend aggregation (P3-2). Wraps rh-supervisor-sweep via createRequire. Default 7, capped at 90. Query overrides: events=<path>, supervisoryLog=<path> (for tests).
 WS   /ws             — WebSocket for real-time updates (includes failureEvent type)
 ```
 

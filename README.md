@@ -40,6 +40,30 @@ rh-oversight self-test
 
 Expected on a healthy install: `oversight-self-test: 37/37 hard passed`.
 
+## CLI subcommands
+
+| Command | Purpose |
+|---|---|
+| `rh-oversight init` | Install / re-deploy framework artifacts (see "Install" above) |
+| `rh-oversight reset` | Reinstall while preserving `oversight.json` |
+| `rh-oversight self-test` | Health check — 37/37 hard pass expected |
+| `rh-oversight health [--json]` | One-screen aggregator (regen + journals + telemetry + alerts + scribe backlog + subagent orphans) |
+| `rh-oversight generate-state` | Regenerate `<oversight-dir>/OVERSIGHT_STATE.md` (filesystem snapshot of rules/hooks/agents) |
+| `rh-oversight generate-env` | Regenerate `<workspace>/claude-setup-ross/environment/ENVIRONMENT.md` |
+| `rh-oversight settings <sub>` | Merge-aware CLI for `settings.json`. Subcommands: `validate / show / diff / merge / backup / restore`. Run `rh-oversight settings --help`. Validator rejects shape errors before write; `merge` defaults to dry-run, requires `--apply` to write, and creates a timestamped backup. (P2-4) |
+| `rh-oversight supervisor-sweep [--days N]` | Cross-session/project trend doc. Reads `~/.claude/oversight-events.jsonl` + supervisory-log Layer3a rejections over a sliding window (default 7 days, capped at 90); writes `~/.claude/memory-shared/supervisor-trends.md`. Flags: `--out <path>`, `--json`, `--dry-run`. (P3-1) |
+
+## Per-turn scribe staging (P1-3)
+
+Default-off. Set `RH_SCRIBE_STAGING=1` in your `~/.claude/settings.json` env (or `scribeStaging: true` in `~/.claude/oversight.json`) to enable. When enabled, the prefilter writes the bytes appended to the transcript on each Stop to a per-session JSONL file under `~/.claude/scribe-staging/`. `/rh-quit` consumes the full staging file for end-of-session true-up instead of the 10K-char tail.
+
+Inspect with:
+```bash
+node ~/.claude/scripts/rh-scribe-staging-read.js <session-id> --stats
+node ~/.claude/scripts/rh-scribe-staging-read.js <session-id>          # full text
+node ~/.claude/scripts/rh-scribe-staging-read.js <session-id> --clear  # delete after consumption
+```
+
 ## Reset
 
 ```bash
