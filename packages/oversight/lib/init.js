@@ -283,8 +283,24 @@ function run(extraOpts = {}) {
   const agentCount = copyDir(path.join(PKG_ROOT, 'agents'), agentsDir, opts);
   console.log(`  Copied ${agentCount} agent files → ${agentsDir}`);
 
-  // 4. Copy skills
-  const skillCount = copyDir(path.join(PKG_ROOT, 'skills'), skillsDir, opts);
+  // 4. Copy skills from packages/skills/ (Phase 3 of 5-package reorg —
+  // skills relocated from packages/oversight/skills/ to their own peer package).
+  // Only copy subdirectories (each skill is a dir like rh-quit/, rh-session/);
+  // top-level files like package.json belong to the npm workspace, not the
+  // installed skill set.
+  const skillsSrc = path.join(PKG_ROOT, '..', 'skills');
+  let skillCount = 0;
+  if (fs.existsSync(skillsSrc)) {
+    if (!opts.dryRun && !fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+    for (const entry of fs.readdirSync(skillsSrc, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      skillCount += copyDir(
+        path.join(skillsSrc, entry.name),
+        path.join(skillsDir, entry.name),
+        opts,
+      );
+    }
+  }
   console.log(`  Copied ${skillCount} skill files → ${skillsDir}`);
 
   // 5. Copy rules
