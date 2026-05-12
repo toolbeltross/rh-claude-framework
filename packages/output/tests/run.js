@@ -9,6 +9,7 @@ const SUITES = [
   'test-scribe-table-write.js',
   'test-learnings-write.js',
   'test-auto-prune.js',
+  'test-daily-regen-trigger.js',
 ];
 
 let total = 0, failed = 0;
