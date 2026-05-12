@@ -8,6 +8,7 @@ const SUITES = [
   'test-generate-state-md.js',
   'test-scribe-table-write.js',
   'test-learnings-write.js',
+  'test-auto-prune.js',
 ];
 
 let total = 0, failed = 0;
