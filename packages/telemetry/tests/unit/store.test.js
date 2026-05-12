@@ -910,17 +910,19 @@ test('V2 removeSubagent missing-start: prompt and permissionMode from data', () 
   assert.strictEqual(hist[0].permissionMode, 'default');
 });
 
-test('V2 sweepOrphanedSubagents: carries prompt into orphaned history', () => {
-  const s = new Store();
-  s.updateLiveSession({ session_id: 's', cost: { total_cost_usd: 0 } });
-  s.addSubagent('s', { agent_id: 'a1', agent_type: 'Explore', prompt: 'orphan prompt' });
-  const agent = s.data.liveSessions.s._activeSubagents.a1;
-  agent.startedAt = Date.now() - 700_000; // 11+ min ago
-  agent._lastToolAt = null;
-  s.sweepOrphanedSubagents(600_000);
-  const hist = s.data.liveSessions.s._subagentHistory;
-  assert.strictEqual(hist[0].prompt, 'orphan prompt');
-  assert.strictEqual(hist[0].status, 'orphaned');
+test('V2 sweepOrphanedSubagents: carries prompt into orphaned history', async () => {
+  await withTmp(async (tmp) => {
+    const s = storeWithTmpFailures(tmp);
+    s.updateLiveSession({ session_id: 's', cost: { total_cost_usd: 0 } });
+    s.addSubagent('s', { agent_id: 'a1', agent_type: 'Explore', prompt: 'orphan prompt' });
+    const agent = s.data.liveSessions.s._activeSubagents.a1;
+    agent.startedAt = Date.now() - 700_000; // 11+ min ago
+    agent._lastToolAt = null;
+    s.sweepOrphanedSubagents(600_000);
+    const hist = s.data.liveSessions.s._subagentHistory;
+    assert.strictEqual(hist[0].prompt, 'orphan prompt');
+    assert.strictEqual(hist[0].status, 'orphaned');
+  }, 'v2-orphan-prompt');
 });
 
 summary();

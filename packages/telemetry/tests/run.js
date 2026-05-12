@@ -65,6 +65,10 @@ const ENV_VARS_TO_SCRUB = [
 function cleanEnv() {
   const env = { ...process.env };
   for (const k of ENV_VARS_TO_SCRUB) delete env[k];
+  // Force NODE_ENV=test so FailureStore's default-path guard redirects writes
+  // to a tmp file even if a test forgets to pass one. Prevents the failure-log
+  // pollution bug that the V2 sweepOrphanedSubagents test hit in 2026-05.
+  env.NODE_ENV = 'test';
   return env;
 }
 
