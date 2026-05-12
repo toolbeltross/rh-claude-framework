@@ -34,7 +34,21 @@ const DESIGN_DOC = path.join(config.oversightDir, "OVERSIGHT_SYSTEM.md");
 // if the human Failure Analysis table and the JSON data block fall out of sync.
 
 function loadFailuresFromDesignDoc() {
-  const designDocText = fs.readFileSync(DESIGN_DOC, "utf8");
+  // Fail-soft on missing design doc: sectionHeader() already reports
+  // "NOT FOUND" in the generated output. Crashing here at module-load time
+  // would prevent the rest of the state doc (rules / hooks / agents / log)
+  // from being generated at all — making the absence harder to recover from.
+  // Empty failure set is correct when the design doc isn't present yet.
+  let designDocText;
+  try {
+    designDocText = fs.readFileSync(DESIGN_DOC, "utf8");
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      console.warn(`[generate-state-md] WARN: OVERSIGHT_SYSTEM.md not found at ${DESIGN_DOC} — failure-mitigation section will be empty.`);
+      return [];
+    }
+    throw e;
+  }
 
   // Extract the JSON block between the begin/end HTML comment markers.
   const blockMatch = designDocText.match(
