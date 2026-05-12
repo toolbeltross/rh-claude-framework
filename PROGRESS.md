@@ -1,8 +1,55 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-11 (5-package reorg landed: shared / oversight / output / skills / cli / telemetry)
+**Last session:** 2026-05-12 (Phase 4b manifests + path-typo guard + failure-store isolation + 5 test-coverage PRs + production fix in rh-generate-state-md)
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` — at merge of PR #23 (Phase 4 cli extraction) + PR #20 (telemetry UI)
+**Branch:** `main` — at merge of PR #34 (rh-generate-state-md fail-soft + 11 tests)
+
+---
+
+## 2026-05-12 session — Phase 4b + path-typo guard + failure-store isolation + test-coverage grind
+
+**10 PRs merged to main** in this session (#25–#34):
+
+| PR | Title | Merge commit | Tests added |
+|---|---|---|---:|
+| #25 | refactor(framework): per-package install.json manifest decomposition (Phase 4b) | `863801f` | +9 (manifest engine) |
+| #26 | feat(oversight): path-typo guard for Read calls (.claire/.clone → .claude) | `a5ce280` | — |
+| #27 | fix(telemetry): isolate FailureStore from real failure log in test runs | `22a1baf` | — |
+| #28 | test: cover rh-path-typo-guard + failure-store alreadyIsolated guard | `85019c8` | +16 |
+| #29 | test+cleanup: cover rh-scribe-staging-read + remove rh-statusline-wrapped | `9d5c989` | +8 |
+| #30 | chore: scrub `rossb` username from telemetry docs + test fixtures | `e08836a` | — |
+| #31 | test(oversight): cover rh-supervisor-preload.js (9 tests) | `316c4f5` | +9 |
+| #32 | test(output): cover rh-render-md-html.js (18 tests) | `22885c4` | +18 |
+| #33 | test(oversight): cover rh-learning-loop.js exported functions (22 tests) | `303f820` | +22 |
+| #34 | fix+test(output): fail-soft on missing OVERSIGHT_SYSTEM.md + 11 tests for rh-generate-state-md | `fffc1ff` | +11 |
+
+**Cumulative test count delta this session: +93 tests** across 4 packages.
+
+**Test counts now (per `node packages/<pkg>/tests/run.js`):**
+- oversight: 126 (was 45 baseline; +81 across session)
+- cli:       52
+- output:    30 (was 1 baseline; +29 across session)
+- telemetry: 28/28 files pass (multiple tests per file)
+
+**Cleanup ops in this session:**
+- Stale remote branch `origin/chore/add-reconciliation-plan` deleted (was `0 ahead, 67 behind`; tip already in main)
+- 7 local detached branches deleted (`rh/cli-phase4`, `rh/docs-phase5`, `rh/skills-phase3`, `rh/test-coverage-recent-work`, `rh/cli-manifest-phase4b`, `rh/heuristic-mendel-0caba7`, `rh/cleanup-and-staging-read-tests`)
+- Dormant worktree `inspiring-cartwright-e3da7c` removed
+- `rh-statusline-wrapped.js` (dead + hardcoded `rossb`) removed (PR #29)
+- `rossb` username scrubbed from 8 telemetry doc + test files (PR #30) — framework code is now `rossb`-free per `grep -r rossb --include="*.js" --include="*.json" packages/`
+
+**Production bugs found + fixed:**
+- PR #34: `rh-generate-state-md.js` crashed unconditionally when OVERSIGHT_SYSTEM.md was absent, despite `sectionHeader()` already having a `NOT FOUND` branch. Now fail-soft. Daily-regen in tmp HOME went **7/10 → 9/10**.
+- PR #27: FailureStore default-path guard introduced `alreadyIsolated` exception — when FAILURE_LOG_PATH is already inside tmpdir (integration tests' HOME=tmpdir pattern), don't override it. Without this guard, 3 integration tests broke when NODE_ENV=test was forced.
+
+**Plan for next session:**
+- More test coverage targets in priority order:
+  - `rh-oversight-health.js` (CLI smoke)
+  - `rh-check-anthropic-guidance.js`
+  - `rh-layer3a-capture.js` (documented atomic-write design)
+  - `rh-statusline.js` (formatting hook)
+  - Output writers: `rh-auto-prune.js`, `rh-daily-regen-trigger.js`, `rh-daily-regen.js`, `rh-generate-env-md.js`, `rh-learnings-write.js`, `rh-scribe-table-write.js`
+- Remaining hardcoded-identity references in `packages/telemetry/docs/*.md`: `claude-setup-ross`, `OneDrive/Workspace`. Smaller surface than `rossb`; defer until clear value.
 
 ---
 
