@@ -26,13 +26,16 @@
 | #36 | test(oversight): cover rh-oversight-health.js | `876cb35` | +11 |
 | #37 | test(output): cover rh-scribe-table-write.js | `ebc12a9` | +14 |
 | #38 | test+fix: cover rh-learnings-write + manifest excludeSubdirs + 4 missing source-tree lib shims | `e6383e8` | +21 |
+| #39 | docs(progress): log PRs #35-#38 | `5b5e3d2` | — |
+| #40 | test+fix(output): cover rh-auto-prune + fix inconsistent return shape | `9f043a1` | +15 |
+| #41 | test(output): cover rh-daily-regen-trigger | `946989c` | +7 |
 
-**Cumulative test count delta this session: +139 tests** across 4 packages.
+**Cumulative test count delta this session: +161 tests** across 4 packages.
 
 **Test counts now (per `node packages/<pkg>/tests/run.js`):**
 - oversight: 137 (was 45 baseline; +92 across session)
 - cli:       54 (was 43; +11)
-- output:    63 (was 1 baseline; +62 across session)
+- output:    85 (was 1 baseline; +84 across session)
 - telemetry: 28/28 files pass (multiple tests per file)
 
 **Cleanup ops in this session:**
@@ -46,13 +49,14 @@
 - PR #34: `rh-generate-state-md.js` crashed unconditionally when OVERSIGHT_SYSTEM.md was absent, despite `sectionHeader()` already having a `NOT FOUND` branch. Now fail-soft. Daily-regen in tmp HOME went **7/10 → 9/10**.
 - PR #27: FailureStore default-path guard introduced `alreadyIsolated` exception — when FAILURE_LOG_PATH is already inside tmpdir (integration tests' HOME=tmpdir pattern), don't override it. Without this guard, 3 integration tests broke when NODE_ENV=test was forced.
 - PR #38: Source-tree dependency coherence bug from Phase 2 reorg — `packages/output/scripts/lib/` was missing shims for `phase-timing`, `journal-probe`, `oversight-events`, `scribe-staging`. Post-install worked (oversight's full lib copy provided canonicals), but source-tree dev/test execution broke. Fix: added 4 shims + new manifest `excludeSubdirs` option so output's lib stays source-tree-only. Byte-identical install verified.
+- PR #40: `pruneScribeFile` returned inconsistent shape when the source file was absent (`{archived, staleOpen, file: <full-path>}` vs `{archived_count, stale_open_count, file: <basename>}` for present files). Fix: missing-file branch returns the canonical shape so callers iterating `scribe_files` don't see undefined counts.
 
 **Plan for next session:**
 - More test coverage targets in priority order:
   - `rh-check-anthropic-guidance.js`
   - `rh-layer3a-capture.js` (documented atomic-write design)
   - `rh-statusline.js` (formatting hook)
-  - Output writers still untested: `rh-auto-prune.js`, `rh-daily-regen-trigger.js`, `rh-daily-regen.js`, `rh-generate-env-md.js`
+  - Output writers still untested: `rh-daily-regen.js` (orchestrator), `rh-generate-env-md.js`
 - Remaining hardcoded-identity references in `packages/telemetry/docs/*.md`: `claude-setup-ross`, `OneDrive/Workspace`. Smaller surface than `rossb`; defer until clear value.
 
 ---
