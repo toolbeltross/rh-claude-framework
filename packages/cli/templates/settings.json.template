@@ -12,6 +12,10 @@
       {
         "matcher": "Agent",
         "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-agent-oversight-guard.js" }]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [{ "type": "command", "command": "node {{SCRIPTS_DIR}}/rh-path-typo-guard.js" }]
       }
     ],
     "PostToolUse": [
