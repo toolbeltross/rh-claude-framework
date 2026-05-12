@@ -164,7 +164,17 @@ function pruneScribeStaging() {
 // ─── 5. Scribe rows ──────────────────────────────────────────────────────
 
 function pruneScribeFile(filePath) {
-  if (!fs.existsSync(filePath)) return { archived: 0, staleOpen: 0, file: filePath };
+  if (!fs.existsSync(filePath)) {
+    // Consistent shape with the file-exists branch below (callers + main()
+    // iterate scribe_files reading archived_count / stale_open_count).
+    return {
+      file: path.basename(filePath),
+      archived_count: 0,
+      archived_ids: [],
+      stale_open_count: 0,
+      stale_open_ids: [],
+    };
+  }
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.split(/\r?\n/);
   const now = Date.now();
