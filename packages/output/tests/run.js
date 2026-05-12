@@ -5,6 +5,7 @@ const path = require('path');
 const SUITES = [
   'test-concurrent-write.js',
   'test-render-md-html.js',
+  'test-generate-state-md.js',
 ];
 
 let total = 0, failed = 0;
