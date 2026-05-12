@@ -1,5 +1,6 @@
 import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
+import { tmpdir } from 'os';
 import { createHash } from 'crypto';
 import { FAILURE_LOG_PATH, MAX_FAILURE_CACHE, MAX_FAILURE_QUERY_RESULTS } from './config.js';
 
@@ -42,7 +43,28 @@ export function hashToolInvocation(toolName, toolInput) {
  * - Loaded from disk on server start so data survives restarts
  */
 export class FailureStore {
-  constructor(filePath = FAILURE_LOG_PATH) {
+  constructor(filePath) {
+    if (filePath === undefined) {
+      // Auto-redirect to a process-scoped tmp file when running under a test
+      // runner. Catches the bug where unit tests construct `new Store()` and
+      // silently pollute the user's real failure log via `failureStore.append`.
+      // Tests can still pass an explicit path; this is a default-safety guard.
+      //
+      // EXCEPTION: integration tests already isolate via HOME=tmpdir before
+      // spawning the server, so FAILURE_LOG_PATH resolves to a path inside
+      // the system tmp dir. In that case the existing path is already safe
+      // — overriding it would break tests that read from FAILURE_LOG_PATH.
+      const underTest = process.env.NODE_ENV === 'test' || !!process.env.RH_TELEMETRY_TEST_MODE;
+      const alreadyIsolated = FAILURE_LOG_PATH.startsWith(tmpdir());
+      if (underTest && !alreadyIsolated) {
+        filePath = join(tmpdir(), `rh-telemetry-failure-store-test-${process.pid}.jsonl`);
+        if (!process.env.RH_TELEMETRY_QUIET_TEST_REDIRECT) {
+          console.warn(`[failure-store] NODE_ENV=test detected without explicit filePath — redirecting writes to ${filePath} to avoid polluting ${FAILURE_LOG_PATH}`);
+        }
+      } else {
+        filePath = FAILURE_LOG_PATH;
+      }
+    }
     this.filePath = filePath;
     this.cache = []; // most recent last
     this.maxCache = MAX_FAILURE_CACHE;
