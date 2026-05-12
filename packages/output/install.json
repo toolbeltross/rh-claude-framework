@@ -1,0 +1,6 @@
+{
+  "package": "@rh/output",
+  "operations": [
+    { "kind": "copyDir", "from": "scripts", "to": "scriptsDir", "label": "output script files" }
+  ]
+}

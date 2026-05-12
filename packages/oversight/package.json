@@ -12,7 +12,8 @@
     "scripts/",
     "agents/",
     "rules/",
-    "templates/"
+    "templates/",
+    "install.json"
   ],
   "license": "MIT",
   "author": "Ross Beveridge",

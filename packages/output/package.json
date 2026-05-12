@@ -7,7 +7,8 @@
     "test": "node tests/run.js"
   },
   "files": [
-    "scripts/"
+    "scripts/",
+    "install.json"
   ],
   "license": "MIT",
   "author": "Ross Beveridge",

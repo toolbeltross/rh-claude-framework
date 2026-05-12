@@ -5,7 +5,8 @@
   "description": "User-invocable skills for rh-claude-framework (rh-quit, rh-session, etc.)",
   "files": [
     "rh-quit/",
-    "rh-session/"
+    "rh-session/",
+    "install.json"
   ],
   "license": "MIT",
   "author": "Ross Beveridge",
