@@ -7,6 +7,9 @@
 //
 // Operation kinds:
 //   - copyDir:     recursive copy of <pkg>/<from> → <paths[to]>
+//                  optional `excludeSubdirs: ["lib", ...]` skips named
+//                  top-level subdirectories (NOT recursive — only top-level
+//                  matches under <pkg>/<from> are excluded).
 //   - copyFiles:   copy listed files from <pkg> root → <paths[to]>
 //   - copySubdirs: copy only subdirectories of <pkg>/<from> (skips top-level files)
 //
@@ -19,14 +22,22 @@
 const fs = require('fs');
 const path = require('path');
 
-function copyDir(src, dest, opts) {
+// copyDir recursively copies src → dest. The optional `excludeSubdirs` set
+// (Set<string>) skips top-level subdirectories of src by name — used by
+// output's install.json to keep its source-tree-only lib shims out of the
+// install set (those shims resolve to oversight's lib in source-tree;
+// post-install, oversight's lib copy provides the canonicals).
+function copyDir(src, dest, opts, excludeSubdirs) {
   if (!fs.existsSync(src)) return 0;
   if (!opts.dryRun && !fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
   let count = 0;
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.isDirectory() && excludeSubdirs && excludeSubdirs.has(entry.name)) continue;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
+      // Recursion does NOT carry excludeSubdirs further — it's a top-level
+      // skip only (more predictable than depth-recursive name matching).
       count += copyDir(srcPath, destPath, opts);
     } else {
       if (opts.dryRun) console.log(`  [dry-run] copy ${srcPath} → ${destPath}`);
@@ -56,7 +67,10 @@ function applyOperation(op, pkgDir, paths, opts) {
 
   if (op.kind === 'copyDir') {
     const src = path.join(pkgDir, op.from);
-    return copyDir(src, dest, opts);
+    const excludeSubdirs = Array.isArray(op.excludeSubdirs)
+      ? new Set(op.excludeSubdirs)
+      : null;
+    return copyDir(src, dest, opts, excludeSubdirs);
   }
 
   if (op.kind === 'copyFiles') {

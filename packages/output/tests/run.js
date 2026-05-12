@@ -7,6 +7,7 @@ const SUITES = [
   'test-render-md-html.js',
   'test-generate-state-md.js',
   'test-scribe-table-write.js',
+  'test-learnings-write.js',
 ];
 
 let total = 0, failed = 0;

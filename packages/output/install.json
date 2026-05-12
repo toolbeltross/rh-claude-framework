@@ -1,6 +1,13 @@
 {
   "package": "@rh/output",
   "operations": [
-    { "kind": "copyDir", "from": "scripts", "to": "scriptsDir", "label": "output script files" }
+    {
+      "kind": "copyDir",
+      "from": "scripts",
+      "to": "scriptsDir",
+      "label": "output script files",
+      "excludeSubdirs": ["lib"],
+      "_note": "scripts/lib/ contains source-tree-only shims (re-exports from oversight/scripts/lib/ and shared/). At install time, oversight's full lib/ canonicals are already placed in scriptsDir/lib (oversight runs first in install order); the shims must NOT be copied or they'd overwrite the canonicals with broken-post-install relative requires."
+    }
   ]
 }

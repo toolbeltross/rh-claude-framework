@@ -62,6 +62,56 @@ const tests = [
     }),
   },
   {
+    name: 'applyOperation copyDir + excludeSubdirs: skips named top-level subdirs',
+    fn: () => withTmpDir((dir) => {
+      const pkgDir = path.join(dir, 'pkg');
+      const dest = path.join(dir, 'dest');
+      fs.mkdirSync(path.join(pkgDir, 'src', 'lib'), { recursive: true });
+      fs.mkdirSync(path.join(pkgDir, 'src', 'subA'), { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'src', 'a.js'), 'top-level');
+      fs.writeFileSync(path.join(pkgDir, 'src', 'lib', 'shim.js'), 'should-not-ship');
+      fs.writeFileSync(path.join(pkgDir, 'src', 'subA', 'kept.js'), 'should-ship');
+      const n = applyOperation(
+        { kind: 'copyDir', from: 'src', to: 'destDir', excludeSubdirs: ['lib'] },
+        pkgDir,
+        { destDir: dest },
+        { dryRun: false }
+      );
+      assert.strictEqual(n, 2, `expected 2 files (a.js + subA/kept.js); got ${n}`);
+      assert.ok(fs.existsSync(path.join(dest, 'a.js')),
+        'top-level file should be copied');
+      assert.ok(fs.existsSync(path.join(dest, 'subA', 'kept.js')),
+        'non-excluded subdir should be copied');
+      assert.ok(!fs.existsSync(path.join(dest, 'lib')),
+        'excluded subdir should NOT exist in dest');
+      assert.ok(!fs.existsSync(path.join(dest, 'lib', 'shim.js')),
+        'excluded subdir contents must not leak');
+    }),
+  },
+  {
+    name: 'applyOperation copyDir + excludeSubdirs is top-level only (nested same-name copied)',
+    fn: () => withTmpDir((dir) => {
+      const pkgDir = path.join(dir, 'pkg');
+      const dest = path.join(dir, 'dest');
+      // src/lib should be skipped; src/subA/lib should be COPIED (deeper)
+      fs.mkdirSync(path.join(pkgDir, 'src', 'lib'), { recursive: true });
+      fs.mkdirSync(path.join(pkgDir, 'src', 'subA', 'lib'), { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'src', 'lib', 'top.js'), 'skip');
+      fs.writeFileSync(path.join(pkgDir, 'src', 'subA', 'lib', 'nested.js'), 'keep');
+      const n = applyOperation(
+        { kind: 'copyDir', from: 'src', to: 'destDir', excludeSubdirs: ['lib'] },
+        pkgDir,
+        { destDir: dest },
+        { dryRun: false }
+      );
+      assert.strictEqual(n, 1, `expected 1 file (subA/lib/nested.js); got ${n}`);
+      assert.ok(!fs.existsSync(path.join(dest, 'lib')),
+        'top-level lib excluded');
+      assert.ok(fs.existsSync(path.join(dest, 'subA', 'lib', 'nested.js')),
+        'nested lib at depth 2 should be copied (excludeSubdirs is top-level only)');
+    }),
+  },
+  {
     name: 'applyOperation copyFiles: copies listed files, skips missing',
     fn: () => withTmpDir((dir) => {
       const pkgDir = path.join(dir, 'pkg');
