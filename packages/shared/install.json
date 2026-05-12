@@ -1,0 +1,12 @@
+{
+  "package": "@rh/shared",
+  "operations": [
+    {
+      "kind": "copyFiles",
+      "files": ["config.js", "file-lock.js", "env.js"],
+      "to": "scriptsDir/lib",
+      "label": "shared lib files",
+      "_note": "Runs AFTER oversight + output so it overwrites the lib/{config,file-lock}.js shims with self-contained canonical files. Post-install scripts have no relative ../../../shared/ dependency."
+    }
+  ]
+}

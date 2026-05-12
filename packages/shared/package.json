@@ -8,7 +8,8 @@
     "config.js",
     "file-lock.js",
     "env.js",
-    "index.js"
+    "index.js",
+    "install.json"
   ],
   "license": "MIT",
   "author": "Ross Beveridge",

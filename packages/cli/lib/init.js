@@ -253,71 +253,25 @@ function run(extraOpts = {}) {
     }
   }
 
-  // 2. Copy scripts
-  if (opts.reset) {
+  // 2. Reset: purge existing rh-* scripts before copy. (Not in any manifest —
+  // it's a global pre-step that operates on the install destination, not on
+  // a source package.)
+  if (opts.reset && fs.existsSync(scriptsDir)) {
     const existing = fs.readdirSync(scriptsDir).filter(f => f.startsWith('rh-'));
     if (!opts.dryRun) for (const f of existing) fs.unlinkSync(path.join(scriptsDir, f));
     console.log(`  [reset] Removed ${existing.length} existing rh-* scripts`);
   }
-  const scriptCount = copyDir(path.join(OVERSIGHT_PKG, 'scripts'), scriptsDir, opts);
-  console.log(`  Copied ${scriptCount} oversight script files → ${scriptsDir}`);
 
-  // 2a. Copy output package scripts (renderers, scribe writers, daily-regen).
-  // All sibling packages' scripts go to the SAME flat ~/.claude/scripts/ dir
-  // so the {{SCRIPTS_DIR}} hook template substitution stays trivial.
-  const outputScriptsSrc = path.join(OUTPUT_PKG, 'scripts');
-  const outputScriptCount = fs.existsSync(outputScriptsSrc)
-    ? copyDir(outputScriptsSrc, scriptsDir, opts) : 0;
-  if (outputScriptCount > 0) console.log(`  Copied ${outputScriptCount} output script files → ${scriptsDir}`);
-
-  // 2b. Copy shared lib files OVER the shims that came from packages/oversight/scripts/lib/.
-  // Source-tree shims at oversight/scripts/lib/{config,file-lock}.js re-export from
-  // packages/shared/. Those shims must NOT ship to ~/.claude/scripts/lib/ — instead
-  // we overwrite them with the canonical files from packages/shared/ so post-install
-  // require('./lib/config') resolves to a self-contained module with no relative
-  // ../../../shared/ dependency (which wouldn't exist post-install).
-  const sharedDir = SHARED_PKG;
-  const libDir = path.join(scriptsDir, 'lib');
-  if (!opts.dryRun && !fs.existsSync(libDir)) fs.mkdirSync(libDir, { recursive: true });
-  const sharedFiles = ['config.js', 'file-lock.js', 'env.js'];
-  let sharedCount = 0;
-  for (const f of sharedFiles) {
-    const src = path.join(sharedDir, f);
-    const dest = path.join(libDir, f);
-    if (!fs.existsSync(src)) continue;
-    if (opts.dryRun) console.log(`  [dry-run] copy ${src} → ${dest}`);
-    else fs.copyFileSync(src, dest);
-    sharedCount++;
+  // 3. Manifest-driven copy. Each package declares an install.json fragment
+  // (Phase 4b of reorg). Order matters: shared MUST run after oversight +
+  // output so the shared/{config,file-lock}.js canonicals overwrite the
+  // shims that oversight ships in scripts/lib/. Skills order is independent.
+  const { applyManifest } = require('./manifest');
+  const installPaths = { scriptsDir, agentsDir, skillsDir, rulesDir };
+  const PACKAGE_INSTALL_ORDER = [OVERSIGHT_PKG, OUTPUT_PKG, SHARED_PKG, SKILLS_PKG];
+  for (const pkgDir of PACKAGE_INSTALL_ORDER) {
+    applyManifest(pkgDir, installPaths, opts);
   }
-  console.log(`  Copied ${sharedCount} shared lib files → ${libDir}`);
-
-  // 3. Copy agents
-  const agentCount = copyDir(path.join(OVERSIGHT_PKG, 'agents'), agentsDir, opts);
-  console.log(`  Copied ${agentCount} agent files → ${agentsDir}`);
-
-  // 4. Copy skills from packages/skills/ (Phase 3 of 5-package reorg —
-  // skills relocated from packages/oversight/skills/ to their own peer package).
-  // Only copy subdirectories (each skill is a dir like rh-quit/, rh-session/);
-  // top-level files like package.json belong to the npm workspace, not the
-  // installed skill set.
-  const skillsSrc = SKILLS_PKG;
-  let skillCount = 0;
-  if (fs.existsSync(skillsSrc)) {
-    if (!opts.dryRun && !fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
-    for (const entry of fs.readdirSync(skillsSrc, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      skillCount += copyDir(
-        path.join(skillsSrc, entry.name),
-        path.join(skillsDir, entry.name),
-        opts,
-      );
-    }
-  }
-  console.log(`  Copied ${skillCount} skill files → ${skillsDir}`);
-
-  // 5. Copy rules
-  const ruleCount = copyDir(path.join(OVERSIGHT_PKG, 'rules'), rulesDir, opts);
-  console.log(`  Copied ${ruleCount} rule files → ${rulesDir}`);
 
   // 6. Create oversight dir
   if (!opts.dryRun && !fs.existsSync(oversightDir)) {
