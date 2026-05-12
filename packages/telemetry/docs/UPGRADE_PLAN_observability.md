@@ -2,7 +2,7 @@
 
 **Created:** 2026-04-19
 **Author:** live-diagnostic walkthrough
-**Absolute path:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-telemetry\docs\UPGRADE_PLAN_observability.md`
+**Absolute path:** `C:\Users\user\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-telemetry\docs\UPGRADE_PLAN_observability.md`
 
 ## Motivation
 

@@ -4,9 +4,9 @@ type: question
 created: 2026-04-14
 updated: 2026-04-14
 sources:
-  - "~/.claude/projects/C--Users-rossb-OneDrive-Desktop-Telemetry/e971dc85-629d-4589-aace-660a052d44c7/subagents/agent-a5d9124.jsonl"
-  - "~/.claude/projects/C--Users-rossb-OneDrive-Desktop-Telemetry/b7962f23-d70d-46c0-85a6-7441cd81dc20/subagents/agent-a4118d2.jsonl"
-  - "~/.claude/projects/C--Users-rossb-OneDrive-Desktop-Telemetry/91e0e0a1-f623-4675-a920-1b3d468f7a3c/subagents/agent-a05d41e.jsonl"
+  - "~/.claude/projects/C--Users-user-OneDrive-Desktop-Telemetry/e971dc85-629d-4589-aace-660a052d44c7/subagents/agent-a5d9124.jsonl"
+  - "~/.claude/projects/C--Users-user-OneDrive-Desktop-Telemetry/b7962f23-d70d-46c0-85a6-7441cd81dc20/subagents/agent-a4118d2.jsonl"
+  - "~/.claude/projects/C--Users-user-OneDrive-Desktop-Telemetry/91e0e0a1-f623-4675-a920-1b3d468f7a3c/subagents/agent-a05d41e.jsonl"
 tags: [design-history, ui, investigation, project-origin]
 confidence: 0.75
 sources_count: 3

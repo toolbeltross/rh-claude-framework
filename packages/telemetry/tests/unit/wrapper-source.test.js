@@ -22,9 +22,9 @@ test('first two lines contain rh-telemetry:wrapped marker with original path', (
 });
 
 test('escapes Windows backslashes in original path literal', () => {
-  const src = buildWrapperSource('C:\\Users\\rossb\\.claude\\scripts\\statusline.js', 'http://localhost:7890');
+  const src = buildWrapperSource('C:\\Users\\user\\.claude\\scripts\\statusline.js', 'http://localhost:7890');
   // The source should contain a doubled-backslash form so the JS literal evaluates to the original
-  assert.ok(src.includes("'C:\\\\Users\\\\rossb\\\\.claude\\\\scripts\\\\statusline.js'"));
+  assert.ok(src.includes("'C:\\\\Users\\\\user\\\\.claude\\\\scripts\\\\statusline.js'"));
 });
 
 test('escapes single quotes in path', () => {
