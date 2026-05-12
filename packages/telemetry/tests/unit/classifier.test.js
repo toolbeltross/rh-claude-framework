@@ -57,15 +57,15 @@ console.log('statusline-classifier tests:\n');
 // --- extractScriptPath ---
 test('extractScriptPath: quoted absolute path', () => {
   assert.strictEqual(
-    extractScriptPath('node "C:/Users/rossb/.claude/scripts/statusline.js"'),
-    'C:/Users/rossb/.claude/scripts/statusline.js'
+    extractScriptPath('node "C:/Users/user/.claude/scripts/statusline.js"'),
+    'C:/Users/user/.claude/scripts/statusline.js'
   );
 });
 
 test('extractScriptPath: unquoted path', () => {
   assert.strictEqual(
-    extractScriptPath('node C:/Users/rossb/.claude/scripts/statusline.js'),
-    'C:/Users/rossb/.claude/scripts/statusline.js'
+    extractScriptPath('node C:/Users/user/.claude/scripts/statusline.js'),
+    'C:/Users/user/.claude/scripts/statusline.js'
   );
 });
 

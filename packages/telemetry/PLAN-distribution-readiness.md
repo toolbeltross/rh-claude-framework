@@ -8,14 +8,14 @@ Status: **CLOSED 2026-05-06 — npm publication not being pursued.** User decisi
 |---|---|---|
 | 1.1 | Remove `docs/` from npm `files` | ✅ Done — `files: ["bin/", "server/", "scripts/*.js", "dist/"]` |
 | 1.2 | Remove `src/` from npm `files` | ✅ Done — same |
-| 1.3 | Remove `['Ross Here', 'rossb']` profiles in `setup-hooks.js` | ✅ Done — grep returns zero matches |
+| 1.3 | Remove `['admin', 'user']` profiles in `setup-hooks.js` | ✅ Done — grep returns zero matches |
 | 1.4 | Add LICENSE | ✅ Done — `packages/telemetry/LICENSE` exists |
 | 1.5 | Move/remove `cross-env` | ✅ Done — `cross-env` not in package.json |
 | 2.1 | Delete 5 obsolete scripts | ✅ Done (4/5 already gone via prior cleanup; 1 kept: `supervisory-agent-prompt.md` is still the active reference doc for Layer 3a per `CLAUDE.md:235` — re-enabled 2026-04-19 after the plan was written) |
 | 2.2 | Clean up `filterOurEntries` strings | ✅ Done — only `'ADDITIVE ONLY'` remains and it's the LIVE Layer 3a marker (load-bearing for hook detection during reinstall) |
 | 3.1 | README accuracy fixes | ✅ Done 2026-05-06 — clone URL updated to framework, slash commands renamed `/telemetry` → `/rh-telemetry`, hook count and Stop description already current |
 | 3.2 | Privacy section | ✅ Done — README lines 178-183 |
-| 4.1 | Git ownership (Ross Here vs rossb) | ❌ Not pursuing — npm publish closed out |
+| 4.1 | Git ownership (admin vs user) | ❌ Not pursuing — npm publish closed out |
 | 4.2 | Verify git remote matches package.json | ✅ Done — `repository.url: https://github.com/toolbeltross/rh-claude-framework`, `directory: packages/telemetry` |
 | 4.3 | `.npmignore` defense-in-depth | ✅ Done — `.npmignore` exists |
 | 5 | `npm pack` + `npm publish` | ❌ Not pursuing — distribution channel will remain "clone the framework repo" |
@@ -26,10 +26,10 @@ Status: **CLOSED 2026-05-06 — npm publication not being pursued.** User decisi
 
 ## Open Question (original — preserved for context)
 
-Both `rossb` and `Ross Here` are the same person. The repo is currently owned by Ross Here.
+Both `user` and `admin` are the same person. The repo is currently owned by admin.
 Decision needed: which user should own the files going forward?
-- **Ross Here (admin)**: owns the repo now, avoids dubious ownership when committing
-- **rossb**: daily driver account, runs Claude Code sessions
+- **admin (admin)**: owns the repo now, avoids dubious ownership when committing
+- **user**: daily driver account, runs Claude Code sessions
 - Consider: git safe.directory may be simpler than chown-ing everything
 
 ---
@@ -51,7 +51,7 @@ Decision needed: which user should own the files going forward?
 - **Why**: `dist/` is the built frontend served by the server. `src/` is only for contributors who clone from git. Saves ~150KB in the published package.
 
 ### 1.3 Remove hardcoded user profiles from `setup-hooks.js`
-- [ ] Edit `scripts/setup-hooks.js` lines ~89-98: remove the `['Ross Here', 'rossb']` logic
+- [ ] Edit `scripts/setup-hooks.js` lines ~89-98: remove the `['admin', 'user']` logic
 - [ ] Replace `getTargetPaths()` with single-user logic: always write to `homedir()/.claude/settings.json`
 - [ ] Remove the `--target` CLI flag and `TARGET` variable (lines ~23-25)
 - [ ] Update the console output that references `--target all` (lines ~236-238, ~286-287)
@@ -102,7 +102,7 @@ These files are superseded and no longer imported or referenced by active code:
 
 ### 3.1 Fix inaccurate content
 - [ ] Line 13: change "3-layer validation system (deterministic + LLM + deep review)" to "deterministic tool-usage validation" (agent hooks removed)
-- [ ] Line 29: change `github.com/rossb/` to match actual repo URL in package.json (`github.com/toolbeltross/`)
+- [ ] Line 29: change `github.com/user/` to match actual repo URL in package.json (`github.com/toolbeltross/`)
 - [ ] Line 44: change "10 Claude Code hooks" to "11 Claude Code hooks"
 - [ ] Line 48: change "Stop — marks turn boundaries + runs supervisory agent review" to "Stop — marks turn boundaries"
 - [ ] Add ConfigChange and TaskCompleted to the hook list in "What `setup` Does"
@@ -124,9 +124,9 @@ These files are superseded and no longer imported or referenced by active code:
 ## Phase 4: Git Repo Setup (SHOULD FIX)
 
 ### 4.1 Fix dubious ownership
-- [ ] As Ross Here (admin), decide: keep Ross Here as owner, or chown to rossb
-- [ ] If keeping Ross Here: rossb needs `git config --global --add safe.directory C:/Users/rossb/OneDrive/Workspace/Code/rh-telemetry`
-- [ ] If transferring to rossb: `icacls` or `takeown` on the repo directory
+- [ ] As admin (admin), decide: keep admin as owner, or chown to user
+- [ ] If keeping admin: user needs `git config --global --add safe.directory C:/Users/user/OneDrive/Workspace/Code/rh-telemetry`
+- [ ] If transferring to user: `icacls` or `takeown` on the repo directory
 
 ### 4.2 Verify git remote
 - [ ] Confirm remote origin matches the repo URL in package.json

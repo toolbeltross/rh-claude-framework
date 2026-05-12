@@ -187,7 +187,7 @@ Verified against the codebase on 2026-04-18. Listed so the retired plan files ca
 
 **`PLAN-distribution-readiness.md` — almost all complete.** Evidence:
 - 1.1–1.2: `package.json → files: ["bin/","server/","scripts/*.js","dist/"]` — no `docs/`, no `src/`
-- 1.3: `setup-hooks.js` no longer has `['Ross Here','rossb']` multi-profile logic or `--target` flag
+- 1.3: `setup-hooks.js` no longer has `['Ross Here','user']` multi-profile logic or `--target` flag
 - 1.4: `LICENSE` (MIT, "Copyright (c) 2026 Ross Beveridge")
 - 1.5: `cross-env` removed from `package.json` entirely (not in deps or devDeps)
 - 2.1: obsolete scripts gone (`tool-validator.js`, `statusline.js`, `progress-tracker.js`, `supervisory-agent-prompt.md`, `supervisory-agent-prompt-v2.md`)

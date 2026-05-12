@@ -33,7 +33,7 @@ To version-control: `cd claude-setup-ross && git init && git add . && git commit
 
 ## What's persistent for next session
 
-- `~/.claude/settings.json` env block: `OVERSIGHT_LOG_PATH=C:/Users/rossb/OneDrive/Workspace/claude-setup-ross/oversight-system/supervisory-log.md` — inherited by all future Claude Code sessions, no setx required
+- `~/.claude/settings.json` env block: `OVERSIGHT_LOG_PATH=C:/Users/user/OneDrive/Workspace/claude-setup-ross/oversight-system/supervisory-log.md` — inherited by all future Claude Code sessions, no setx required
 - `rh-telemetry-1.0.0.tgz` at telemetry repo root — pack artifact, can be deleted or kept (not tracked by git, not shipped by npm publish either)
 - `.claude/worktrees/bold-driscoll/` — untracked worktree with its own branch (`claude/bold-driscoll`), abandoned content, decision pending
 

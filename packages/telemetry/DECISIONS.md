@@ -42,7 +42,7 @@ The work was first done on the standalone `toolbeltross/rh-telemetry` repo (comm
 
 ### Source
 
-- Plan file: `C:/Users/rossb/.claude/plans/check-with-the-supervisor-sparkling-meteor.md`
+- Plan file: `C:/Users/user/.claude/plans/check-with-the-supervisor-sparkling-meteor.md`
 - Standalone-repo mirror commit (dead-end): `toolbeltross/rh-telemetry@fe7b7c5` (local-only, repo archived)
 - This commit's branch: `fix/skill-install-rename-resilient` off `main` at `89966c0`
 
@@ -87,7 +87,7 @@ Yesterday's session bailed on the directory rename due to "Device or resource bu
 
 ### Source
 
-- Plan file: `C:/Users/rossb/.claude/plans/recursive-pondering-alpaca.md`
+- Plan file: `C:/Users/user/.claude/plans/recursive-pondering-alpaca.md`
 - Backup: `~/.claude/settings.json.pre-dir-rename-20260504`
 
 ---
@@ -138,6 +138,6 @@ User directive: "I would like to call it rh-telemetry everywhere including packa
 
 ### Source
 
-- Plan file: `C:/Users/rossb/.claude/plans/do-the-analysis-and-expressive-liskov.md`
+- Plan file: `C:/Users/user/.claude/plans/do-the-analysis-and-expressive-liskov.md`
 - Session ID: 53e2eec0
 - Supervisor scope review: returned with bridge-timing flip + 6 scope-addition findings (env-var blast radius, gist statusline alias risk, settings.json backup, self-test:292 stale path, statusline comment markers, EBUSY-on-OneDrive caveat — last item moot since OneDrive sync is off).
