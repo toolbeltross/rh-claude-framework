@@ -96,7 +96,7 @@ The "tmp HOME" pattern is the outer-seam verification per `rh-work-verification.
 - **`rh-security.md` split** — base file ships with the framework; `rh-security-local.md.template` is the user-private dirs list, gitignored at install time.
 - **Generators use configurable `oversightDir`** — defaults to `~/.claude/oversight/`. Ross's local config points to `claude-setup-ross/oversight-system/`.
 - **Settings.json pre-write validator (P2-4)** — `cli/lib/init.js` runs `validateSettings()` on the fully-merged object before any write. Errors abort without modifying the live file; warnings surface but allow.
-- **Per-turn scribe staging (P1-3)** — default-OFF feature flag. Enable via env `RH_SCRIBE_STAGING=1` or `oversight.json:scribeStaging:true`.
+- **Per-turn scribe staging (P1-3)** — on by default. Disable via `RH_SCRIBE_STAGING=0` or `oversight.json:scribeStaging:false`.
 - **Cross-package trends (P3-2)** — telemetry server bridges to the CJS sweep module via `createRequire`. Single canonical aggregation; both `rh-oversight supervisor-sweep` and `GET /api/trends` produce the same data.
 - **Concurrency hardening (Phase 2 reorg)** — full-file writers in output package wrap writes in `withLock` for cross-process safety. Documented exception: `rh-daily-regen.js` LOG_PATH append stays unlocked under JSONL atomic-append assumption (single-process under same-day guard).
 

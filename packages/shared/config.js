@@ -67,9 +67,9 @@ function resolveConfig() {
     userName: process.env.USER || process.env.USERNAME || file.userName || path.basename(HOME),
     privateDirs: file.privateDirs || [],
 
-    // P1-3: per-turn scribe staging file. Off by default; env var
-    // RH_SCRIBE_STAGING overrides. See lib/scribe-staging.js.
-    scribeStaging: file.scribeStaging === true,
+    // P1-3: per-turn scribe staging file. On by default; disable via
+    // RH_SCRIBE_STAGING=0 or oversight.json scribeStaging:false.
+    scribeStaging: file.scribeStaging !== false,
 
     configPath: CONFIG_PATH,
   };

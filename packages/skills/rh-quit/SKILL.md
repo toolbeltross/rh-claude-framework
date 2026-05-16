@@ -11,7 +11,7 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 ## What this skill does
 
-1. **Read the full session text** — if per-turn staging is enabled (P1-3; env `RH_SCRIBE_STAGING=1` or `oversight.json: scribeStaging:true`), the multiscope agent should consume the staging file via `node ~/.claude/scripts/rh-scribe-staging-read.js <session-id>` for full-session coverage. Otherwise fall back to the 10K-char transcript tail (legacy path; misses content from long sessions).
+1. **Read the full session text** — per-turn staging is on by default (P1-3). The multiscope agent should consume the staging file via `node ~/.claude/scripts/rh-scribe-staging-read.js <session-id>` for full-session coverage. Fall back to the 10K-char transcript tail only if staging is explicitly disabled (`oversight.json: scribeStaging:false` or `RH_SCRIBE_STAGING=0`) or no staging file exists for this session.
 
 2. **Detect scribe-worthy content** — apply the same marker regexes from `rh-scribe-prefilter.js` (recommendations, cleanup, learnings) to decide whether to dispatch at all.
 

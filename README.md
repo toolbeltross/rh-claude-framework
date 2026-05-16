@@ -105,7 +105,7 @@ Target wall-clock: < 90s for a typical session.
 - **Config priority**: env var > `~/.claude/oversight.json` > auto-detect (walk up from CWD looking for `.claude/rules/`).
 - **Security split**: `rh-security.md` (framework base) + `rh-security-local.md.template` (user's private dirs, gitignored at install time).
 - **Cross-process file locking**: `@rh/shared/file-lock` provides atomic O_EXCL lockfiles with PID stamping + 5s stale recovery. Used by all output writers and scribe table writes.
-- **Per-turn scribe staging** (opt-in): set `scribeStaging: true` in `~/.claude/oversight.json`. Prefilter writes per-turn JSONL; `/rh-quit` consumes the staging file instead of the 10K-char transcript tail.
+- **Per-turn scribe staging** (on by default): prefilter writes per-turn JSONL to `~/.claude/scribe-staging/`; `/rh-quit` consumes the full staging file instead of the 10K-char transcript tail. Disable with `scribeStaging: false` in `~/.claude/oversight.json` or `RH_SCRIBE_STAGING=0`.
 
 ## Development
 

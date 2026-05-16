@@ -230,7 +230,7 @@ function pruneStale(maxAgeMs = STAGING_TTL_MS) {
 }
 
 // Feature-flag check. Returns true when staging is enabled for this run.
-// Priority: env var RH_SCRIBE_STAGING (=1) > oversight.json `scribeStaging:true`.
+// On by default. Disable via RH_SCRIBE_STAGING=0 or oversight.json scribeStaging:false.
 function isEnabled() {
   const env = process.env.RH_SCRIBE_STAGING;
   if (env === '1' || env === 'true') return true;
