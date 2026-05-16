@@ -6,7 +6,7 @@ Context for picking up after restart. Last session worked through (a) consolidat
 
 ## Outer-seam verification status (critical)
 
-The dual-write for the supervisory log is **now outer-seam verified**. Seven paired entries exist in both `~/.claude/telemetry-supervisory-log.md` and `claude-setup-ross/oversight-system/supervisory-log.md`, produced by real Claude Code Stop hooks between 07:48:50 and 08:02:15 on 2026-04-19. The `oversight=on` flag fires in `hook-debug.log` for each. No manual intervention required for this to continue — the env block in `~/.claude/settings.json` is persistent and is inherited by every Claude Code session from now on.
+The dual-write for the supervisory log is **now outer-seam verified**. Seven paired entries exist in both `~/.claude/telemetry-supervisory-log.md` and `<oversight-workspace>/oversight-system/supervisory-log.md`, produced by real Claude Code Stop hooks between 07:48:50 and 08:02:15 on 2026-04-19. The `oversight=on` flag fires in `hook-debug.log` for each. No manual intervention required for this to continue — the env block in `~/.claude/settings.json` is persistent and is inherited by every Claude Code session from now on.
 
 PreCompact hook remains **unverified outer-seam** — Claude Code has never fired it in this environment (0 occurrences in hook-debug.log across all history, while all other configured hooks fire fine). Server-side `/api/compact` ingestion works (verified via manual POST); the gap is Claude Code's side. See Outstanding § PreCompact investigation below.
 
@@ -21,7 +21,7 @@ Two commits on `master`, pre-commit unit suite (8/8) passed on both:
 
 `master` is **20 commits ahead of `origin/master`** (16 pre-session + 2 from today + possibly more from the Layer 3a work in the parallel session). Not pushed — deliberate, awaiting user.
 
-## What's on disk but NOT committed (`claude-setup-ross` — not a git repo)
+## What's on disk but NOT committed (`<oversight-workspace>` — not a git repo)
 
 All saved, none versioned:
 
@@ -29,11 +29,11 @@ All saved, none versioned:
 - `oversight-system/incidents/2026-04-15-supervisory-log-drift.md` — status flipped `diagnosed` → `fixed`, root cause rewritten (path swap, not snapshot endpoint)
 - `LOOSE_ENDS_2026-04-15.md` — LE-13 flipped to `✅ RESOLVED`, new LE-16 added for cross-subagent dispatch-prompt correlation (deferred)
 
-To version-control: `cd claude-setup-ross && git init && git add . && git commit -m "Initial snapshot with 2026-04-18 oversight fixes"` — your call.
+To version-control: `cd <oversight-workspace> && git init && git add . && git commit -m "Initial snapshot with 2026-04-18 oversight fixes"` — your call.
 
 ## What's persistent for next session
 
-- `~/.claude/settings.json` env block: `OVERSIGHT_LOG_PATH=C:/Users/user/OneDrive/Workspace/claude-setup-ross/oversight-system/supervisory-log.md` — inherited by all future Claude Code sessions, no setx required
+- `~/.claude/settings.json` env block: `OVERSIGHT_LOG_PATH=C:/Users/<user>/<workspace-root>/<oversight-workspace>/oversight-system/supervisory-log.md` — inherited by all future Claude Code sessions, no setx required
 - `rh-telemetry-1.0.0.tgz` at telemetry repo root — pack artifact, can be deleted or kept (not tracked by git, not shipped by npm publish either)
 - `.claude/worktrees/bold-driscoll/` — untracked worktree with its own branch (`claude/bold-driscoll`), abandoned content, decision pending
 
@@ -65,7 +65,7 @@ The Layer 3a Stop-hook supervisor caught a real Rule-1 violation earlier this se
 
 ### 5. Tracker items (pre-existing, not in today's scope)
 
-- **LE-07** — Layer 3 supervisor agent broader implementation; original 278-line plan archived at `oversight-system/archive/plan-layer3-supervisory.md`. Layer 3a already shipped (narrow 3-rule prompt-hook variant — see oversight log's 2026-04-19 section); Layer 3b agent-hook variant parked to avoid double per-turn cost. Status tracked in `claude-setup-ross/LOOSE_ENDS_2026-04-19.md`
+- **LE-07** — Layer 3 supervisor agent broader implementation; original 278-line plan archived at `oversight-system/archive/plan-layer3-supervisory.md`. Layer 3a already shipped (narrow 3-rule prompt-hook variant — see oversight log's 2026-04-19 section); Layer 3b agent-hook variant parked to avoid double per-turn cost. Status tracked in `<oversight-workspace>/LOOSE_ENDS_2026-04-19.md`
 - **LE-08** — explicitly kept open per earlier instruction from the parallel session; do not close
 - **LE-14** — Obsidian visibility filters (`*.html`, `.claude/`)
 - **LE-15** — wiki wikilink normalization
@@ -93,7 +93,7 @@ The Layer 3a Stop-hook supervisor caught a real Rule-1 violation earlier this se
 - `hook-debug.log` — all hook fires including the outer-seam verification evidence
 - Both supervisory logs with their paired entries
 - `telemetry-failures.jsonl`
-- Uncommitted changes in `claude-setup-ross` (they're on disk, just not in a repo)
+- Uncommitted changes in `<oversight-workspace>` (they're on disk, just not in a repo)
 
 ---
 
@@ -101,7 +101,7 @@ The Layer 3a Stop-hook supervisor caught a real Rule-1 violation earlier this se
 
 1. `/session` to confirm environment healthy
 2. Verify outer-seam still works: after your first turn ends in the new Claude Code session, `tail -2` both supervisory logs and confirm the new entry appears in both
-3. Decide: push the 20 telemetry commits? init the claude-setup-ross repo? `npm publish`?
+3. Decide: push the 20 telemetry commits? init the <oversight-workspace> repo? `npm publish`?
 4. If resuming work on this project, open `docs/PLAN.md` as the canonical task list
 
 No hidden state. No secrets. Nothing waiting on me.
