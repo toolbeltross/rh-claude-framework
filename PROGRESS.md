@@ -23,8 +23,7 @@
 - Added `"test": "echo 'No tests for this package' && exit 0"` to `packages/shared/package.json` and `packages/skills/package.json`
 - `npm test` across all workspaces: 0 failures, all real suites pass (oversight 177, cli 54, output 1, telemetry 28/28)
 
-**Open queue (priority order):**
-1. Remaining hardcoded-identity references in `packages/telemetry/docs/*.md`: `claude-setup-ross`, `OneDrive/Workspace`. Low urgency.
+**Open queue:** None.
 
 ---
 
