@@ -10,6 +10,8 @@ const SUITES = [
   'test-learnings-write.js',
   'test-auto-prune.js',
   'test-daily-regen-trigger.js',
+  'test-daily-regen.js',
+  'test-generate-env-md.js',
 ];
 
 let total = 0, failed = 0;
