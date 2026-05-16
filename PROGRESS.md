@@ -1,8 +1,8 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-12 (Phase 4b manifests + path-typo guard + failure-store isolation + 5 test-coverage PRs + production fix in rh-generate-state-md)
+**Last session:** 2026-05-15 (test coverage grind complete — 5 final untested scripts covered, PR #43)
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` — at merge of PR #34 (rh-generate-state-md fail-soft + 11 tests)
+**Branch:** `main` — at merge of PR #43 (5 remaining untested scripts, +67 tests)
 
 ---
 
@@ -29,13 +29,14 @@
 | #39 | docs(progress): log PRs #35-#38 | `5b5e3d2` | — |
 | #40 | test+fix(output): cover rh-auto-prune + fix inconsistent return shape | `9f043a1` | +15 |
 | #41 | test(output): cover rh-daily-regen-trigger | `946989c` | +7 |
+| #43 | test: cover 5 remaining untested scripts (+67 tests) | `eb44c87` | +67 |
 
-**Cumulative test count delta this session: +161 tests** across 4 packages.
+**Cumulative test count delta this session: +228 tests** across 4 packages.
 
 **Test counts now (per `node packages/<pkg>/tests/run.js`):**
-- oversight: 137 (was 45 baseline; +92 across session)
+- oversight: 177 (was 45 baseline; +132 across session)
 - cli:       54 (was 43; +11)
-- output:    85 (was 1 baseline; +84 across session)
+- output:    112 (was 1 baseline; +111 across session)
 - telemetry: 28/28 files pass (multiple tests per file)
 
 **Cleanup ops in this session:**
@@ -52,12 +53,10 @@
 - PR #40: `pruneScribeFile` returned inconsistent shape when the source file was absent (`{archived, staleOpen, file: <full-path>}` vs `{archived_count, stale_open_count, file: <basename>}` for present files). Fix: missing-file branch returns the canonical shape so callers iterating `scribe_files` don't see undefined counts.
 
 **Plan for next session:**
-- More test coverage targets in priority order:
-  - `rh-check-anthropic-guidance.js`
-  - `rh-layer3a-capture.js` (documented atomic-write design)
-  - `rh-statusline.js` (formatting hook)
-  - Output writers still untested: `rh-daily-regen.js` (orchestrator), `rh-generate-env-md.js`
-- Remaining hardcoded-identity references in `packages/telemetry/docs/*.md`: `claude-setup-ross`, `OneDrive/Workspace`. Smaller surface than `rossb`; defer until clear value.
+- ~~Test coverage grind complete~~ — all scripts now have tests (PR #43)
+- **P5-1** Anthropic deliverable: `docs/PATTERNS.md` + framework README pitch + 2-page summary (gate "Phase 1-3 stability" now passed)
+- **P1-3 flag flip**: flip `scribeStaging: true` in `~/.claude/oversight.json`, verify multiscope uses the reader CLI, confirm `/rh-quit` wall-clock < 90s
+- Remaining hardcoded-identity references in `packages/telemetry/docs/*.md`: `claude-setup-ross`, `OneDrive/Workspace`. Smaller surface; defer until clear value.
 
 ---
 
@@ -186,7 +185,7 @@ If those signals confirm, mark P1-6 ✅ in plan.
 2. ~~**P2-4** settings.json safety rails~~ — **landed 2026-05-10**. Both (a) pre-write validator gate and (c) merge-aware CLI; (b) git-tracking was not pursued (caller can use the `backup`/`restore` subcommands instead, or wrap them with their own VCS). New `packages/oversight/scripts/lib/settings-validator.js` (pure function returning structured `{ok, errors, warnings}` with stable codes like `hooks.item.command.missing`). Validator is wired into `lib/init.js` as a pre-write gate on the FULLY MERGED object — errors abort without writing, warnings surface but allow. New `lib/settings-cli.js` exposes `rh-oversight settings <validate|show|diff|merge|backup|restore>` with dry-run-by-default for `merge` (requires `--apply` to write), validation gate on `merge`/`restore`, automatic timestamped backup on `merge --apply`. 26 unit tests in `test-settings-validator.js` + 17 CLI integration tests in `test-settings-cli.js`; outer-seam helper at `packages/oversight/tests/helpers/p2-4-outer-seam.js` invokes real `rh-oversight settings ...` + `rh-oversight init` subprocesses (20/20 assertions including the init-refuses-to-write-bad-settings F-10-prevention check). Suite: 100/100.
 3. ~~**P3-1** Cross-session supervisor sweep~~ — **landed 2026-05-10**. New `packages/oversight/scripts/rh-supervisor-sweep.js` reads `~/.claude/oversight-events.jsonl` + supervisory-log Layer3a rejections over a sliding window (default 7d), aggregates by event_type / day / session / missing-elements / subagent-patterns, and writes a structured trend doc to `~/.claude/memory-shared/supervisor-trends.md` with summary table, prior-window delta column, daily-cadence ASCII bar chart, top-N sessions, and source-verification block. Wired as `rh-oversight supervisor-sweep` subcommand. CLI flags: `--days N`, `--out <path>`, `--json`, `--dry-run`. 19 new unit tests in `test-supervisor-sweep.js` (parseArgs, readEvents, readLayer3aRejections, aggregate, renderMarkdown, formatDelta, plus the plan-required 7-day synthetic-events end-to-end). Outer-seam helper `p3-1-outer-seam.js` (22/22) runs the real subprocess against synthetic events AND against the user's actual 757-event `oversight-events.jsonl` (635 events in last 7d resolved correctly). Suite: 119/119.
 4. ~~**P3-2** Dashboard "Trends" tab~~ — **landed 2026-05-10**. Backend: new `packages/telemetry/server/trends-router.js` exposes `GET /api/trends?days=N` (capped at 90, defaults 7) wrapping the sweep aggregation via createRequire cross-package import. Default sources are HOME-derived, query-string overridable for tests. Frontend: new `packages/telemetry/src/components/TrendsTab.jsx` (React + Recharts) with day-range selector (1/7/14/30), 3 summary cards with prior-window deltas, daily-cadence BarChart, event-type table with deltas, top missing oversight elements + subagent-failure patterns, top sessions by event count. Wired into App.jsx tab system (added 'trends' to the activeTab whitelist on line 297 — without it, activeTab='trends' was reset to overview by the unknown-tab guard). 6 integration tests in `tests/integration/trends-router.test.js` (spawned-server harness against synthetic events). Browser verification via Playwright dev-server check confirmed live render against the user's real 636-event log (instructions_loaded +476, oversight_auto_inject -18, all 6 event types surfaced with correct prior-window deltas, daily-cadence SVG renders).
-5. **P5-1** Anthropic deliverable — `docs/PATTERNS.md` + framework README pitch + 2-page summary; gated on Phase 1-3 stability
+5. **P5-1** Anthropic deliverable — `docs/PATTERNS.md` + framework README pitch + 2-page summary; **gate cleared** (all scripts now tested, framework stable)
 
 ### Useful commands
 
