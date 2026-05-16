@@ -194,11 +194,11 @@ const tests = [
       // Re-require staging to pick up fresh config. Module is cached, so we
       // can't just re-require; isEnabled() itself reads process.env and
       // config.scribeStaging live, so cache-busting config is enough.
-      // Without config flag set and env unset → false.
+      // Without config flag set and env unset → true (on by default).
       // We can't set config.scribeStaging without writing oversight.json;
       // assert the env path here and let the config path be covered by a
       // separate scenario.
-      assert.strictEqual(staging.isEnabled(), false, 'env unset + no config → false');
+      assert.strictEqual(staging.isEnabled(), true, 'env unset + no config → true (default on)');
 
       process.env.RH_SCRIBE_STAGING = '1';
       assert.strictEqual(staging.isEnabled(), true, 'env=1 → true');
@@ -222,8 +222,8 @@ const tests = [
       delete require.cache[require.resolve('../scripts/lib/scribe-staging')];
       const fresh = require('../scripts/lib/scribe-staging');
       assert.strictEqual(fresh.isEnabled(), true, 'config flag should enable when env unset');
-      // Restore default-off for subsequent tests.
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify({ scribeStaging: false }), 'utf8');
+      // Restore: clear scribeStaging so subsequent tests see the default (on).
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify({}), 'utf8');
       resetCache();
     }
   },
