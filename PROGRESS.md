@@ -1,8 +1,36 @@
 # rh-claude-framework — Progress & Pickup Notes
 
-**Last session:** 2026-05-15 (test coverage grind complete — 5 final untested scripts covered, PR #43)
+**Last session:** 2026-05-16 (P5-1 complete — docs/PATTERNS.md + README pitch + SUMMARY.md, PR #45)
 **Repo:** `C:\Users\rossb\OneDrive\Workspace\toolbeltross\toolbeltross-public\rh-claude-framework\`
-**Branch:** `main` — at merge of PR #43 (5 remaining untested scripts, +67 tests)
+**Branch:** `main` — at merge of PR #45 (`244bc5d`)
+
+---
+
+## 2026-05-16 session — P5-1 Anthropic deliverable
+
+**1 PR merged to main:**
+
+| PR | Title | Merge commit |
+|---|---|---|
+| #45 | docs(p5-1): PATTERNS.md + README pitch + SUMMARY.md | `244bc5d` |
+
+**Deliverables:**
+- `docs/PATTERNS.md` — 10 named Claude Code oversight patterns with problem/solution/implementation/design-choices structure
+- `docs/SUMMARY.md` — 2-page standalone summary for external sharing
+- `README.md` — rewritten with value-proposition lead, quick-tour examples, updated test counts (343)
+
+**Outer-seam verification:**
+- `node packages/oversight/tests/run.js` → 177/177
+- `node packages/cli/tests/run.js` → 54/54
+- `node packages/output/tests/run.js` → 112/112
+- `rh-oversight self-test` → 37/37 hard passed
+
+**Plan status:** P5-1 ✅ — all plan items complete
+
+**Open queue (priority order):**
+1. **P1-3 flag flip** — flip `scribeStaging: true` in `~/.claude/oversight.json`, verify multiscope uses the reader CLI, confirm `/rh-quit` wall-clock < 90s
+2. **`npm test` workspace gap** — `@rh/shared` and `@rh/skills` have no test scripts; `npm test` exits with lifecycle error from those two packages. Fix: add no-op `exit 0` test script to each. (spawned as cleanup task)
+3. Remaining hardcoded-identity references in `packages/telemetry/docs/*.md`: `claude-setup-ross`, `OneDrive/Workspace`. Low urgency.
 
 ---
 
