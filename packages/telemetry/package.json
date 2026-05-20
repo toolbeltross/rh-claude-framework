@@ -26,13 +26,16 @@
     "bin/",
     "server/",
     "scripts/*.js",
-    "dist/"
+    "dist/",
+    "dist-v2/"
   ],
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "vite",
     "build": "vite build",
+    "build:v2": "vite build --config vite.config.v2.js",
+    "client:v2": "vite --config vite.config.v2.js",
     "prepublishOnly": "npm run build",
     "start": "node server/index.js",
     "setup-hooks": "node scripts/setup-hooks.js",

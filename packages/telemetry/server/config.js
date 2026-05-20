@@ -23,6 +23,7 @@ const HOME = process.env.HOME || process.env.USERPROFILE || homedir();
 export const CLAUDE_JSON_PATH = join(HOME, '.claude.json');
 export const STATS_CACHE_PATH = join(HOME, '.claude', 'stats-cache.json');
 export const CREDENTIALS_PATH = join(HOME, '.claude', '.credentials.json');
+export const CLAUDE_PROJECTS_DIR = join(HOME, '.claude', 'projects');
 
 // ── Limits ───────────────────────────────────────────────────────────────────
 

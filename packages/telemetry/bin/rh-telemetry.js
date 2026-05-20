@@ -70,7 +70,9 @@ function printUsage() {
     rh-telemetry repair-statusline    Classify + repair statusLine config
     rh-telemetry start                Start the server (foreground)
     rh-telemetry start --bg           Start the server (background)
+    rh-telemetry start --ui v2        Start serving the v2 dashboard (default: v1)
     rh-telemetry dev                  Start server + Vite dev server
+    rh-telemetry dev --ui v2          Dev mode against the v2 source tree
     rh-telemetry status               Check if the server is running
     rh-telemetry digest               Failure digest (last 24h, stdout)
     rh-telemetry digest --append  Append digest to ~/.claude/telemetry-supervisory-log.md
@@ -152,17 +154,28 @@ switch (command) {
       console.error(`[statusline] pre-start classification failed: ${err.message}`);
     }
 
+    // Parse --ui v1|v2 (default v1). Sets RH_TELEMETRY_UI for the child process,
+    // which server/index.js reads to pick which dist*/ directory to serve.
+    const uiIdx = args.indexOf('--ui');
+    const uiArg = uiIdx !== -1 ? args[uiIdx + 1] : null;
+    const childEnv = uiArg === 'v2' ? { RH_TELEMETRY_UI: 'v2' } : {};
+
     if (args.includes('--bg') || args.includes('-d')) {
-      run('scripts/start-bg.js');
+      run('scripts/start-bg.js', [], { env: childEnv });
     } else {
-      run('server/index.js');
+      run('server/index.js', [], { env: childEnv });
     }
     break;
   }
 
   case 'dev': {
+    // Parse --ui v1|v2: vite dev server uses vite.config.v2.js for v2
+    const uiIdx = args.indexOf('--ui');
+    const uiArg = uiIdx !== -1 ? args[uiIdx + 1] : null;
+    const viteCmd = uiArg === 'v2' ? '"npx vite --config vite.config.v2.js"' : '"npx vite"';
+    const childEnv = uiArg === 'v2' ? { RH_TELEMETRY_UI: 'v2' } : {};
     // concurrently runs server + vite — needs devDependencies
-    run('node_modules/.bin/concurrently', ['"node server/index.js"', '"npx vite"']);
+    run('node_modules/.bin/concurrently', ['"node server/index.js"', viteCmd], { env: childEnv });
     break;
   }
 

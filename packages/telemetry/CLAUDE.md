@@ -7,8 +7,9 @@ Real-time monitoring dashboard for Claude Code CLI sessions. Built for **real-ti
 ### Global install (recommended for users)
 ```bash
 npm install -g rh-telemetry
-rh-telemetry setup   # configures hooks + installs skills
-rh-telemetry start   # starts server on :7890
+rh-telemetry setup       # configures hooks + installs skills
+rh-telemetry start       # starts server on :7890 (v1 UI default)
+rh-telemetry start --ui v2   # serve the v2 UI instead (see "v2 frontend" below)
 ```
 
 ### Local dev (for contributors)
@@ -17,6 +18,14 @@ npm install
 npm run dev          # Vite on :5173, API on :7890
 npm run setup-hooks  # Required: enables live tool feed, validation, prompt capture, agents
 ```
+
+### v2 frontend (in-flight, opt-in)
+v2 ships in the same tarball as v1, gated by an env flag. v1 is untouched and remains the default.
+- `RH_TELEMETRY_UI=v2 npm start` (or `rh-telemetry start --ui v2`) → serves `dist-v2/`
+- `npm run build:v2` → build the v2 bundle
+- `npm run client:v2` → Vite dev server for v2 source on `:5174` (proxies API to `:7890`)
+- v2 source lives at `src-v2/`, separate Vite config at `vite.config.v2.js`, separate entry `index.v2.html`. v1 paths unchanged.
+- Plan: [`PLAN-20260520-frontend-v2.md`](PLAN-20260520-frontend-v2.md). Research in [`docs/research/`](docs/research/).
 
 ## Architecture
 

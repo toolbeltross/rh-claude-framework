@@ -112,6 +112,18 @@ npm run install-skills    # install /rh-telemetry skill
 npm run dev               # Vite on :5173, API on :7890
 ```
 
+## v2 frontend (in-flight, opt-in)
+
+A second UI is being built alongside v1. Both ship in the same tarball; pick at runtime via env flag.
+
+```bash
+npm run build:v2                        # build the v2 bundle to dist-v2/
+RH_TELEMETRY_UI=v2 npm start            # serve v2 instead of v1
+rh-telemetry start --ui v2              # same, via the CLI
+```
+
+Default is unchanged (v1). See `PLAN-20260520-frontend-v2.md` for scope.
+
 ## Requirements
 
 - Node.js 18+

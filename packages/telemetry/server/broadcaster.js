@@ -1,5 +1,6 @@
 import { WebSocketServer } from 'ws';
 import { store } from './store.js';
+import { aggregatesStore } from './aggregates-store.js';
 import { WS_HEARTBEAT_MS } from './config.js';
 
 let wss = null;
@@ -44,6 +45,15 @@ export function startBroadcaster(server) {
     broadcast({
       type: 'update',
       data: changed,
+    });
+  });
+
+  // Broadcast transcript-aggregates updates (replaces stale stats-cache.json
+  // reads for any v2 surface that wants live totals)
+  aggregatesStore.on('update', (aggregates) => {
+    broadcast({
+      type: 'aggregatesUpdated',
+      data: aggregates,
     });
   });
 
