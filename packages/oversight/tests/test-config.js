@@ -110,6 +110,133 @@ const tests = [
       assert.ok(Array.isArray(c.privateDirs), 'privateDirs should be an array');
     },
   },
+
+  // ─── autoDetectOversightDir — walk-up helper ──────────────────────────────
+  // Added 2026-05-19. Motivation: the hardcoded `~/.claude/oversight` default
+  // ENOENT'd on machines where the real oversight-system/ lived elsewhere
+  // (e.g. <workspace>/claude-setup-ross/oversight-system/). The walk now finds
+  // it automatically — direct match OR one-level-down (the common wrapper
+  // pattern).
+  {
+    name: 'autoDetectOversightDir finds oversight-system/OVERSIGHT_SYSTEM.md in an ancestor (direct)',
+    fn: () => {
+      withTmpDir((root) => {
+        const oversightDir = path.join(root, 'oversight-system');
+        fs.mkdirSync(oversightDir);
+        fs.writeFileSync(path.join(oversightDir, 'OVERSIGHT_SYSTEM.md'), '# stub\n', 'utf8');
+        const nested = path.join(root, 'a', 'b', 'c');
+        fs.mkdirSync(nested, { recursive: true });
+        const origCwd = process.cwd();
+        try {
+          process.chdir(nested);
+          const { autoDetectOversightDir } = require('../scripts/lib/config');
+          assert.strictEqual(
+            path.resolve(autoDetectOversightDir()),
+            path.resolve(oversightDir),
+            'should find oversight-system/ in ancestor'
+          );
+        } finally {
+          process.chdir(origCwd);
+        }
+      });
+    },
+  },
+  {
+    name: 'autoDetectOversightDir finds oversight-system/ one level down (wrapper pattern)',
+    fn: () => {
+      withTmpDir((root) => {
+        // root/setup-wrapper/oversight-system/OVERSIGHT_SYSTEM.md — the wrapper
+        // pattern used by claude-setup-ross/oversight-system/ on the original
+        // affected machine.
+        const wrapper = path.join(root, 'setup-wrapper');
+        const oversightDir = path.join(wrapper, 'oversight-system');
+        fs.mkdirSync(oversightDir, { recursive: true });
+        fs.writeFileSync(path.join(oversightDir, 'OVERSIGHT_SYSTEM.md'), '# stub\n', 'utf8');
+        const projectDir = path.join(root, 'some-project');
+        fs.mkdirSync(projectDir);
+        const origCwd = process.cwd();
+        try {
+          process.chdir(projectDir);
+          const { autoDetectOversightDir } = require('../scripts/lib/config');
+          assert.strictEqual(
+            path.resolve(autoDetectOversightDir()),
+            path.resolve(oversightDir),
+            'should find <wrapper>/oversight-system/ from sibling dir'
+          );
+        } finally {
+          process.chdir(origCwd);
+        }
+      });
+    },
+  },
+  {
+    name: 'autoDetectOversightDir returns null when no oversight-system/ on path',
+    fn: () => {
+      withTmpDir((root) => {
+        // Empty tmp tree with no oversight-system anywhere up to the OS root.
+        // The walk is bounded at 10 levels; in a deep $TMPDIR the walk may
+        // reach a real oversight-system above, so we mock CWD inside an
+        // isolated tree and rely on the bounded walk to give up.
+        const inner = path.join(root, 'a', 'b', 'c');
+        fs.mkdirSync(inner, { recursive: true });
+        const origCwd = process.cwd();
+        try {
+          process.chdir(inner);
+          const { autoDetectOversightDir } = require('../scripts/lib/config');
+          const result = autoDetectOversightDir();
+          // Either null (no oversight-system on the path) or a path that does
+          // NOT contain our tmp root — both prove the helper isn't false-
+          // positiving on our empty tree.
+          if (result !== null) {
+            assert.ok(
+              !path.resolve(result).startsWith(path.resolve(root)),
+              `did not expect a hit inside the empty tmp tree; got ${result}`
+            );
+          }
+        } finally {
+          process.chdir(origCwd);
+        }
+      });
+    },
+  },
+  {
+    name: 'oversightLogPath derives from resolved oversightDir when file/env do not override',
+    fn: () => {
+      // Sets OVERSIGHT_DIR env var to a known location and confirms that
+      // oversightLogPath defaults to <that>/supervisory-log.md — proving the
+      // log path now follows oversightDir instead of being decoupled.
+      // The user's real oversight.json may set file.oversightLogPath which
+      // would take priority over the derived default, so we stub the config
+      // file to {} for the duration of the test (then restore).
+      const origDir = process.env.OVERSIGHT_DIR;
+      const origLog = process.env.OVERSIGHT_LOG_PATH;
+      const { resolveConfig, resetCache, CONFIG_PATH } = require('../scripts/lib/config');
+      let origContent = null;
+      if (fs.existsSync(CONFIG_PATH)) origContent = fs.readFileSync(CONFIG_PATH, 'utf8');
+      try {
+        // Empty config file so no file.oversightLogPath / file.oversightDir wins.
+        fs.writeFileSync(CONFIG_PATH, '{}\n', 'utf8');
+        process.env.OVERSIGHT_DIR = '/tmp/custom-oversight';
+        delete process.env.OVERSIGHT_LOG_PATH;
+        resetCache();
+        const c = resolveConfig();
+        assert.strictEqual(c.oversightDir, '/tmp/custom-oversight');
+        assert.strictEqual(
+          c.oversightLogPath.replace(/\\/g, '/'),
+          '/tmp/custom-oversight/supervisory-log.md',
+          'log path should derive from oversightDir'
+        );
+      } finally {
+        if (origContent !== null) fs.writeFileSync(CONFIG_PATH, origContent, 'utf8');
+        else try { fs.unlinkSync(CONFIG_PATH); } catch {}
+        if (origDir === undefined) delete process.env.OVERSIGHT_DIR;
+        else process.env.OVERSIGHT_DIR = origDir;
+        if (origLog === undefined) delete process.env.OVERSIGHT_LOG_PATH;
+        else process.env.OVERSIGHT_LOG_PATH = origLog;
+        resetCache();
+      }
+    },
+  },
 ];
 
 module.exports = { tests };
