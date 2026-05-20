@@ -6,7 +6,8 @@
 // entries. See OVERSIGHT_SYSTEM.md F-10 + framework PROGRESS.md item 11.
 
 const assert = require('assert');
-const { mergeHooksData } = require('../lib/init');
+const path = require('path');
+const { mergeHooksData, buildConfigData } = require('../lib/init');
 
 // Helper: build a hook entry with given matcher + command list.
 // Matcherless entries (Stop, SessionStart, PreCompact, etc.) pass null.
@@ -237,6 +238,44 @@ const tests = [
       mergeHooksData(existing, template);
       assert.deepStrictEqual(existing, existingSnapshot, 'existing must not be mutated');
       assert.deepStrictEqual(template, templateSnapshot, 'template must not be mutated');
+    },
+  },
+
+  // ─── buildConfigData: written oversight.json carries oversightLogPath ───
+  // Added 2026-05-19. Prior behavior dropped `oversightLogPath` on every init
+  // re-run; the runtime then fell back to the hardcoded
+  // ~/.claude/oversight/supervisory-log.md default even when oversightDir had
+  // been redirected. Test pins the new contract: configData written by init
+  // includes oversightLogPath derived from oversightDir.
+  {
+    name: 'buildConfigData includes oversightLogPath derived from oversightDir',
+    fn: () => {
+      const data = buildConfigData({
+        workspace: '/tmp/workspace',
+        oversightDir: '/tmp/custom-oversight',
+      });
+      assert.strictEqual(data.oversightDir, '/tmp/custom-oversight');
+      assert.strictEqual(
+        data.oversightLogPath.replace(/\\/g, '/'),
+        '/tmp/custom-oversight/supervisory-log.md',
+        'log path co-locates with oversightDir'
+      );
+      assert.strictEqual(data.workspace, '/tmp/workspace');
+      assert.strictEqual(data.telemetryPort, 7890);
+      assert.ok(data.userName, 'userName is present');
+    },
+  },
+  {
+    name: 'buildConfigData includes privateDirs only when provided',
+    fn: () => {
+      const without = buildConfigData({ workspace: '/w', oversightDir: '/o' });
+      assert.ok(!('privateDirs' in without), 'privateDirs omitted when not provided');
+      const withPrivate = buildConfigData({
+        workspace: '/w',
+        oversightDir: '/o',
+        privateDirs: ['Personal', 'Financial'],
+      });
+      assert.deepStrictEqual(withPrivate.privateDirs, ['Personal', 'Financial']);
     },
   },
 ];

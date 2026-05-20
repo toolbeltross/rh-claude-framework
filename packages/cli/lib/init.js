@@ -209,6 +209,27 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
   }
 }
 
+/**
+ * Build the configData object that init writes to ~/.claude/oversight.json.
+ * Extracted from run() so tests can verify the full key set without running
+ * the manifest installer or touching the filesystem.
+ *
+ * oversightLogPath is derived from the resolved oversightDir (not hardcoded to
+ * ~/.claude/oversight/...) so the supervisory log co-locates with the rest of
+ * the oversight artifacts regardless of where oversightDir resolves.
+ */
+function buildConfigData({ workspace, oversightDir, privateDirs }) {
+  const data = {
+    workspace,
+    oversightDir,
+    oversightLogPath: path.join(oversightDir, 'supervisory-log.md'),
+    telemetryPort: 7890,
+    userName: process.env.USER || process.env.USERNAME || path.basename(HOME),
+  };
+  if (privateDirs) data.privateDirs = privateDirs;
+  return data;
+}
+
 function run(extraOpts = {}) {
   const opts = { ...parseArgs(), ...extraOpts };
   const configModule = require(path.join(SHARED_PKG, 'config'));
@@ -218,7 +239,14 @@ function run(extraOpts = {}) {
 
   // Detect or use provided workspace
   const workspace = opts.workspace || configModule.autoDetectWorkspace();
-  const oversightDir = opts.oversightDir || path.join(CLAUDE_DIR, 'oversight');
+  // Default oversightDir uses the same auto-detect as the runtime config so a
+  // fresh `rh-oversight init` (no flags) finds the same oversight-system/
+  // directory the deployed scripts would resolve to. Falls back to
+  // ~/.claude/oversight only when no oversight-system/ marker is found on disk.
+  const oversightDir =
+    opts.oversightDir ||
+    configModule.autoDetectOversightDir() ||
+    path.join(CLAUDE_DIR, 'oversight');
   const scriptsDir = path.join(CLAUDE_DIR, 'scripts');
   const agentsDir = path.join(CLAUDE_DIR, 'agents');
   const skillsDir = path.join(CLAUDE_DIR, 'skills');
@@ -232,14 +260,15 @@ function run(extraOpts = {}) {
   console.log(`  Rules dir:     ${rulesDir}`);
   console.log('');
 
-  // 1. Write oversight.json config
-  const configData = {
+  // 1. Write oversight.json config. oversightLogPath is included so the key
+  // survives re-runs of init — previously it was dropped, leaving the runtime
+  // to fall back to the hardcoded ~/.claude/oversight/supervisory-log.md
+  // default even on machines where oversightDir was correctly redirected.
+  const configData = buildConfigData({
     workspace,
     oversightDir,
-    telemetryPort: 7890,
-    userName: process.env.USER || process.env.USERNAME || path.basename(HOME),
-  };
-  if (opts.privateDirs) configData.privateDirs = opts.privateDirs;
+    privateDirs: opts.privateDirs,
+  });
 
   const configPath = path.join(CLAUDE_DIR, 'oversight.json');
   if (opts.reset && fs.existsSync(configPath)) {
@@ -315,4 +344,4 @@ function run(extraOpts = {}) {
   console.log('\n  Done. Run `rh-oversight self-test` to verify.\n');
 }
 
-module.exports = { run, mergeHooksData };
+module.exports = { run, mergeHooksData, buildConfigData };
