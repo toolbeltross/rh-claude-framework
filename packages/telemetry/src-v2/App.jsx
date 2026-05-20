@@ -2,6 +2,8 @@ import { useState } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import Header from './components/Header.jsx';
 import HistorySurface from './components/HistorySurface.jsx';
+import FailuresSurface from './components/FailuresSurface.jsx';
+import OversightSurface from './components/OversightSurface.jsx';
 import PlaceholderSurface from './components/PlaceholderSurface.jsx';
 import { useAggregates } from './hooks/useAggregates.js';
 
@@ -45,17 +47,9 @@ function Surface({ active, aggregates, loading, error }) {
         hint="Cross-session leaderboard of subagent activity. Source: walking <sessionId>/subagents/agent-*.jsonl files (595 found in current ~/.claude/projects/)."
       />;
     case 'oversight':
-      return <PlaceholderSurface
-        title="Oversight"
-        phaseRef="Phase 3.5"
-        hint="New top-level surface for oversight-events.jsonl (Layer 3a rejections, guards, scribe outputs, hook perf). 6 event types catalogued in Phase 0.6."
-      />;
+      return <OversightSurface />;
     case 'failures':
-      return <PlaceholderSurface
-        title="Failures"
-        phaseRef="Phase 3.4"
-        hint="Promoted from v1 subtab. Source: existing GET /api/failures + /api/failures/patterns + /api/failures/top-cost (D4 — currently API-only)."
-      />;
+      return <FailuresSurface />;
     case 'trends':
       return <PlaceholderSurface
         title="Trends"

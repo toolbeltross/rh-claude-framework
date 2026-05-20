@@ -13,6 +13,7 @@ import { startStatusLineWatcher } from './statusline-watcher.js';
 import hookReceiver from './hook-receiver.js';
 import trendsRouter from './trends-router.js';
 import { aggregatesStore } from './aggregates-store.js';
+import { readOversightEvents } from './oversight-bridge.js';
 
 import {
   PORT,
@@ -48,6 +49,20 @@ app.get('/api/health', (_req, res) => {
 // Output shape matches parser.js:parseStatsCache + lastComputedAt timestamp.
 app.get('/api/aggregates', (_req, res) => {
   res.json(aggregatesStore.getAggregates());
+});
+
+// Oversight events feed — ~/.claude/oversight-events.jsonl read through
+// the bridge façade. Lightweight always-on view; deeper aggregation goes
+// through /api/trends which wraps @rh/oversight rh-supervisor-sweep.
+app.get('/api/oversight/events', async (req, res) => {
+  const days = Math.max(1, Math.min(90, parseInt(req.query.days || '7', 10)));
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  try {
+    const data = await readOversightEvents({ sinceMs, recentLimit: 100 });
+    res.json({ ...data, days });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/refresh', (_req, res) => {

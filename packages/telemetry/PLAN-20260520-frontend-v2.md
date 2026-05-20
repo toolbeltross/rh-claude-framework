@@ -181,26 +181,31 @@ Conditional on Phase 0.3 outcome. Two paths:
 
 **What's done (2026-05-20):**
 
+- [x] **3.4 — Failures** (`src-v2/components/FailuresSurface.jsx` + `hooks/useFailures.js`): summary cards (total / in-window / top tool / top error count), 7-day daily bars header (red), top tools + top errors side-by-side ranked lists, **`/api/failures/top-cost` D4 endpoint surfaced** (was API-only in v1), recent failures table with `errorClass` colour mapping. Day range 24h/7d/30d. Subscribes WS `failureEvent` for live appends. Outer-seam verified: total=1.0K lifetime, in-window-7d=183, top tool=Agent (336).
+- [x] **3.5 — Oversight (NEW top-level)** (`src-v2/components/OversightSurface.jsx` + `hooks/useOversight.js` + `server/oversight-bridge.js` + `GET /api/oversight/events`): 6 event types catalogued from Phase 0.6, **heartbeat (`instructions_loaded`, 692) separated from actionable signal (160)** so the dominant noise doesn't drown the meaningful events. Actionable section: WARNING (auto-inject 76, OVERSIGHT_STATE.md stale 72) + ALERT (subagent_orphan 12). Recent events feed shows real subagent_orphan_alert occurrences with session IDs. Polls every 30s (WS push deferred per Phase 0.6 follow-up).
 - [x] **3.7 — History** (the cache replacement): `src-v2/components/HistorySurface.jsx`. Consumes `GET /api/aggregates` + WS `aggregatesUpdated` via `src-v2/hooks/useAggregates.js`. 4 summary cards (sessions/messages/cost/first-session), model breakdown table, 29-bar daily activity, 24-cell hour heatmap, longest-session block. Filters out `<synthetic>` model bucket.
 - [x] **3.8 — Header strip** (`src-v2/components/Header.jsx`): env badge `[v2]`, 3-dot model legend pulled from v1's `MODEL_COLORS`, relative-time "updated Ns ago" (turns amber after 60s), refresh button.
 - [x] **3.9 — Visual contract**: v2 imports v1's `src/lib/model-colors.js` directly (cross-tree import works as designed in Phase 1). Same dark theme, same gray-950 / gray-900 / gray-800 surface hierarchy.
 - [x] **Shell** (not in original list — needed): `src-v2/App.jsx` + `src-v2/components/Sidebar.jsx` with all 7 surfaces. Sidebar + sticky header layout per `docs/research/v2-ia.md`. Default surface = History (consumes the live aggregator).
 - [x] **Placeholder surfaces** for the other 6: explanatory cards stating phase-ref + data source so the layout reads as a coherent IA even before they're built.
 
-**Outer-seam verification (browser, real data):**
-- Playwright MCP navigated to `http://localhost:7891/` (test server with `RH_TELEMETRY_UI=v2`)
-- DOM query confirmed: title `Claude Code Telemetry · v2`, 7 sidebar surfaces, History active, header env badge present, model legend with correct hexes (#8b5cf6 / #60a5fa / #22d3ee), 4 cards rendered with **live aggregator values** (Sessions=140, Messages=45.9K, Cost=$19,430, First=2026-04-16), 3 model rows, 29 daily bars, 24 hour cells, longest-session block visible
-- **Zero console errors** (`browser_console_messages level=error`)
-- User's live :7890 server untouched throughout (verified `200 OK` after test cleanup)
+**Outer-seam verification (browser, real data, current run):**
+- Playwright MCP, fresh build, fresh server with `RH_TELEMETRY_UI=v2`
+- Visual screenshots saved under `packages/telemetry/docs/screenshots/v2/`:
+  - `01-history.png` — sessions 141, messages 46.1K, cost $19,494, 3 model rows, 29 daily bars, 24 hour cells, longest-session block
+  - `02-failures.png` — total 1.0K, in-window 183, top tool Agent, 7-day red bars, ranked top tools/errors, recent failures table
+  - `03-oversight.png` — total 852, actionable 160 (amber), heartbeat 692 (gray), 3 actionable event types color-coded WARNING/ALERT, recent events feed with session-id pills
+- **Zero console errors** in any surface
+- Header `updated 1m ago` turns amber correctly when WS quiet >60s
+- User's live :7890 server untouched throughout
 
 ### What's PARTIAL (Phase 3 not yet complete)
 
 - [ ] **3.1 — Live** (placeholder only): WS-driven active-session view. Needs to lift `ContextWindow`, `ModelBreakdownMini`, `TurnHeartbeat`, `CurrentPrompt`, `SubagentTracker` (active rows only).
-- [ ] **3.2 — Sessions** (placeholder only): browse/filter/search 140 on-disk sessions. Needs per-session detail endpoint addition to aggregator (currently `/api/aggregates` only returns rolled-up totals).
+- [ ] **3.2 — Sessions** (placeholder only): browse/filter/search 141 on-disk sessions. Needs per-session detail endpoint addition to aggregator (currently `/api/aggregates` only returns rolled-up totals).
 - [ ] **3.3 — Subagents** (placeholder only): walk `<sessionId>/subagents/agent-*.jsonl` (595 found). Cross-session leaderboard with cost, duration, fails.
-- [ ] **3.4 — Failures** (placeholder only): lift v1 `FailureHistory.jsx`, add daily-bars header, surface `/api/failures/top-cost`.
-- [ ] **3.5 — Oversight (NEW)** (placeholder only): biggest leverage item — surfaces 6 oversight event types per Phase 0.6. Needs new chokidar watcher on `oversight-events.jsonl` + WS `OVERSIGHT_EVENT` push + endpoint.
 - [ ] **3.6 — Trends** (placeholder only): lift v1 `TrendsTab.jsx` verbatim (uses existing `/api/trends` endpoint).
+- [ ] **Oversight WS push** (deferred from 3.5): add chokidar watcher on `oversight-events.jsonl` + WS `OVERSIGHT_EVENT` frame so the surface updates in real time instead of polling every 30s.
 
 **Phase 3 time spent so far:** ~1 hour. Remaining estimated: 6-12 hours depending on depth.
 
