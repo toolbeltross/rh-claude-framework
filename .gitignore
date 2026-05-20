@@ -9,3 +9,9 @@ dist/
 /cleanup.md
 /recommendations.md
 /.claude/
+
+# Playwright MCP outputs (verification screenshots + ARIA snapshots) — written
+# by the --isolated browser profile during visual-verification sessions.
+.playwright-mcp/
+/v2-*.png
+/verify-*.png
