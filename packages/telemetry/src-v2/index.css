@@ -1,12 +1,29 @@
 @import "tailwindcss";
 
+/* Theme tokens — mirror v1 (src/index.css) so component lifts work verbatim */
 @theme {
-  --color-gray-950: #030712;
-  --color-gray-900: #111827;
-  --color-gray-800: #1f2937;
+  --font-sans: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+  --color-gray-950: #0a0a0f;
+  --color-gray-900: #111118;
+  --color-gray-800: #1a1a24;
+  --color-gray-700: #2a2a38;
+  --color-gray-600: #3a3a4a;
   --color-gray-500: #6b7280;
-  --color-gray-400: #9ca3af;
-  --color-gray-300: #d1d5db;
-  --color-gray-200: #e5e7eb;
-  --color-gray-100: #f3f4f6;
+  --color-gray-400: #8888a0;
+  --color-gray-300: #aaaabb;
+  --color-gray-200: #c8c8d8;
+  --color-gray-100: #e0e0ee;
+  --color-accent: #8b5cf6;
+  --color-accent-dim: #6d28d9;
+  --color-green: #34d399;
+  --color-red: #f87171;
+  --color-amber: #fbbf24;
+  --color-blue: #60a5fa;
+  --color-cyan: #22d3ee;
 }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-gray-900); }
+::-webkit-scrollbar-thumb { background: var(--color-gray-700); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-gray-600); }

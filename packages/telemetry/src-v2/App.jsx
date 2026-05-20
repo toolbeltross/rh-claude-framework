@@ -4,6 +4,7 @@ import Header from './components/Header.jsx';
 import HistorySurface from './components/HistorySurface.jsx';
 import FailuresSurface from './components/FailuresSurface.jsx';
 import OversightSurface from './components/OversightSurface.jsx';
+import TrendsSurface from './components/TrendsSurface.jsx';
 import PlaceholderSurface from './components/PlaceholderSurface.jsx';
 import { useAggregates } from './hooks/useAggregates.js';
 
@@ -51,11 +52,7 @@ function Surface({ active, aggregates, loading, error }) {
     case 'failures':
       return <FailuresSurface />;
     case 'trends':
-      return <PlaceholderSurface
-        title="Trends"
-        phaseRef="Phase 3.6"
-        hint="Lift v1 TrendsTab.jsx verbatim. Source: existing GET /api/trends?days=N."
-      />;
+      return <TrendsSurface />;
     default:
       return <PlaceholderSurface title={active} phaseRef="unknown" />;
   }

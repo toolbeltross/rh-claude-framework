@@ -199,12 +199,17 @@ Conditional on Phase 0.3 outcome. Two paths:
 - Header `updated 1m ago` turns amber correctly when WS quiet >60s
 - User's live :7890 server untouched throughout
 
-### What's PARTIAL (Phase 3 not yet complete)
+### What's now done (added 2026-05-20 second pass)
+
+- [x] **3.6 — Trends**: `src-v2/components/TrendsSurface.jsx` — adapted near-verbatim from v1's `TrendsTab.jsx`. Same Recharts BarChart, same 3 summary cards with current-vs-prior delta, same event-type table, same patterns lists, same hot-sessions table. Uses existing `/api/trends?days=N` endpoint. Visual: `04-trends.png`.
+- [x] **Theme tokens expanded** (`src-v2/index.css`): mirror v1's `@theme` block so component lifts use the same `text-accent`/`text-amber`/`text-green`/`text-red`/`text-blue`/`text-cyan` token names. Re-screenshotted History after the change — unchanged.
+- [x] **Visual test plan** (`docs/screenshots/v2/README.md`): explicit checklist of what automated DOM verification CANNOT catch (layout-width responsiveness, color contrast, interaction states, empty states, header staleness indicator, WS live behavior). Designed for Claude Desktop human walkthrough.
+
+### What's still PARTIAL (defer to next session)
 
 - [ ] **3.1 — Live** (placeholder only): WS-driven active-session view. Needs to lift `ContextWindow`, `ModelBreakdownMini`, `TurnHeartbeat`, `CurrentPrompt`, `SubagentTracker` (active rows only).
 - [ ] **3.2 — Sessions** (placeholder only): browse/filter/search 141 on-disk sessions. Needs per-session detail endpoint addition to aggregator (currently `/api/aggregates` only returns rolled-up totals).
-- [ ] **3.3 — Subagents** (placeholder only): walk `<sessionId>/subagents/agent-*.jsonl` (595 found). Cross-session leaderboard with cost, duration, fails.
-- [ ] **3.6 — Trends** (placeholder only): lift v1 `TrendsTab.jsx` verbatim (uses existing `/api/trends` endpoint).
+- [ ] **3.3 — Subagents** (placeholder only): walk `<sessionId>/subagents/agent-*.jsonl` (595 found). Cross-session leaderboard with cost, duration, fails. Needs aggregator extension to walk 2 levels deep + a separate `/api/subagents` endpoint.
 - [ ] **Oversight WS push** (deferred from 3.5): add chokidar watcher on `oversight-events.jsonl` + WS `OVERSIGHT_EVENT` frame so the surface updates in real time instead of polling every 30s.
 
 **Phase 3 time spent so far:** ~1 hour. Remaining estimated: 6-12 hours depending on depth.
