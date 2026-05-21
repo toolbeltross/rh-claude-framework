@@ -16,6 +16,7 @@ This rule exists because a component can be locally correct and still broken at 
 - [ ] Every user-facing command mentioned in the change has been invoked through its **actual entry point** (the `bin` script, the `npm run` alias, the CLI subcommand, the git hook, the deployed URL) — not just the underlying script it wraps.
 - [ ] Every regression-adjacent test suite that already exists has been re-run after changes that could affect it. Adding a new feature is not an excuse to skip re-running the old tests.
 - [ ] Every failure path claimed in a plan has been either exercised or explicitly flagged as "not exercised in this pass."
+- [ ] For code targeting a versioned framework (Prisma, Tailwind, Next.js, etc.), the syntax has been verified against the installed version — either by dispatching the `rh-compatibility-analyst` agent or by citing the specific migration-guide page read this session.
 
 ## The "standalone vs through-the-seam" trap
 
