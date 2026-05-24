@@ -48,6 +48,36 @@ function formatDuration(ms) {
   return `${s}s`;
 }
 
+// Wall-clock tool-busy time = UNION of each tool's [ts - durationMs, ts]
+// interval. Naively summing durationMs double-counts overlapping/parallel
+// calls (e.g. multiple Agent dispatches fired in one assistant message, or
+// tools running inside subagent threads), which can exceed the turn's elapsed
+// time and pin the derived "model thinking" time to 0. Unioning the intervals
+// yields the real wall-clock time at least one tool was running.
+function unionDurationMs(events) {
+  const intervals = (events || [])
+    .filter((e) => e && e.ts != null && (e.durationMs || 0) > 0)
+    .map((e) => [e.ts - e.durationMs, e.ts])
+    .sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let curStart = null;
+  let curEnd = null;
+  for (const [start, end] of intervals) {
+    if (curEnd === null) {
+      curStart = start;
+      curEnd = end;
+    } else if (start <= curEnd) {
+      if (end > curEnd) curEnd = end;
+    } else {
+      total += curEnd - curStart;
+      curStart = start;
+      curEnd = end;
+    }
+  }
+  if (curEnd !== null) total += curEnd - curStart;
+  return total;
+}
+
 function formatScaleLabel(ms) {
   const totalSec = Math.round(ms / 1000);
   const m = Math.floor(totalSec / 60);
@@ -203,7 +233,7 @@ export default function TurnHeartbeat({ liveSession, toolEvents, sessionId }) {
   const start = turnStart || timelineEvents[0].ts;
   const elapsed = Math.max(now - start, 1);
   const displayMs = getDisplayMs(elapsed);
-  const totalToolMs = timelineEvents.reduce((s, e) => s + (e.durationMs || 0), 0);
+  const totalToolMs = unionDurationMs(timelineEvents);
   const modelMs = Math.max(0, elapsed - totalToolMs);
   const ticks = buildScaleTicks(displayMs);
   const lastTool = timelineEvents[timelineEvents.length - 1]?.tool;
