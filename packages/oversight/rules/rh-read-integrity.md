@@ -1,5 +1,7 @@
 ---
 description: "Read tool truncation handling and source attribution standards for consolidation tasks"
+keywords: [read, partial, truncation, subsumed, incorporated, consolidation, source, registry, verification, token, offset, limit]
+severity: warn
 ---
 
 # Read Integrity

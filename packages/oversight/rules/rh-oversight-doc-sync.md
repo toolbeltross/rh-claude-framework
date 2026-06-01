@@ -1,5 +1,7 @@
 ---
 description: "Keep oversight-system design doc in sync when oversight code changes"
+keywords: [OVERSIGHT_SYSTEM.md, trigger surface, design doc, oversight code, settings.json hooks, generate-state-md, supervisory-log, .claude/scripts, .claude/agents]
+severity: note
 ---
 
 # Oversight Documentation Sync

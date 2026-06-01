@@ -1,5 +1,7 @@
 ---
 description: "Full decomposition of user messages before any action — prevents keyword-latching and missed nuance"
+keywords: [parse, decompose, hierarchical, path separator, org/repo, entity, nuance, qualifier, subordinate clause, pattern match]
+severity: warn
 ---
 
 # Input Parsing

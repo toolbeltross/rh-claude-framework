@@ -1,5 +1,7 @@
 ---
 description: "Verify work end-to-end before presenting it as complete, tested, or ready"
+keywords: [done, complete, ready, tested, verified, verify, outer seam, end-to-end, ship, deliver, finished]
+severity: block
 ---
 
 # Work Verification

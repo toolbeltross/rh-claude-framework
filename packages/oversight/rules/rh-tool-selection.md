@@ -1,5 +1,7 @@
 ---
 description: "Environment-aware tool selection rules for multi-user, multi-environment workspace"
+keywords: [environment, claude-desktop, cli, vscode, MCP, desktop-commander, visual verification, screenshot, playwright, preview, pdf-reader, ENTRYPOINT]
+severity: warn
 ---
 
 # Tool Selection Rules
@@ -183,6 +185,33 @@ Should return three lines confirming `--isolated`, `--user-data-dir`, and `--por
 - Don't OCR styled chip/code pills — go DOM via `browser_evaluate` / `javascript_tool` instead. Tesseract mangles them.
 - Don't burn turns interpreting pixel images when a DOM query would answer the question deterministically.
 - **Don't retry the same screenshot surface after a 30s timeout.** Telemetry shows 39 historical failures of this class with retry chains of 3–4 on the same broken tool — that's 90–120s and 3+ turns burned per attempt. **Escalate to the next surface tier immediately.**
+
+### Figma and other WebGL/canvas web apps (default: desktop app + computer-use)
+
+Figma — and any whiteboard / map editor / design tool that renders on a `<canvas>` — is **not a
+normal web page**. Its content is WebGL pixels, not DOM, so `read_page` / `get_page_text` /
+`browser_evaluate` return nothing useful. The decision tree above does not apply.
+
+**Default method (verified 2026-05-18):** drive the **native desktop app** with **computer-use**.
+
+1. Open the file in the app's **desktop client** (Figma desktop app, etc.), logged into the
+   correct account.
+2. `request_access` (computer-use) for the app — native apps are granted **full tier**
+   (click / scroll / type / screenshot), unlike browsers which are read-tier.
+3. `open_application` to bring it frontmost, then `screenshot` + `zoom` + `left_click` / `scroll`.
+
+**Do NOT use the browser route for canvas apps.** Tested and rejected: computer-use blocks
+clicks on browsers (read tier); the Chrome-extension MCP `computer` action is broken here
+(`Cannot access a chrome-extension:// URL of different extension`); the extension's
+`javascript_tool` works only flakily and cannot read canvas content anyway.
+
+**Server-side render** (e.g. Figma MCP `get_screenshot`, which renders a node by ID) is a valid
+*complement* — reliable, no UI driving — but the user may prefer live desktop capture for
+interactive exploration. It is not a downgrade in fidelity (same renderer), just a different
+delivery path.
+
+Project-specific procedure for this workspace's Figma work:
+`rh-platform-agentbuild/docs/figma-acquisition-method.md`.
 
 ## Multi-User Awareness
 
