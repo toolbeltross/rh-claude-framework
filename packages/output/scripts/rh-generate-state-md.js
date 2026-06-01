@@ -338,7 +338,12 @@ function sectionOversightAgents() {
     lines.push(`| \`${a.name}\` | \`${a.model}\` | ${closes} | ${mdEscape(a.description).slice(0, 100)} |`);
   }
   lines.push("");
-  const missing = OVERSIGHT_AGENT_NAMES.filter(n => !matched.find(m => m.name === n));
+  // Note: matched agents store the file's frontmatter `name`, which today is
+  // always rh-prefixed (e.g. `rh-supervisor`); OVERSIGHT_AGENT_NAMES is the
+  // unprefixed list (e.g. `supervisor`). Strip prefix on both sides before
+  // comparing so present agents aren't falsely reported missing. Tolerates a
+  // future revert to unprefixed naming.
+  const missing = OVERSIGHT_AGENT_NAMES.filter(n => !matched.find(m => m.name.replace(/^rh-/, '') === n));
   if (missing.length > 0) {
     lines.push(`⚠ **Missing:** ${missing.map(n => "`" + n + "`").join(", ")}`);
     lines.push("");
