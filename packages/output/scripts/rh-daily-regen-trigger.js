@@ -52,11 +52,38 @@ try {
 }
 
 // ─── Daily regen trigger (original responsibility) ────────────────────────
+//
+// 2026-05-31 A4: extend staleness probe to OVERSIGHT_STATE.md. The
+// --skip-if-today-done flag short-circuits the regen whenever the daily-regen
+// marker shows it already ran today, but the state doc itself can be stale
+// (observed 10 days old on 2026-05-31 while the marker advanced normally).
+// When the state doc has not been touched in >24h, drop the skip flag so the
+// regen actually re-emits the artifacts.
 
-const SCRIPT = path.join(__dirname, "daily-regen.js");
+// 2026-05-31 A4: corrected from "daily-regen.js" (which no longer exists at
+// this path) to "rh-daily-regen.js". The original reference predates the
+// rh-prefix migration and had been silently failing to spawn since then —
+// SessionStart was a no-op for the regen pathway; only Windows Task Scheduler
+// kept the regen alive. Fact correction per rh-replacement-assessment.md.
+const SCRIPT = path.join(__dirname, "rh-daily-regen.js");
+
+function stateMdIsStale() {
+  try {
+    const { config } = require("./lib/config");
+    const stateMd = path.join(config.oversightDir, "OVERSIGHT_STATE.md");
+    if (!fs.existsSync(stateMd)) return true;
+    const stat = fs.statSync(stateMd);
+    return (Date.now() - stat.mtimeMs) > 24 * 3600 * 1000;
+  } catch {
+    return false;
+  }
+}
 
 try {
-  const child = spawn("node", [SCRIPT, "--skip-if-today-done", "--quiet"], {
+  const args = stateMdIsStale()
+    ? [SCRIPT, "--quiet"]
+    : [SCRIPT, "--skip-if-today-done", "--quiet"];
+  const child = spawn("node", args, {
     detached: true,
     stdio: "ignore",
     windowsHide: true,
