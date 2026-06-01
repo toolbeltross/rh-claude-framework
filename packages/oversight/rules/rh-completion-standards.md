@@ -1,5 +1,7 @@
 ---
 description: "Definition of 'done' for multi-source consolidation tasks; facilitator requirement; prohibited self-certification language"
+keywords: [consolidation, synthesis, MASTER, CONSOLIDATED, comprehensive, master document, single source of truth, subsumed, complete, source registry, facilitator]
+severity: block
 ---
 
 # Completion Standards

@@ -1,5 +1,7 @@
 ---
 description: "Qualifies ADDITIVE ONLY-style rules: removal/replacement requires a brief written assessment; fact corrections are exempt"
+keywords: [ADDITIVE ONLY, replacement, removal, replace, drop, fact correction, assessment, value lost, value gained, refactor, deprecate]
+severity: warn
 ---
 
 # Replacement Assessment

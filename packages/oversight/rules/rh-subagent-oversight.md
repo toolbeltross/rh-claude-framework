@@ -1,5 +1,7 @@
 ---
 description: "Standard instructions for dispatching and trusting subagent results"
+keywords: [subagent, agent, dispatch, task, Task tool, verification token, telemetry, batch overflow, count cross-reference, ScheduleWakeup, tiebreaker]
+severity: warn
 ---
 
 # Subagent Oversight

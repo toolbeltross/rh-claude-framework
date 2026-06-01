@@ -1,5 +1,7 @@
 ---
 description: "Privacy and access control rules for multi-domain workspace"
+keywords: [SSN, EIN, credentials, API key, .env, Personal, Financial, Divorce, PRIVATE, secret, password, token, account number]
+severity: block
 ---
 
 # Security Rules

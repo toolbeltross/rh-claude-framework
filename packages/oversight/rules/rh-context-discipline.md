@@ -1,21 +1,29 @@
 ---
 description: "Context window monitoring thresholds and required disclosure actions"
+keywords: [context, tokens, remaining, threshold, compaction, telemetry context, headroom, disclose, /telemetry]
+severity: warn
 ---
 
 # Context Discipline
 
 ## Monitoring Thresholds
 
-| Context Used | Required Action                                                                    |
-|-------------|------------------------------------------------------------------------------------|
-| > 50%       | Note internally; avoid starting new large tasks                                    |
-| > 70%       | Inform user: "Context at ~70%. Recommend finishing current task then new session." |
-| > 85%       | Stop taking new work. Complete only current task. Strongly recommend new session.  |
-| > 95%       | Halt all new work. Inform user. Do not start anything.                             |
+Thresholds are expressed as **remaining tokens**, not percentages, so they apply correctly
+across all model sizes (e.g., ~200K windows on Sonnet/Haiku and ~1M windows on Opus 4.7).
 
-How to estimate: run `/telemetry context` — report as **#compactions** and **% of context window used**. Compaction is detectable via 500%+ cumulative token ratio.
+**Measure before acting — never estimate or guess.** Run `/telemetry context` to get the
+actual remaining token count. Do not infer context pressure from message length, turn count,
+or a felt sense of "this is getting long." Guessing a percentage and acting on the guess is a
+policy violation.
 
-## Prohibited at > 70% Context
+| Remaining tokens | Required Action |
+|---|---|
+| < 150,000 | Note internally; avoid starting new large tasks |
+| < 80,000 | Inform user: "Remaining context is low (~80K tokens). Recommend finishing current task then starting a new session." |
+| < 40,000 | Stop taking new work. Complete only current task. Strongly recommend new session. |
+| < 15,000 | Halt all new work. Inform user. Do not start anything. |
+
+## Prohibited below 80,000 remaining tokens
 
 - Beginning any multi-file read task
 - Beginning any consolidation or synthesis document

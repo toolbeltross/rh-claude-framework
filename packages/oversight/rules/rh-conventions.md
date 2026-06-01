@@ -1,5 +1,7 @@
 ---
 description: "Workspace file and project conventions"
+keywords: [_index.md, CLAUDE.md, xlwings, openpyxl, absolute path, relative path, session state, MASTER_, CONSOLIDATED_, checkbox tracking]
+severity: warn
 ---
 
 # Conventions
