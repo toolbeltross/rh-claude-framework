@@ -2,6 +2,10 @@
 
 Real-time monitoring dashboard for Claude Code CLI sessions. Built for **real-time oversight of Claude's decisions** so you can intervene when things go wrong.
 
+*Formerly known as `claude-telemetry` → `rh-claude-code-telemetry` → `rh-telemetry` (standalone, now archived). This package is the canonical live home; the npm package name remains `rh-telemetry`. If you searched for any of those names, you're in the right place.*
+
+> **See also — the oversight system.** This dashboard is the *telemetry half* of a two-part setup; the *enforcement half* is the **oversight system** (its design doc lives in the user's workspace; dual-write is configured via the `OVERSIGHT_LOG_PATH` env var). The two reference each other by design: oversight hooks POST timing to `/api/hook-perf`, the daily config gate probes `rh-oversight health`, and the Trends tab wraps `rh-supervisor-sweep` via `GET /api/trends`. (This pointer is intentionally path-free — the concrete workspace paths live in the user's local notes, per this repo's zero-hardcoded-paths rule.)
+
 ## Quick Start
 
 ### Global install (recommended for users)
