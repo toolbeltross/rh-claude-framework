@@ -163,8 +163,9 @@ function probeRecentAlerts() {
 function probeScribeBacklog() {
   const cleanup = path.join(config.workspace, 'cleanup.md');
   const recs = path.join(config.workspace, 'recommendations.md');
-  const counts = { cleanup_open: 0, cleanup_oldest_d: 0, recs_open: 0, recs_oldest_d: 0 };
-  for (const [file, key] of [[cleanup, 'cleanup'], [recs, 'recs']]) {
+  const learnings = path.join(config.workspace, 'learnings.md');
+  const counts = { cleanup_open: 0, cleanup_oldest_d: 0, recs_open: 0, recs_oldest_d: 0, learnings_open: 0, learnings_oldest_d: 0 };
+  for (const [file, key] of [[cleanup, 'cleanup'], [recs, 'recs'], [learnings, 'learnings']]) {
     if (!fileExists(file)) continue;
     const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
     let oldestTs = Infinity;
@@ -179,10 +180,10 @@ function probeScribeBacklog() {
     }
     if (oldestTs !== Infinity) counts[`${key}_oldest_d`] = Math.floor((Date.now() - oldestTs) / (24 * 3_600_000));
   }
-  const totalOpen = counts.cleanup_open + counts.recs_open;
-  const oldest = Math.max(counts.cleanup_oldest_d, counts.recs_oldest_d);
+  const totalOpen = counts.cleanup_open + counts.recs_open + counts.learnings_open;
+  const oldest = Math.max(counts.cleanup_oldest_d, counts.recs_oldest_d, counts.learnings_oldest_d);
   const level = oldest > 21 ? 'warn' : oldest > 0 ? 'info' : 'ok';
-  const detail = `cleanup ${counts.cleanup_open} open (oldest ${counts.cleanup_oldest_d}d) · recs ${counts.recs_open} open (oldest ${counts.recs_oldest_d}d)`;
+  const detail = `cleanup ${counts.cleanup_open} open (oldest ${counts.cleanup_oldest_d}d) · recs ${counts.recs_open} open (oldest ${counts.recs_oldest_d}d) · learnings ${counts.learnings_open} open (oldest ${counts.learnings_oldest_d}d)`;
   return { name: 'scribe-backlog', level, detail, totalOpen, oldest };
 }
 

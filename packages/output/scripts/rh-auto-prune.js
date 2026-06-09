@@ -252,6 +252,7 @@ function main() {
     scribe_files: [
       pruneScribeFile(path.join(config.workspace, 'cleanup.md')),
       pruneScribeFile(path.join(config.workspace, 'recommendations.md')),
+      pruneScribeFile(path.join(config.workspace, 'learnings.md')),
     ],
   };
 

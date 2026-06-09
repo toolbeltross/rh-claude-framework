@@ -78,6 +78,15 @@ Walk through the tail. For each substantive item (not pleasantries), assign it t
 
 Skip the write phase entirely for buckets with zero candidates — don't open the file, don't touch the sentinel.
 
+#### 5 — Resolve the canonical workspace FIRST (deterministic, NOT from CWD)
+
+Before any write, set `$WORKSPACE` to the canonical workspace root from config so recs/cleanup ALWAYS land in one place regardless of your current directory. (A prior run split files between the workspace root and a subfolder because it inferred the path from CWD — do not do that.) Run this ONCE and reuse the value:
+```bash
+WORKSPACE=$(node -e "console.log(require(require('os').homedir()+'/.claude/scripts/lib/config').config.workspace)")
+echo "canonical workspace: $WORKSPACE"
+```
+Use this `$WORKSPACE` for every `--target` below. Do NOT substitute your CWD or guess the path.
+
 #### 5a — Recommendations write phase
 
 Use the `rh-scribe-table-write.js` CLI helper. ONE bash call per file. The helper handles sentinel position, dedup-safe appends, and lock acquisition — you do not need to do sentinel hygiene yourself.
