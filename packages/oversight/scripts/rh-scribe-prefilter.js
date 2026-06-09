@@ -50,6 +50,11 @@ const SENTINEL = '<!-- scribe-done -->';
 const FLAG_TTL_MS = 90_000;
 const REC_FILE = path.join(config.workspace, 'recommendations.md');
 const CLEAN_FILE = path.join(config.workspace, 'cleanup.md');
+// Low-fidelity per-turn learnings capture (2026-06-09). Parallel to rec/cleanup; a
+// cheap regex safety-net so learnings are captured turn-by-turn. The HIGH-fidelity
+// curated learnings (YAML frontmatter + sections) are still produced only by /rh-quit
+// into ~/.claude/memory-shared/learnings/. This file is snippet rows, not the curated form.
+const LEARN_FILE = path.join(config.workspace, 'learnings.md');
 const MAX_SNIPPETS_PER_SCOPE = 5;
 const SNIPPET_MAX_CHARS = 400;
 const SNIPPET_MIN_CHARS = 30;
@@ -484,8 +489,9 @@ wrapHook('scribe-prefilter', (input) => {
   //
   // Trade-off: lower content quality vs LLM-curated rows. Acceptable here because
   // the high-quality path is preserved in /rh-quit (user-invoked, in-process Task
-  // dispatch — no headless claude). Learnings are NOT extracted inline because
-  // their YAML+sections format requires synthesis a regex cannot produce.
+  // dispatch — no headless claude). Learnings are ALSO captured inline now (2026-06-09)
+  // as low-fidelity snippet rows in learnings.md — a per-turn safety net; the curated
+  // YAML+sections learnings (which a regex cannot synthesize) are still produced by /rh-quit.
   // Snippet extraction sources from ASSISTANT text only — user prompts
   // (e.g. "How should we improve X?") trigger marker detection upstream
   // but should never be captured as recommendations.
@@ -499,8 +505,10 @@ wrapHook('scribe-prefilter', (input) => {
     const rows = extractSnippets(assistantOnly, CLEANUP_MARKERS).map(s => buildRow(s.id, sessionId, s.text));
     totalAppended += appendRowsToFile(CLEAN_FILE, rows);
   }
-  // Note: hasLearnings detection still runs (used by /rh-quit metadata if needed)
-  // but inline extraction is intentionally skipped for learnings.
+  if (hasLearnings && assistantOnly) {
+    const rows = extractSnippets(assistantOnly, LEARNINGS_MARKERS).map(s => buildRow(s.id, sessionId, s.text));
+    totalAppended += appendRowsToFile(LEARN_FILE, rows);
+  }
 
   // Telemetry breadcrumb (silent best-effort): record what was extracted this turn.
   // JSONL atomic-append assumption (Phase 1 C3, 2026-05-02): unlocked because
