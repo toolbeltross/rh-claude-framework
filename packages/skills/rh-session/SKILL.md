@@ -7,7 +7,7 @@ argument-hint: ""
 Here is the current session inventory from the filesystem:
 
 ```
-!`node "~/.claude/skills/rh-session/scripts/session-inventory.js"`
+!`node "$HOME/.claude/skills/rh-session/scripts/session-inventory.js"`
 ```
 
 Now supplement the filesystem inventory above with runtime information that only you (Claude) can see from the current session context:
