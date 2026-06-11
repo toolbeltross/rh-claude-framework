@@ -39,6 +39,7 @@
 const fs = require('fs');
 const path = require('path');
 const { withLock } = require('./lib/file-lock');
+const scribeDb = require('./lib/scribe-db');
 
 const SENTINEL = '<!-- scribe-done -->';
 const LOCK_RETRIES = 30;
@@ -171,11 +172,36 @@ function main() {
     console.error(`error: could not acquire lock on ${targetAbs} after ${LOCK_RETRIES} retries`);
     process.exit(1);
   }
+
+  // Postgres shadow write (Phase 2, PLAN-2026-06-11-scribe-postgres-fts).
+  // Best-effort AFTER the canonical md write; failures are logged by
+  // scribe-db and never affect this CLI's result.
+  const bucket = { 'recommendations.md': 'recommendations', 'cleanup.md': 'cleanup', 'learnings.md': 'learnings' }[path.basename(targetAbs)];
+  let dbShadow = { ok: true, skipped: true };
+  if (bucket) {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const res = scribeDb.writeRow({
+        bucket,
+        row_id: String(r.id),
+        session_id: r.session ? String(r.session).slice(0, 8) : null,
+        ts: r.ts || null,
+        content: String(r.text || ''),
+        status: r.status || 'open',
+        source_file: targetAbs,
+        raw_line: rowLines[i].trimEnd(),
+      });
+      if (!res.ok) dbShadow = res;
+      else if (!res.skipped && dbShadow.skipped) dbShadow = { ok: true, skipped: false };
+    }
+  }
+
   console.log(JSON.stringify({
     ok: true,
     wrote,
     target: targetAbs,
     sentinelPosition: 'eof',
+    dbShadow: dbShadow.skipped ? 'off' : (dbShadow.ok ? 'written' : 'failed (md unaffected)'),
   }));
 }
 

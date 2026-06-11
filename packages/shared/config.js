@@ -106,6 +106,19 @@ function resolveConfig() {
     // RH_SCRIBE_STAGING=0 or oversight.json scribeStaging:false.
     scribeStaging: file.scribeStaging !== false,
 
+    // 2026-06-11: scribe -> postgres dual-write + transcript FTS
+    // (PLAN-2026-06-11-scribe-postgres-fts.md). OFF by default; enable via
+    // RH_SCRIBE_DB=1 or oversight.json scribeDb:true. md files remain
+    // canonical; DB writes are best-effort shadow and must never block.
+    scribeDb: process.env.RH_SCRIBE_DB === '1' ||
+      (process.env.RH_SCRIBE_DB !== '0' && file.scribeDb === true),
+    scribeDbName: file.scribeDbName || 'rh_scribe',
+    scribeDbUser: file.scribeDbUser || 'rh_scribe',
+    scribeDbHost: file.scribeDbHost || 'localhost',
+    scribeDbPort: parseInt(file.scribeDbPort || '5432', 10),
+    // Path to psql; null -> caller probes common install locations.
+    scribeDbPsql: process.env.RH_SCRIBE_PSQL || file.scribeDbPsql || null,
+
     configPath: CONFIG_PATH,
   };
 

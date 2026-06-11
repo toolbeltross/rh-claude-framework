@@ -1,0 +1,84 @@
+// Tests for lib/scribe-db.js — postgres shadow writes (Phase 2,
+// PLAN-2026-06-11-scribe-postgres-fts.md).
+//
+// Unit tests always run. The integration tests against a REAL rh_scribe
+// database run only when RH_TEST_PG=1 (CI/machines without postgres skip
+// them cleanly as named no-op passes).
+
+const assert = require('assert');
+const path = require('path');
+
+const SHARED = path.join(__dirname, '..', '..', 'shared');
+const LIB = path.join(__dirname, '..', 'scripts', 'lib');
+
+function freshScribeDb(env) {
+  // scribe-db captures the resolved config at require time, so a fresh
+  // require (with cleared caches) is needed per env scenario.
+  const prev = {};
+  for (const [k, v] of Object.entries(env)) { prev[k] = process.env[k]; process.env[k] = v; }
+  for (const m of [path.join(LIB, 'scribe-db.js'), path.join(LIB, 'config.js'), path.join(SHARED, 'config.js')]) {
+    delete require.cache[require.resolve(m)];
+  }
+  require(path.join(SHARED, 'config.js')).resetCache();
+  const mod = require(path.join(LIB, 'scribe-db.js'));
+  // restore env immediately — config is already captured
+  for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  return mod;
+}
+
+const PG = process.env.RH_TEST_PG === '1';
+
+const tests = [
+  {
+    name: 'writeRow is a skipped no-op when scribeDb flag is off',
+    fn: () => {
+      const db = freshScribeDb({ RH_SCRIBE_DB: '0' });
+      const res = db.writeRow({ bucket: 'cleanup', row_id: 'test-noop', content: 'x' });
+      assert.deepStrictEqual(res, { ok: true, skipped: true });
+    },
+  },
+  {
+    name: 'dollarQuote wraps payload in a tag absent from the payload',
+    fn: () => {
+      const db = freshScribeDb({ RH_SCRIBE_DB: '0' });
+      for (const payload of ["plain", "it's $quoted$", "$qdeadbeef$ injection attempt $qdeadbeef$", "multi\nline | pipes"]) {
+        const q = db.dollarQuote(payload);
+        const m = q.match(/^\$(q[0-9a-f]{8})\$([\s\S]*)\$(q[0-9a-f]{8})\$$/);
+        assert.ok(m, `quoted form malformed: ${q.slice(0, 40)}`);
+        assert.strictEqual(m[1], m[3], 'open/close tags match');
+        assert.strictEqual(m[2], payload, 'payload preserved verbatim');
+        assert.ok(!payload.includes('$' + m[1] + '$'), 'tag not present in payload');
+      }
+    },
+  },
+  {
+    name: 'writeRow never throws even with a broken psql path',
+    fn: () => {
+      const db = freshScribeDb({ RH_SCRIBE_DB: '1', RH_SCRIBE_PSQL: 'Z:/does/not/exist/psql.exe' });
+      const res = db.writeRow({ bucket: 'cleanup', row_id: 'test-broken-psql', content: 'x' });
+      assert.strictEqual(res.ok, false);
+      assert.ok(res.error, 'error string present');
+    },
+  },
+  {
+    name: PG ? 'PG: upsert inserts then conflict-updates a real row' : 'PG: skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const db = freshScribeDb({ RH_SCRIBE_DB: '1' });
+      const rid = 'test-' + Date.now().toString(36);
+      try {
+        const ins = db.writeRow({ bucket: 'cleanup', row_id: rid, session_id: 'testsess', ts: '2026-06-11T00:00:00Z', content: 'first version', status: 'open' });
+        assert.strictEqual(ins.ok, true, `insert failed: ${ins.error}`);
+        const upd = db.writeRow({ bucket: 'cleanup', row_id: rid, content: "second version with 'quotes' and $tags$", status: 'closed' });
+        assert.strictEqual(upd.ok, true, `update failed: ${upd.error}`);
+        const sel = db.runSql(`SELECT status || '|' || content FROM scribe_rows WHERE bucket='cleanup' AND row_id=${db.dollarQuote(rid)};`);
+        assert.strictEqual(sel.ok, true, `select failed: ${sel.error}`);
+        assert.strictEqual(sel.stdout, "closed|second version with 'quotes' and $tags$");
+      } finally {
+        db.runSql(`DELETE FROM scribe_rows WHERE row_id=${db.dollarQuote(rid)};`);
+      }
+    },
+  },
+];
+
+module.exports = { tests };
