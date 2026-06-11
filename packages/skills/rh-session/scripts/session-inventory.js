@@ -136,7 +136,9 @@ function getHooks() {
     for (const matcher of matchers) {
       const target = matcher.matcher || "*";
       for (const h of (matcher.hooks || [])) {
-        const label = labelHook(h.command || "");
+        const label = (!h.command && (h.type === "prompt" || h.prompt))
+          ? "(prompt) " + (h.prompt || "").slice(0, 48) + "…"
+          : labelHook(h.command || "");
         hooks.push({ phase, target, label });
       }
     }

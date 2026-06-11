@@ -273,6 +273,21 @@ function listMdFiles(dir) {
       .map(f => path.join(dir, f));
   } catch { return []; }
 }
+function forwarderPathFromSettings() {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(config.claudeDir, "settings.json"), "utf8"));
+    for (const matchers of Object.values(s.hooks || {})) {
+      for (const m of matchers) {
+        for (const h of (m.hooks || [])) {
+          const match = (h.command || "").match(/"?([^"s]*hook-forwarder.js)"?/);
+          if (match) return match[1];
+        }
+      }
+    }
+  } catch { /* settings unreadable - surface omitted */ }
+  return null;
+}
+
 function runDocSyncProbe() {
   const DESIGN_DOC = path.join(config.oversightDir, "OVERSIGHT_SYSTEM.md");
   const designMtime = statMtimeMs(DESIGN_DOC);
@@ -286,7 +301,10 @@ function runDocSyncProbe() {
     ...listMdFiles(path.join(config.claudeDir, "agents")),
     ...listMdFiles(config.rulesDir),
     path.join(config.claudeDir, "settings.json"),
-    path.join(config.workspace, "toolbeltross", "toolbeltross-public", "rh-telemetry", "scripts", "hook-forwarder.js"),
+    // Forwarder path derived from the live settings.json hook command - the
+    // previous hardcoded rh-telemetry path went stale when telemetry migrated
+    // into rh-claude-framework/packages/telemetry (2026-05-04).
+    ...(forwarderPathFromSettings() ? [forwarderPathFromSettings()] : []),
   ];
 
   const newer = [];

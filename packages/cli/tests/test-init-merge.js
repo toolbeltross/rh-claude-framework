@@ -7,7 +7,7 @@
 
 const assert = require('assert');
 const path = require('path');
-const { mergeHooksData, buildConfigData } = require('../lib/init');
+const { mergeHooksData, buildConfigData, mergeConfigData } = require('../lib/init');
 
 // Helper: build a hook entry with given matcher + command list.
 // Matcherless entries (Stop, SessionStart, PreCompact, etc.) pass null.
@@ -276,6 +276,43 @@ const tests = [
         privateDirs: ['Personal', 'Financial'],
       });
       assert.deepStrictEqual(withPrivate.privateDirs, ['Personal', 'Financial']);
+    },
+  },
+
+  // ─── mergeConfigData: init must not clobber a hand-tuned oversight.json ───
+  // Added 2026-06-11 (OI-31). Incident: a no-flag init re-run reduced
+  // oversight.json to near-empty; with workspace/oversightDir gone, the
+  // state-doc generator auto-detected the wrong workspace and misreported
+  // all rule mitigations as missing (OVERSIGHT_SYSTEM.md 2026-06-11 header).
+  // Contract: existing file keys win over auto-detected values; explicit CLI
+  // flags win over existing; detected values fill gaps.
+  {
+    name: 'mergeConfigData: existing keys win over detected',
+    fn: () => {
+      const detected = { workspace: '/autodetected', oversightDir: '/auto/ov', telemetryPort: 7890, userName: 'u' };
+      const existing = { workspace: '/hand/tuned', oversightDir: '/hand/ov', scribeStaging: false };
+      const merged = mergeConfigData(detected, existing);
+      assert.strictEqual(merged.workspace, '/hand/tuned', 'existing workspace preserved');
+      assert.strictEqual(merged.oversightDir, '/hand/ov', 'existing oversightDir preserved');
+      assert.strictEqual(merged.scribeStaging, false, 'user-only key preserved');
+      assert.strictEqual(merged.telemetryPort, 7890, 'detected fills gaps');
+    },
+  },
+  {
+    name: 'mergeConfigData: explicit CLI flags win over existing',
+    fn: () => {
+      const detected = { workspace: '/auto', telemetryPort: 7890 };
+      const existing = { workspace: '/hand/tuned' };
+      const merged = mergeConfigData(detected, existing, { workspace: '/cli/flag' });
+      assert.strictEqual(merged.workspace, '/cli/flag', 'explicit flag wins');
+    },
+  },
+  {
+    name: 'mergeConfigData: empty/absent existing file behaves like plain detected',
+    fn: () => {
+      const detected = { workspace: '/auto', oversightDir: '/auto/ov', telemetryPort: 7890 };
+      const merged = mergeConfigData(detected, {}, { privateDirs: undefined });
+      assert.deepStrictEqual(merged, detected, 'no existing keys -> detected written as-is');
     },
   },
 ];
