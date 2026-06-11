@@ -94,6 +94,13 @@ const STEPS = [
     ],
   },
   {
+    // Transcript FTS ingestion (flag-gated: the script itself no-ops unless
+    // oversight.json scribeDb:true). Incremental — only new bytes per session.
+    name: "rh-transcript-ingest",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-transcript-ingest.js")],
+  },
+  {
     // Fetches Anthropic Claude Code / SDK doc pages, diffs against cached hashes,
     // writes environment/GUIDANCE_CHANGES.md when drift is detected. Runs last so
     // transient network errors don't block the core regen steps.
