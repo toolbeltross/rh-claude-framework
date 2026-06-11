@@ -58,6 +58,7 @@ const fs = require('fs');
 const path = require('path');
 const { withLock } = require(path.join(__dirname, 'lib', 'file-lock'));
 const { withPhase } = require(path.join(__dirname, 'lib', 'phase-timing'));
+const scribeDb = require(path.join(__dirname, 'lib', 'scribe-db'));
 
 const SENTINEL = '<!-- scribe-done -->';
 
@@ -118,7 +119,18 @@ ${SENTINEL}
     }
     fs.writeFileSync(p.topicFile, body, 'utf8');
   });
-  return { ok: true, mode: 'create', wrote: p.topicFile };
+  // Postgres shadow (Phase 2, PLAN-2026-06-11-scribe-postgres-fts):
+  // best-effort after the canonical md write; never affects the result.
+  const dbRes = scribeDb.writeRow({
+    bucket: 'learnings',
+    row_id: path.basename(p.topicFile, '.md'),
+    session_id: String(p.originSessionId || '').slice(0, 8) || null,
+    ts: p.created || null,
+    content: body,
+    status: 'active',
+    source_file: p.topicFile,
+  });
+  return { ok: true, mode: 'create', wrote: p.topicFile, dbShadow: dbRes.skipped ? 'off' : (dbRes.ok ? 'written' : 'failed (md unaffected)') };
 }
 
 // --- append-observation ---
