@@ -19,6 +19,11 @@
  *
  * Usage:
  *   node rh-transcript-ingest.js [--dry-run] [--full] [--project <slug>] [--stats]
+ *                                [--projects-dir <path>] [--slug-prefix <p>]
+ *     --projects-dir  ingest an alternate projects tree (e.g. an archived
+ *                     machine's .claude/projects) instead of the live one
+ *     --slug-prefix   prefix stored project_slug values (e.g. "centrifuge:")
+ *                     so corpora stay distinguishable
  *     --dry-run  list what would be ingested, write nothing
  *     --full     forget offsets and re-ingest everything (delete + reinsert)
  *     --project  restrict to one project slug
@@ -37,6 +42,8 @@ const DRY = ARGS.includes('--dry-run');
 const FULL = ARGS.includes('--full');
 const STATS = ARGS.includes('--stats');
 const ONLY_PROJECT = ARGS.includes('--project') ? ARGS[ARGS.indexOf('--project') + 1] : null;
+const PROJECTS_DIR_OVERRIDE = ARGS.includes('--projects-dir') ? ARGS[ARGS.indexOf('--projects-dir') + 1] : null;
+const SLUG_PREFIX = ARGS.includes('--slug-prefix') ? ARGS[ARGS.indexOf('--slug-prefix') + 1] : '';
 
 const BATCH_ROWS = 200;          // rows per INSERT statement
 const MAX_MSG_CHARS = 500000;    // clamp pathological messages
@@ -83,8 +90,8 @@ function sqlBatchInsert(sessionId, startTurn, msgs) {
   return `INSERT INTO transcript_messages (session_id, turn, role, ts, content) VALUES\n${values};`;
 }
 
-function ingestFile(slug, file) {
-  const sessionId = path.basename(file, '.jsonl');
+function ingestFile(slug, file, sessionIdOverride) {
+  const sessionId = sessionIdOverride || path.basename(file, '.jsonl');
   const size = fs.statSync(file).size;
 
   const prev = scribeDb.runSql(
@@ -144,7 +151,7 @@ function main() {
     console.log('scribeDb flag is off (oversight.json scribeDb:true to enable) — nothing to do.');
     return;
   }
-  const projectsDir = path.join(config.claudeDir, 'projects');
+  const projectsDir = PROJECTS_DIR_OVERRIDE || path.join(config.claudeDir, 'projects');
   if (!fs.existsSync(projectsDir)) { console.log('no projects dir'); return; }
 
   const patterns = loadBlockPatterns();
@@ -157,12 +164,27 @@ function main() {
     if (slugBlocked(slug, patterns)) { summary.blockedProjects++; continue; }
     summary.projects++;
     for (const f of fs.readdirSync(dir)) {
-      if (!f.endsWith('.jsonl')) continue;
-      summary.files++;
-      const r = ingestFile(slug, path.join(dir, f));
-      if (r.error) summary.errors.push(`${r.sessionId}: ${r.error}`);
-      else if (r.skipped) summary.upToDate++;
-      else summary.ingested += r.ingested || r.wouldIngest || 0;
+      const fp = path.join(dir, f);
+      if (f.endsWith('.jsonl')) {
+        summary.files++;
+        const r = ingestFile(SLUG_PREFIX + slug, fp);
+        if (r.error) summary.errors.push(`${r.sessionId}: ${r.error}`);
+        else if (r.skipped) summary.upToDate++;
+        else summary.ingested += r.ingested || r.wouldIngest || 0;
+        continue;
+      }
+      // Subagent transcripts live at <session>/subagents/agent-*.jsonl.
+      const subDir = path.join(fp, 'subagents');
+      if (fs.statSync(fp).isDirectory() && fs.existsSync(subDir)) {
+        for (const sf of fs.readdirSync(subDir)) {
+          if (!sf.endsWith('.jsonl')) continue;
+          summary.files++;
+          const r = ingestFile(SLUG_PREFIX + slug, path.join(subDir, sf), f + ':' + path.basename(sf, '.jsonl'));
+          if (r.error) summary.errors.push(`${r.sessionId}: ${r.error}`);
+          else if (r.skipped) summary.upToDate++;
+          else summary.ingested += r.ingested || r.wouldIngest || 0;
+        }
+      }
     }
   }
   console.log(JSON.stringify({ dryRun: DRY || undefined, ...summary, errors: summary.errors.slice(0, 5) }, null, 1));
