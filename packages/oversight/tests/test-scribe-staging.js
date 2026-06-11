@@ -213,18 +213,29 @@ const tests = [
     name: 'isEnabled() — oversight.json scribeStaging:true is honored when env unset',
     fn: () => {
       const { resetCache, CONFIG_PATH } = require('../scripts/lib/config');
+      // This test writes the REAL user config file (CONFIG_PATH derives from
+      // HOME). Until 2026-06-11 it "restored" by writing {} — silently
+      // destroying the user's oversight.json on EVERY suite run. That was the
+      // recurring-clobber root cause behind the state-doc misreporting
+      // incidents (2026-06-06, 2026-06-10, 2026-06-11); rh-oversight init had
+      // been wrongly blamed. Save the original and restore it in finally.
       delete process.env.RH_SCRIBE_STAGING;
       const cfgDir = path.dirname(CONFIG_PATH);
       fs.mkdirSync(cfgDir, { recursive: true });
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify({ scribeStaging: true }), 'utf8');
-      resetCache();
-      // Force lib/scribe-staging to re-read by reloading via require.cache bust.
-      delete require.cache[require.resolve('../scripts/lib/scribe-staging')];
-      const fresh = require('../scripts/lib/scribe-staging');
-      assert.strictEqual(fresh.isEnabled(), true, 'config flag should enable when env unset');
-      // Restore: clear scribeStaging so subsequent tests see the default (on).
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify({}), 'utf8');
-      resetCache();
+      let origConfig = null;
+      try { origConfig = fs.readFileSync(CONFIG_PATH, 'utf8'); } catch {}
+      try {
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify({ scribeStaging: true }), 'utf8');
+        resetCache();
+        // Force lib/scribe-staging to re-read by reloading via require.cache bust.
+        delete require.cache[require.resolve('../scripts/lib/scribe-staging')];
+        const fresh = require('../scripts/lib/scribe-staging');
+        assert.strictEqual(fresh.isEnabled(), true, 'config flag should enable when env unset');
+      } finally {
+        if (origConfig !== null) fs.writeFileSync(CONFIG_PATH, origConfig, 'utf8');
+        else { try { fs.unlinkSync(CONFIG_PATH); } catch {} }
+        resetCache();
+      }
     }
   },
   {
