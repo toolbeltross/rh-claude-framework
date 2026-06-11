@@ -47,3 +47,23 @@ CREATE INDEX IF NOT EXISTS transcript_messages_session
   ON transcript_messages (session_id);
 CREATE INDEX IF NOT EXISTS scribe_rows_bucket_status
   ON scribe_rows (bucket, status);
+
+-- Log entries (supervisory log, oversight events, telemetry failures, …)
+-- Added 2026-06-11 (log-FTS extension). Same idempotent convention.
+CREATE TABLE IF NOT EXISTS log_entries (
+  id          bigserial PRIMARY KEY,
+  source      text NOT NULL,
+  seq         int NOT NULL,
+  ts          timestamptz,
+  content     text NOT NULL,
+  content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', left(content, 1048575))) STORED,
+  UNIQUE (source, seq)
+);
+CREATE INDEX IF NOT EXISTS log_entries_tsv_gin ON log_entries USING GIN (content_tsv);
+
+CREATE TABLE IF NOT EXISTS ingest_offsets (
+  source           text PRIMARY KEY,
+  ingested_through bigint NOT NULL DEFAULT 0,
+  entries          int NOT NULL DEFAULT 0,
+  ingested_at      timestamptz NOT NULL DEFAULT now()
+);

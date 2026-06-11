@@ -101,6 +101,12 @@ const STEPS = [
     args: [path.join(SCRIPTS_DIR, "rh-transcript-ingest.js")],
   },
   {
+    // Oversight-log FTS ingestion (same scribeDb flag gate, incremental).
+    name: "rh-ingest-logs",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-ingest-logs.js")],
+  },
+  {
     // Fetches Anthropic Claude Code / SDK doc pages, diffs against cached hashes,
     // writes environment/GUIDANCE_CHANGES.md when drift is detected. Runs last so
     // transient network errors don't block the core regen steps.
