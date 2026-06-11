@@ -257,6 +257,12 @@ function sectionHooksActive() {
       const target = matcher.matcher || "*";
       for (const h of (matcher.hooks || [])) {
         const cmd = h.command || "";
+        if (!cmd && (h.type === "prompt" || h.prompt)) {
+          // Prompt-type hooks have no command; an empty cell here previously
+          // read as a malformed entry (OI-23 false positive, 2026-06-11).
+          rows.push({ phase, target, script: "(prompt) " + mdEscape((h.prompt || "").slice(0, 48)) + "…" });
+          continue;
+        }
         const scriptMatch = cmd.match(/([^/\\"]+\.js)/);
         const script = scriptMatch ? scriptMatch[1] : mdEscape(cmd.slice(0, 40));
         rows.push({ phase, target, script });

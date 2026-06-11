@@ -230,6 +230,21 @@ function buildConfigData({ workspace, oversightDir, privateDirs }) {
   return data;
 }
 
+/**
+ * Merge-preserve semantics for oversight.json (2026-06-11, OI-31):
+ * existing user keys win over auto-detected values; explicit CLI flags win
+ * over existing. Prevents a no-flag re-run of init from clobbering a
+ * hand-tuned config (incident: oversight.json reduced to {} broke
+ * state-doc workspace resolution - OVERSIGHT_SYSTEM.md 2026-06-11 header).
+ */
+function mergeConfigData(detected, existing, explicit = {}) {
+  const merged = { ...detected, ...existing };
+  for (const k of Object.keys(explicit)) {
+    if (explicit[k] !== undefined) merged[k] = explicit[k];
+  }
+  return merged;
+}
+
 function run(extraOpts = {}) {
   const opts = { ...parseArgs(), ...extraOpts };
   const configModule = require(path.join(SHARED_PKG, 'config'));
@@ -274,11 +289,18 @@ function run(extraOpts = {}) {
   if (opts.reset && fs.existsSync(configPath)) {
     console.log('  [reset] Preserving existing oversight.json');
   } else {
+    let existingConfig = {};
+    try { existingConfig = JSON.parse(fs.readFileSync(configPath, 'utf8')) || {}; } catch { /* absent or invalid - treat as none */ }
+    const mergedConfig = mergeConfigData(configData, existingConfig, {
+      workspace: opts.workspace ? workspace : undefined,
+      oversightDir: opts.oversightDir ? oversightDir : undefined,
+      privateDirs: opts.privateDirs,
+    });
     if (opts.dryRun) console.log(`  [dry-run] would write ${configPath}`);
     else {
       if (!fs.existsSync(CLAUDE_DIR)) fs.mkdirSync(CLAUDE_DIR, { recursive: true });
-      fs.writeFileSync(configPath, JSON.stringify(configData, null, 2) + '\n', 'utf8');
-      console.log(`  Wrote ${configPath}`);
+      fs.writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2) + '\n', 'utf8');
+      console.log(`  Wrote ${configPath}${Object.keys(existingConfig).length ? ' (merge-preserved existing keys)' : ''}`);
     }
   }
 
@@ -344,4 +366,4 @@ function run(extraOpts = {}) {
   console.log('\n  Done. Run `rh-oversight self-test` to verify.\n');
 }
 
-module.exports = { run, mergeHooksData, buildConfigData };
+module.exports = { run, mergeHooksData, buildConfigData, mergeConfigData };
