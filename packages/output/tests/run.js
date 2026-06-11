@@ -13,6 +13,7 @@ const SUITES = [
   'test-daily-regen.js',
   'test-generate-env-md.js',
   'test-scribe-db.js',
+  'test-transcript-ingest.js',
 ];
 
 let total = 0, failed = 0;
