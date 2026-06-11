@@ -64,7 +64,11 @@ test('POST /api/hooks with agent_id stamps _lastToolAt on the active subagent', 
       agent_id: 'agent-1',
       agent_type: 'Explore',
     });
-    const before = Date.now();
+    // The server stamps _lastToolAt with its own Date.now() in a separate
+    // process; on Windows the two processes' clocks can disagree by a few ms,
+    // so the baseline gets a tolerance window rather than a strict >=.
+    const CLOCK_SKEW_MS = 50;
+    const before = Date.now() - CLOCK_SKEW_MS;
     await postJson(srv.baseUrl + '/api/hooks', {
       tool_name: 'Read',
       session_id: 'sess-1',
@@ -73,7 +77,14 @@ test('POST /api/hooks with agent_id stamps _lastToolAt on the active subagent', 
     });
     const snap = await getJson(srv.baseUrl + '/api/snapshot');
     const agent = snap.liveSessions['sess-1']._activeSubagents['agent-1'];
-    assert.ok(agent._lastToolAt >= before, `_lastToolAt (${agent._lastToolAt}) should be >= ${before}`);
+    assert.ok(
+      typeof agent._lastToolAt === 'number' && agent._lastToolAt >= before,
+      `_lastToolAt (${agent._lastToolAt}) should be >= ${before} (baseline minus ${CLOCK_SKEW_MS}ms skew tolerance)`
+    );
+    assert.ok(
+      agent._lastToolAt <= Date.now() + CLOCK_SKEW_MS,
+      `_lastToolAt (${agent._lastToolAt}) should not be in the future`
+    );
     assert.strictEqual(agent._toolCount, 1);
     assert.strictEqual(agent._lastTool, 'Read');
   });
