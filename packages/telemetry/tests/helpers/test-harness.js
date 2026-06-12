@@ -68,7 +68,18 @@ export function summary() {
       }
     }
     console.log(`\n${passed} passed, ${failed} failed`);
-    process.exit(failed > 0 ? 1 : 0);
+    // Prefer a natural exit over process.exit(): a hard exit while libuv is
+    // still closing handles (child-process pipes, ws sockets, fetch keep-alive)
+    // trips "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)" on Windows
+    // (src\win\async.c:94, STATUS_STACK_BUFFER_OVERRUN) and the runner reads
+    // the crash code as a FAIL even when all assertions passed.
+    process.exitCode = failed > 0 ? 1 : 0;
+    // Watchdog: if a test leaked a handle that keeps the loop alive, force-exit
+    // after a grace period. unref() so the timer itself never delays exit.
+    setTimeout(() => {
+      console.error('[test-harness] event loop did not drain within 5s — forcing exit');
+      process.exit(failed > 0 ? 1 : 0);
+    }, 5000).unref();
   })();
 }
 
