@@ -253,6 +253,7 @@ class Store extends EventEmitter {
           _fromToolEvents: true,
           _toolCount: (existing?._toolCount || 0) + 1,
           _lastTool: toolEvent.tool,
+          _entrypoint: event.entrypoint || existing?._entrypoint || null,
           workspace: { current_dir: cwd },
         };
         // Add model info if we don't have it yet (try to extract from project's file data)
@@ -269,6 +270,11 @@ class Store extends EventEmitter {
         existing._lastSeen = Date.now();
         existing._toolCount = (existing._toolCount || 0) + 1;
         existing._lastTool = toolEvent.tool;
+        if (!existing._entrypoint && event.entrypoint) existing._entrypoint = event.entrypoint;
+        // A tool ran — any pending permission request has been decided
+        if (existing._awaitingPermission) existing._awaitingPermission = null;
+        // Activity after SessionEnd means the session resumed
+        if (existing._ended) { existing._ended = false; existing._endedAt = null; }
         this.emit('liveSession', { id, data: existing });
       }
     }
@@ -300,6 +306,18 @@ class Store extends EventEmitter {
     data._lastSeen = Date.now();
     data._startedAt = existing._startedAt || Date.now();
     data._fromStatusLine = true;
+    // Origin: who spawned this session (claude-desktop / cli / claude-vscode).
+    // Stamped by hook-forwarder from CLAUDE_CODE_ENTRYPOINT.
+    data._entrypoint = data.entrypoint || existing._entrypoint || null;
+
+    // Plan-quota overlay: newer Claude Code builds include rate_limits
+    // (five_hour / seven_day used_percentage + resets_at) in the statusline
+    // payload after every API response — fresher than the 60s OAuth poll.
+    // Dormant until this machine's CC version sends the field; the OAuth
+    // poll remains the full source (per-model + extra-usage data).
+    if (data.rate_limits && (data.rate_limits.five_hour || data.rate_limits.seven_day)) {
+      this.overlayRateLimits(data.rate_limits);
+    }
     // Preserve tool count from derived sessions
     if (existing._toolCount) data._toolCount = existing._toolCount;
     if (existing._lastTool) data._lastTool = existing._lastTool;
@@ -553,12 +571,46 @@ class Store extends EventEmitter {
     return { pruned, remaining: Object.keys(this.data.liveSessions).length };
   }
 
+  /**
+   * Mark a session ended (SessionEnd hook). Deliberately does NOT remove the
+   * entry — sessions linger until the stale prune (user preference: the
+   * refresh button handles immediate cleanup). The flag lets the UI render an
+   * ended state instead of "idle".
+   */
+  markSessionEnded(sessionId) {
+    const id = sessionId || 'unknown';
+    const session = this.data.liveSessions[id];
+    if (!session) return;
+    session._ended = true;
+    session._endedAt = Date.now();
+    session._awaitingPermission = null;
+    session._lastLifecycleEvent = 'session-end';
+    // Do NOT bump _lastSeen — an ended session should age toward the stale
+    // prune from its last real activity, not from the end notification.
+    this.emit('liveSession', { id, data: session });
+  }
+
+  /**
+   * Mark a session as waiting on a permission decision (PermissionRequest
+   * hook). Cleared by the next tool event / prompt / turn end — whichever
+   * follows the user's decision.
+   */
+  markAwaitingPermission(sessionId, toolName) {
+    const id = sessionId || 'unknown';
+    const session = this.data.liveSessions[id];
+    if (!session) return;
+    session._awaitingPermission = { tool: toolName || null, since: Date.now() };
+    session._lastSeen = Date.now();
+    this.emit('liveSession', { id, data: session });
+  }
+
   /** Record a turn end from Stop hook */
   recordTurnEnd(sessionId, data) {
     const id = sessionId || 'unknown';
     const session = this.data.liveSessions[id];
     if (!session) return;
 
+    session._awaitingPermission = null;
     session._lastSeen = Date.now();
     session._turnCount = (session._turnCount || 0) + 1;
     session._lastStopAt = Date.now();
@@ -704,6 +756,9 @@ class Store extends EventEmitter {
     session._currentTurnStartTs = Date.now();
     session._currentTurnEvents = [];
     session._lastLifecycleEvent = 'prompt';
+    // New prompt = the user is here: clear ended/awaiting-permission states
+    session._awaitingPermission = null;
+    if (session._ended) { session._ended = false; session._endedAt = null; }
     // Fresh user prompt resets the consecutive-continuation streak — any
     // prior Stop-hook back-and-forth was resolved by the user giving new input.
     session._consecutiveForcedContinuations = 0;
@@ -983,6 +1038,40 @@ class Store extends EventEmitter {
   /** Update plan info (type, display mode, usage) from plan-detector */
   updatePlanInfo(info) {
     this.data.planInfo = { ...this.data.planInfo, ...info, lastUpdated: Date.now() };
+    this.emit('planInfo', this.data.planInfo);
+  }
+
+  /**
+   * Overlay statusline-sourced rate limits onto planInfo.usage.
+   * statusline shape: { five_hour: { used_percentage, resets_at<epoch s> }, seven_day: {...} }
+   * planInfo shape:   { fiveHour: { utilization, resets_at<ISO> }, sevenDay: {...} }
+   * Only the 5h/7d gauges are overlaid — per-model and extra-usage data still
+   * come from the OAuth poll. Statusline data arrives after every API
+   * response, so this keeps the headline gauges fresh between polls.
+   */
+  overlayRateLimits(rateLimits) {
+    const usage = { ...(this.data.planInfo.usage || {}) };
+    const mapWindow = (w) => ({
+      utilization: typeof w.used_percentage === 'number' ? w.used_percentage : null,
+      resets_at: w.resets_at ? new Date(w.resets_at * 1000).toISOString() : null,
+    });
+    let changed = false;
+    if (rateLimits.five_hour && typeof rateLimits.five_hour.used_percentage === 'number') {
+      usage.fiveHour = { ...usage.fiveHour, ...mapWindow(rateLimits.five_hour) };
+      changed = true;
+    }
+    if (rateLimits.seven_day && typeof rateLimits.seven_day.used_percentage === 'number') {
+      usage.sevenDay = { ...usage.sevenDay, ...mapWindow(rateLimits.seven_day) };
+      changed = true;
+    }
+    if (!changed) return;
+    this.data.planInfo = {
+      ...this.data.planInfo,
+      usage,
+      usageSource: 'statusline',
+      usageTimestamp: Date.now(),
+      lastUpdated: Date.now(),
+    };
     this.emit('planInfo', this.data.planInfo);
   }
 

@@ -75,6 +75,12 @@ function subagentFlagPath(agentId) {
 
 function post(path, data) {
   return new Promise((resolve) => {
+    // Stamp the calling process's entrypoint (claude-desktop / cli / claude-vscode)
+    // on every payload so the dashboard can tell interactive sessions from
+    // headless runs (cron, scheduled tasks, script-spawned `claude -p`).
+    if (data && typeof data === 'object' && !data.entrypoint && process.env.CLAUDE_CODE_ENTRYPOINT) {
+      data = { ...data, entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT };
+    }
     const body = JSON.stringify(data);
     const req = http.request(
       `${BASE_URL}${path}`,
@@ -573,6 +579,27 @@ if (mode === 'status') {
   await post('/api/compact', {
     session_id: sessionId,
     trigger: parsed.trigger || 'auto',
+  });
+} else if (mode === 'session-end') {
+  // SessionEnd hook: mark the session ended on the dashboard (NOT pruned —
+  // it lingers until the stale prune / manual refresh, per user preference)
+  const raw = await readStdin();
+  let parsed = {};
+  try { parsed = JSON.parse(raw); } catch {}
+  const sessionId = parsed.session_id || process.argv[3] || '';
+  debugLog(`session-end: session=${sessionId?.slice(0, 8)}`);
+  await post('/api/session-end', { session_id: sessionId });
+} else if (mode === 'permission-request') {
+  // PermissionRequest hook: surface "waiting on user permission" state so a
+  // session blocked on a dialog doesn't read as idle on the Live surface
+  const raw = await readStdin();
+  let parsed = {};
+  try { parsed = JSON.parse(raw); } catch {}
+  const sessionId = parsed.session_id || process.argv[3] || '';
+  debugLog(`permission-request: session=${sessionId?.slice(0, 8)} tool=${parsed.tool_name || '?'}`);
+  await post('/api/permission-request', {
+    session_id: sessionId,
+    tool_name: parsed.tool_name || null,
   });
 } else if (mode === 'subagent-start') {
   // SubagentStart hook: forward subagent start + extract prompt from transcript

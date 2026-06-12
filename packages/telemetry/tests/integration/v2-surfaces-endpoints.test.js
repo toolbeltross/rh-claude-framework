@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { test, summary } from '../helpers/test-harness.js';
 import { withTmp } from '../helpers/tmp.js';
-import { startTestServer, getJson } from '../helpers/server.js';
+import { startTestServer, getJson, postJson } from '../helpers/server.js';
 import { openTestWs } from '../helpers/ws-client.js';
 
 console.log('v2-surfaces endpoints integration tests:\n');
@@ -159,6 +159,69 @@ test('double-wrapped event_type lines are normalized, not served as objects', as
       await server.stop();
     }
   }, 'v2-oversight-normalize');
+});
+
+test('session lifecycle: entrypoint stamp, permission-wait, session-end mark (not prune)', async () => {
+  await withTmp(async (tmp) => {
+    seedHome(tmp);
+    const server = await startTestServer({ tmpHome: tmp });
+    try {
+      // Mint a session via statusline POST carrying an entrypoint stamp
+      await postJson(`${server.baseUrl}/api/status`, {
+        session_id: 'sess-life',
+        entrypoint: 'claude-vscode',
+        model: { id: 'claude-fable-5', display_name: 'Fable 5' },
+        cost: { total_cost_usd: 1.0 },
+        context_window: {},
+      });
+      let snap = await getJson(`${server.baseUrl}/api/snapshot`);
+      assert.strictEqual(snap.liveSessions['sess-life']._entrypoint, 'claude-vscode', 'entrypoint stamped');
+
+      // Permission request → awaiting state
+      await postJson(`${server.baseUrl}/api/permission-request`, { session_id: 'sess-life', tool_name: 'Bash' });
+      snap = await getJson(`${server.baseUrl}/api/snapshot`);
+      assert.strictEqual(snap.liveSessions['sess-life']._awaitingPermission.tool, 'Bash');
+
+      // Tool event clears the awaiting state
+      await postJson(`${server.baseUrl}/api/hooks`, { tool_name: 'Bash', session_id: 'sess-life', success: true });
+      snap = await getJson(`${server.baseUrl}/api/snapshot`);
+      assert.strictEqual(snap.liveSessions['sess-life']._awaitingPermission, null, 'cleared by tool event');
+
+      // SessionEnd marks ended but does NOT remove (user keeps the 2h linger)
+      await postJson(`${server.baseUrl}/api/session-end`, { session_id: 'sess-life' });
+      snap = await getJson(`${server.baseUrl}/api/snapshot`);
+      assert.ok(snap.liveSessions['sess-life'], 'session still present after end');
+      assert.strictEqual(snap.liveSessions['sess-life']._ended, true, 'marked ended');
+    } finally {
+      await server.stop();
+    }
+  }, 'v2-lifecycle');
+});
+
+test('statusline rate_limits overlay refreshes planInfo 5h/7d gauges', async () => {
+  await withTmp(async (tmp) => {
+    seedHome(tmp);
+    const server = await startTestServer({ tmpHome: tmp });
+    try {
+      await postJson(`${server.baseUrl}/api/status`, {
+        session_id: 'sess-rl',
+        model: { id: 'claude-fable-5' },
+        cost: { total_cost_usd: 0.5 },
+        context_window: {},
+        rate_limits: {
+          five_hour: { used_percentage: 42, resets_at: 1781400000 },
+          seven_day: { used_percentage: 17, resets_at: 1781900000 },
+        },
+      });
+      const snap = await getJson(`${server.baseUrl}/api/snapshot`);
+      assert.strictEqual(snap.planInfo.usage.fiveHour.utilization, 42);
+      assert.strictEqual(snap.planInfo.usage.sevenDay.utilization, 17);
+      assert.strictEqual(snap.planInfo.usageSource, 'statusline');
+      assert.ok(snap.planInfo.usage.fiveHour.resets_at.startsWith('2026-'), 'epoch converted to ISO');
+    } finally {
+      await server.stop();
+    }
+  }, 'v2-ratelimits');
 });
 
 test('WS pushes oversightEvent frames when oversight-events.jsonl grows', async () => {

@@ -74,23 +74,48 @@ export default function LiveSurface({ live }) {
             return otherLabel === label;
           });
           if (collision) label = `${label} · ${id.slice(0, 8)}`;
-          // Hover shows the same English title Claude Code Desktop displays
+          // Hover shows the same English title Claude Code Desktop displays.
+          // Sessions with no Desktop title are typically headless runs
+          // (scheduled tasks, script-spawned `claude -p`) — say so, since
+          // "tabs I didn't open" are confusing without an origin.
           const ccdTitle = ccdTitles[id]?.title;
+          const origin = s?._entrypoint || null;
+          const originNote = ccdTitle
+            ? null
+            : 'no Desktop tab — likely a headless/scheduled run';
+          const awaiting = s?._awaitingPermission;
+          const ended = s?._ended;
+          const dotClass = ended
+            ? 'bg-gray-600'
+            : awaiting
+              ? 'bg-amber animate-pulse-dot'
+              : activity === 'processing'
+                ? 'bg-green animate-pulse-dot'
+                : 'bg-blue';
+          const state = ended
+            ? 'ended'
+            : awaiting
+              ? `awaiting permission${awaiting.tool ? ` (${awaiting.tool})` : ''}`
+              : activity;
           return (
             <button
               key={id}
               onClick={() => selectSession(id)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors ${
                 selected ? 'bg-gray-800 text-gray-100' : 'bg-gray-900 text-gray-400 hover:text-gray-200'
-              }`}
-              title={`${ccdTitle ? `“${ccdTitle}”\n` : ''}${id} — ${activity}`}
+              } ${ended ? 'opacity-60' : ''}`}
+              title={[
+                ccdTitle ? `“${ccdTitle}”` : null,
+                `${id} — ${state}`,
+                origin ? `origin: ${origin}` : null,
+                originNote,
+              ].filter(Boolean).join('\n')}
             >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  activity === 'processing' ? 'bg-green animate-pulse-dot' : 'bg-blue'
-                }`}
-              />
+              <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
               {label}
+              {origin && origin !== 'claude-desktop' && (
+                <span className="text-[9px] text-gray-600 uppercase">{origin.replace('claude-', '')}</span>
+              )}
             </button>
           );
         })}

@@ -20,9 +20,9 @@ import {
   PORT,
   VITE_DEV_PORT,
   CLAUDE_PROJECTS_DIR,
-  FILE_POLL_INTERVAL_MS,
-  WRITE_STABILITY_MS,
-  WRITE_POLL_MS,
+  JSONL_POLL_INTERVAL_MS,
+  JSONL_STABILITY_MS,
+  JSONL_WRITE_POLL_MS,
 } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -150,10 +150,12 @@ aggregatesStore.loadAll().catch((err) => {
 if (existsSync(CLAUDE_PROJECTS_DIR)) {
   const projectsWatcher = chokidar.watch(`${CLAUDE_PROJECTS_DIR.replace(/\\/g, '/')}/**/*.jsonl`, {
     usePolling: true,
-    interval: FILE_POLL_INTERVAL_MS,
+    interval: JSONL_POLL_INTERVAL_MS,
+    // Append-only JSONL: parseTranscript skips a partially-written last
+    // line, so a short stability window is safe and much fresher.
     awaitWriteFinish: {
-      stabilityThreshold: WRITE_STABILITY_MS,
-      pollInterval: WRITE_POLL_MS,
+      stabilityThreshold: JSONL_STABILITY_MS,
+      pollInterval: JSONL_WRITE_POLL_MS,
     },
     ignoreInitial: true, // initial load handled by loadAll()
   });

@@ -15,7 +15,7 @@ import { existsSync, statSync, createReadStream } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import chokidar from 'chokidar';
-import { FILE_POLL_INTERVAL_MS, WRITE_STABILITY_MS, WRITE_POLL_MS } from './config.js';
+import { JSONL_POLL_INTERVAL_MS, JSONL_STABILITY_MS, JSONL_WRITE_POLL_MS } from './config.js';
 
 const HOME = process.env.HOME || process.env.USERPROFILE || homedir();
 const EVENTS_PATH = join(HOME, '.claude', 'oversight-events.jsonl');
@@ -177,10 +177,12 @@ export function startOversightWatcher(onEvents) {
 
   const watcher = chokidar.watch(EVENTS_PATH, {
     usePolling: true,
-    interval: FILE_POLL_INTERVAL_MS,
+    interval: JSONL_POLL_INTERVAL_MS,
+    // Short stability window only — the offset reader consumes complete
+    // lines exclusively, so long write-finish damping is wasted latency.
     awaitWriteFinish: {
-      stabilityThreshold: WRITE_STABILITY_MS,
-      pollInterval: WRITE_POLL_MS,
+      stabilityThreshold: JSONL_STABILITY_MS,
+      pollInterval: JSONL_WRITE_POLL_MS,
     },
     ignoreInitial: true,
   });

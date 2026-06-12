@@ -140,6 +140,18 @@ Do NOT flag violations from prior turns — acknowledging a past violation in th
     { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" compact "$CLAUDE_SESSION_ID"` }] },
   ];
 
+  // --- SessionEnd: mark session ended on the dashboard (kept until stale prune) ---
+  settings.hooks.SessionEnd = [
+    ...filterOurEntries(settings.hooks.SessionEnd || [], 'hook-forwarder'),
+    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" session-end "$CLAUDE_SESSION_ID"` }] },
+  ];
+
+  // --- PermissionRequest: surface "waiting on permission" state ---
+  settings.hooks.PermissionRequest = [
+    ...filterOurEntries(settings.hooks.PermissionRequest || [], 'hook-forwarder'),
+    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" permission-request "$CLAUDE_SESSION_ID"` }] },
+  ];
+
   // --- SubagentStart: track spawned subagents ---
   settings.hooks.SubagentStart = [
     ...filterOurEntries(settings.hooks.SubagentStart, 'hook-forwarder'),
