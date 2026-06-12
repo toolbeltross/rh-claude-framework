@@ -101,6 +101,35 @@ test('GET /api/sessions + /api/subagents serve seeded transcripts with type join
   }, 'v2-endpoints');
 });
 
+test('GET /api/ccd-sessions maps transcript ids to Desktop titles (empty without APPDATA)', async () => {
+  await withTmp(async (tmp) => {
+    seedHome(tmp);
+    // Seed a fake %APPDATA%/Claude/claude-code-sessions tree
+    const appdata = join(tmp, 'appdata');
+    const sessDir = join(appdata, 'Claude', 'claude-code-sessions', 'org-1', 'proj-1');
+    mkdirSync(sessDir, { recursive: true });
+    writeFileSync(join(sessDir, 'local_abc.json'), JSON.stringify({
+      sessionId: 'local_abc',
+      cliSessionId: 'sess-1',
+      title: 'My English Title',
+      isArchived: false,
+      prNumber: 42,
+      prState: 'MERGED',
+    }));
+    writeFileSync(join(sessDir, 'local_broken.json'), '{not json');
+
+    const server = await startTestServer({ tmpHome: tmp, extraEnv: { APPDATA: appdata } });
+    try {
+      const res = await getJson(`${server.baseUrl}/api/ccd-sessions`);
+      assert.strictEqual(res.byCliId['sess-1'].title, 'My English Title');
+      assert.strictEqual(res.byCliId['sess-1'].prState, 'MERGED');
+      assert.strictEqual(Object.keys(res.byCliId).length, 1, 'corrupt file skipped');
+    } finally {
+      await server.stop();
+    }
+  }, 'v2-ccd-titles');
+});
+
 test('double-wrapped event_type lines are normalized, not served as objects', async () => {
   await withTmp(async (tmp) => {
     seedHome(tmp);

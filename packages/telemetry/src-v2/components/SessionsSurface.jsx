@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSessions } from '../hooks/useSessions.js';
+import { useCcdTitles } from '../hooks/useCcdTitles.js';
 import { formatN, formatUsd, relativeTime } from '../lib/format.js';
 import { getModelColor, getModelFamily } from '../../src/lib/model-colors';
 
@@ -34,6 +35,7 @@ function projectLabel(s) {
  */
 export default function SessionsSurface() {
   const { data, loading, error } = useSessions();
+  const ccdTitles = useCcdTitles();
   const [query, setQuery] = useState('');
   const [project, setProject] = useState('all');
   const [model, setModel] = useState('all');
@@ -152,11 +154,12 @@ export default function SessionsSurface() {
             <tbody>
               {pageRows.map((s) => {
                 const color = getModelColor(s.primaryModel);
+                const ccdTitle = ccdTitles[s.sessionId]?.title;
                 return (
                   <tr
                     key={s.sessionId}
                     className="border-b border-gray-800/50 hover:bg-gray-800/40"
-                    title={`${s.sessionId}\n${s.projectPath || s.projectDir || ''}`}
+                    title={`${ccdTitle ? `“${ccdTitle}”\n` : ''}${s.sessionId}\n${s.projectPath || s.projectDir || ''}`}
                   >
                     <td className="px-3 py-1.5 whitespace-nowrap overflow-hidden text-gray-300">{projectLabel(s)}</td>
                     <td className="px-3 py-1.5 font-mono text-gray-400">{s.sessionId.slice(0, 8)}</td>

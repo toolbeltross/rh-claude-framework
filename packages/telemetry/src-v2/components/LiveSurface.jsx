@@ -5,6 +5,7 @@ import CurrentPrompt from '../../src/components/CurrentPrompt.jsx';
 import AgentActivity from '../../src/components/AgentActivity.jsx';
 import ToolActivity from '../../src/components/ToolActivity.jsx';
 import { formatUsd, relativeTime } from '../lib/format.js';
+import { useCcdTitles } from '../hooks/useCcdTitles.js';
 
 /**
  * Surface 1 — Live (plan 3.1, v2-ia.md).
@@ -23,6 +24,7 @@ export default function LiveSurface({ live }) {
     toolEvents,
     connected,
   } = live;
+  const ccdTitles = useCcdTitles();
 
   const liveSession = selectedSessionId ? liveSessions[selectedSessionId] : null;
 
@@ -72,6 +74,8 @@ export default function LiveSurface({ live }) {
             return otherLabel === label;
           });
           if (collision) label = `${label} · ${id.slice(0, 8)}`;
+          // Hover shows the same English title Claude Code Desktop displays
+          const ccdTitle = ccdTitles[id]?.title;
           return (
             <button
               key={id}
@@ -79,7 +83,7 @@ export default function LiveSurface({ live }) {
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors ${
                 selected ? 'bg-gray-800 text-gray-100' : 'bg-gray-900 text-gray-400 hover:text-gray-200'
               }`}
-              title={`${id} — ${activity}`}
+              title={`${ccdTitle ? `“${ccdTitle}”\n` : ''}${id} — ${activity}`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${

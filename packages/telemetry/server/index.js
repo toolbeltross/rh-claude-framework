@@ -14,6 +14,7 @@ import hookReceiver from './hook-receiver.js';
 import trendsRouter from './trends-router.js';
 import { aggregatesStore, decomposeSubagentPath } from './aggregates-store.js';
 import { readOversightEvents, startOversightWatcher } from './oversight-bridge.js';
+import { getCcdSessionTitles } from './ccd-sessions.js';
 
 import {
   PORT,
@@ -59,6 +60,16 @@ app.get('/api/sessions', (_req, res) => {
 // Cross-session subagent list + per-type leaderboard (Subagents surface).
 app.get('/api/subagents', (_req, res) => {
   res.json(aggregatesStore.getSubagents());
+});
+
+// Claude Code Desktop session titles, keyed by transcript session id.
+// Empty map on machines without the Desktop app — clients must fall back.
+app.get('/api/ccd-sessions', async (_req, res) => {
+  try {
+    res.json({ byCliId: await getCcdSessionTitles() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Oversight events feed — ~/.claude/oversight-events.jsonl read through
