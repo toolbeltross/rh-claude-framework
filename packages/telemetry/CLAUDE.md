@@ -23,8 +23,8 @@ npm run dev          # Vite on :5173, API on :7890
 npm run setup-hooks  # Required: enables live tool feed, validation, prompt capture, agents
 ```
 
-### v2 frontend (in-flight, opt-in)
-v2 ships in the same tarball as v1, gated by an env flag. v1 is untouched and remains the default.
+### v2 frontend (opt-in; all 7 surfaces built, Phase 4 cutover pending)
+v2 ships in the same tarball as v1, gated by an env flag. v1 is untouched and remains the default. All 7 surfaces (Live, Sessions, Subagents, Oversight, Failures, Trends, History) are implemented as of 2026-06-12; the Oversight surface gets real-time WS push (`oversightEvent` frame) with the 30s poll kept as fallback.
 - `RH_TELEMETRY_UI=v2 npm start` (or `rh-telemetry start --ui v2`) → serves `dist-v2/`
 - `npm run build:v2` → build the v2 bundle
 - `npm run client:v2` → Vite dev server for v2 source on `:5174` (proxies API to `:7890`)
@@ -330,11 +330,15 @@ POST /api/compact    — Compaction events (from PreCompact hook)
 POST /api/subagent   — Agent start/stop (from SubagentStart/SubagentStop hooks)
 POST /api/prompt     — Current prompt text (from UserPromptSubmit hook)
 GET  /api/snapshot   — Full state snapshot (used by CLI)
+GET  /api/aggregates — Live transcript aggregates (stats-cache.json replacement; v2 History)
+GET  /api/sessions   — Per-session detail list from the aggregator (v2 Sessions surface)
+GET  /api/subagents  — Cross-session subagent list + per-type leaderboard (v2 Subagents surface)
+GET  /api/oversight/events?days=N — Oversight-events feed via server/oversight-bridge.js (v2 Oversight surface)
 GET  /api/failures          — Query failure history (session, tool, time range)
 GET  /api/failures/patterns — Failure frequency analysis (by tool, by error, by session)
 GET  /api/failures/digest   — Failure summary for time period (default: 24h)
 GET  /api/trends?days=N     — Cross-session/project trend aggregation (P3-2). Wraps rh-supervisor-sweep via createRequire. Default 7, capped at 90. Query overrides: events=<path>, supervisoryLog=<path> (for tests).
-WS   /ws             — WebSocket for real-time updates (includes failureEvent type)
+WS   /ws             — WebSocket for real-time updates (failureEvent, aggregatesUpdated, subagentsAggUpdated, oversightEvent, …)
 ```
 
 ## CLI — `rh-telemetry` (bin/rh-telemetry.js)

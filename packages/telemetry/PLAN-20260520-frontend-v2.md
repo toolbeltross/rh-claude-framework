@@ -177,7 +177,7 @@ Conditional on Phase 0.3 outcome. Two paths:
 
 ---
 
-## Phase 3 — v2 UI build (full redesign, all surfaces) — **PARTIAL: shell + 3 of 9 sub-items**
+## Phase 3 — v2 UI build (full redesign, all surfaces) — **COMPLETE 2026-06-12 (all 7 surfaces live)**
 
 **What's done (2026-05-20):**
 
@@ -205,14 +205,17 @@ Conditional on Phase 0.3 outcome. Two paths:
 - [x] **Theme tokens expanded** (`src-v2/index.css`): mirror v1's `@theme` block so component lifts use the same `text-accent`/`text-amber`/`text-green`/`text-red`/`text-blue`/`text-cyan` token names. Re-screenshotted History after the change — unchanged.
 - [x] **Visual test plan** (`docs/screenshots/v2/README.md`): explicit checklist of what automated DOM verification CANNOT catch (layout-width responsiveness, color contrast, interaction states, empty states, header staleness indicator, WS live behavior). Designed for Claude Desktop human walkthrough.
 
-### What's still PARTIAL (defer to next session)
+### Completed 2026-06-12 (third pass — closes the Phase 3 backlog)
 
-- [ ] **3.1 — Live** (placeholder only): WS-driven active-session view. Needs to lift `ContextWindow`, `ModelBreakdownMini`, `TurnHeartbeat`, `CurrentPrompt`, `SubagentTracker` (active rows only).
-- [ ] **3.2 — Sessions** (placeholder only): browse/filter/search 141 on-disk sessions. Needs per-session detail endpoint addition to aggregator (currently `/api/aggregates` only returns rolled-up totals).
-- [ ] **3.3 — Subagents** (placeholder only): walk `<sessionId>/subagents/agent-*.jsonl` (595 found). Cross-session leaderboard with cost, duration, fails. Needs aggregator extension to walk 2 levels deep + a separate `/api/subagents` endpoint.
-- [ ] **Oversight WS push** (deferred from 3.5): add chokidar watcher on `oversight-events.jsonl` + WS `OVERSIGHT_EVENT` frame so the surface updates in real time instead of polling every 30s.
+- [x] **3.1 — Live** (`src-v2/components/LiveSurface.jsx`): lifts v1's `useDashboardData`, `ContextWindow`, `ModelBreakdownMini`, `TurnHeartbeat`, `CurrentPrompt`, `AgentActivity`, `ToolActivity` verbatim via cross-tree import (the Phase 1 pattern). Adds a v2 session picker (activity dot + workspace label) + meta strip. Designed empty state per v2-ia.md. Cleanup row `77cb9091dc`.
+- [x] **3.2 — Sessions** (`src-v2/components/SessionsSurface.jsx` + `hooks/useSessions.js` + `GET /api/sessions`): aggregator gained `getSessions()` per-session serialization (sessionId, projectDir/path, msgs, tools, cost, duration, primaryModel, per-model tokens). UI: search, project + model-family filters, 4 sorts, 50/page client-side pagination. Refetches on WS `aggregatesUpdated`. Cleanup row `2d4fcda7fb`.
+- [x] **3.3 — Subagents** (`src-v2/components/SubagentsSurface.jsx` + `hooks/useSubagents.js` + `GET /api/subagents`): aggregator now walks `<projDir>/<sessionId>/subagents/agent-*.jsonl` two levels deep. **Agent type/status/prompt joined from the parent transcript's `toolUseResult` records** (the only place dispatch metadata lives — agent transcripts carry only model/usage). Leaderboard by type (runs, ∑cost, ∑tokens, avg dur, fails, top model) + recent-runs table with click-to-expand prompt detail. New WS frame `subagentsAggUpdated`. Cleanup row `bd60f0ea61`.
+- [x] **Oversight WS push** (deferred from 3.5): `startOversightWatcher()` in `server/oversight-bridge.js` — chokidar polling watch on `oversight-events.jsonl`, byte-offset tail reader that only consumes complete lines (no half-parsed events), `oversightEvent` WS frame via new `broadcastFrame()` export. `useOversight` triggers a debounced refetch on the frame; the 30s poll is KEPT as fallback (ADDITIVE ONLY). Cleanup row `11b47974e9`.
+- [x] **Watcher routing bug fixed** (found during 3.3): the `**/*.jsonl` chokidar watcher in `server/index.js` was feeding subagent transcript writes into `reloadSession()`, silently inserting `agent-*` pseudo-sessions into session aggregates after boot. Now routed through `decomposeSubagentPath()` → `reloadSubagent()`. Unit test pins both walks (`subagent transcripts do NOT inflate session aggregates`).
 
-**Phase 3 time spent so far:** ~1 hour. Remaining estimated: 6-12 hours depending on depth.
+**Tests:** `tests/unit/subagents-aggregation.test.js` (5 tests) + `tests/integration/v2-surfaces-endpoints.test.js` (2 tests, incl. WS oversightEvent push against a spawned server with tmp HOME).
+
+**Phase 3 time spent:** ~1 hour (first pass) + this session.
 
 ---
 

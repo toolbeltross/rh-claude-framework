@@ -6,11 +6,11 @@ export function formatN(n) {
   return String(Math.round(n));
 }
 
-/** USD cost formatter ($1234.56) */
+/** USD cost formatter — styleguide §13: ≥ $0.01 two decimals, below four */
 export function formatUsd(n) {
   if (n == null || isNaN(n)) return '—';
   if (n >= 1000) return `$${n.toFixed(0)}`;
-  if (n >= 1) return `$${n.toFixed(2)}`;
+  if (n >= 0.01) return `$${n.toFixed(2)}`;
   return `$${n.toFixed(4)}`;
 }
 
