@@ -57,6 +57,18 @@ app.get('/api/sessions', (_req, res) => {
   res.json(aggregatesStore.getSessions());
 });
 
+// Single-session drill-through: deep transcript parse + this session's
+// subagent runs. 404 when the transcript is gone (pruned by Claude Code).
+app.get('/api/sessions/:id', async (req, res) => {
+  try {
+    const detail = await aggregatesStore.getSessionDetail(req.params.id);
+    if (!detail) return res.status(404).json({ error: 'session not found on disk' });
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cross-session subagent list + per-type leaderboard (Subagents surface).
 app.get('/api/subagents', (_req, res) => {
   res.json(aggregatesStore.getSubagents());

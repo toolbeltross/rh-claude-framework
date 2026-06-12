@@ -101,6 +101,44 @@ test('GET /api/sessions + /api/subagents serve seeded transcripts with type join
   }, 'v2-endpoints');
 });
 
+test('GET /api/sessions/:id returns deep detail: prompts, tools, subagents', async () => {
+  await withTmp(async (tmp) => {
+    seedHome(tmp);
+    const projDir = join(tmp, '.claude', 'projects', 'proj-x');
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, 'sess-d.jsonl'), [
+      JSON.stringify({ type: 'user', timestamp: '2026-06-10T10:00:00Z', sessionId: 'sess-d', cwd: '/work/proj-x', message: { role: 'user', content: 'build the thing' } }),
+      assistantLine('2026-06-10T10:01:00Z', 'sess-d', 'claude-opus-4-7', 1000),
+      userLine('2026-06-10T10:05:00Z', 'sess-d', {
+        toolUseResult: { agentId: 'agD', agentType: 'Explore', status: 'completed', prompt: 'scan', totalDurationMs: 1000, totalToolUseCount: 2 },
+      }),
+    ].join('\n') + '\n');
+    const subDir = join(projDir, 'sess-d', 'subagents');
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(join(subDir, 'agent-agD.jsonl'), [
+      userLine('2026-06-10T10:01:10Z', 'sess-d'),
+      assistantLine('2026-06-10T10:02:00Z', 'sess-d', 'claude-haiku-4-5', 200),
+    ].join('\n') + '\n');
+
+    const server = await startTestServer({ tmpHome: tmp });
+    try {
+      await new Promise((r) => setTimeout(r, 500));
+      const d = await getJson(`${server.baseUrl}/api/sessions/sess-d`);
+      assert.strictEqual(d.sessionId, 'sess-d');
+      assert.strictEqual(d.prompts[0].text, 'build the thing');
+      assert.strictEqual(d.toolsByName.Read, 1, 'tool_use counted by name');
+      assert.strictEqual(d.subagents.length, 1);
+      assert.strictEqual(d.subagents[0].agentType, 'Explore');
+      assert.ok(d.totalCost > 0);
+      // 404 for a pruned/unknown session
+      const res = await fetch(`${server.baseUrl}/api/sessions/nope`);
+      assert.strictEqual(res.status, 404);
+    } finally {
+      await server.stop();
+    }
+  }, 'v2-session-detail');
+});
+
 test('GET /api/ccd-sessions maps transcript ids to Desktop titles (empty without APPDATA)', async () => {
   await withTmp(async (tmp) => {
     seedHome(tmp);

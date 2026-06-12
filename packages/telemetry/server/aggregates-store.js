@@ -300,6 +300,7 @@ export class AggregatesStore extends EventEmitter {
         const session = await parseTranscript(path, sessionId);
         if (session) {
           session.projectDir = projectDir;
+          session.path = path;
           this.sessions.set(sessionId, session);
         }
       }
@@ -438,6 +439,7 @@ export class AggregatesStore extends EventEmitter {
     const session = await parseTranscript(path, sessionId);
     if (session) {
       session.projectDir = projectDir || this.sessions.get(sessionId)?.projectDir || null;
+      session.path = path;
       this.sessions.set(sessionId, session);
     } else {
       this.sessions.delete(sessionId);
@@ -503,6 +505,36 @@ export class AggregatesStore extends EventEmitter {
   }
 
   /**
+   * Full drill-through detail for one session: the rolled-up record, a deep
+   * transcript parse (prompt timeline + per-tool counts), and this session's
+   * subagent runs. Transcript is read on demand — cheap (~2ms typical) and
+   * always current.
+   */
+  async getSessionDetail(sessionId) {
+    const s = this.sessions.get(sessionId);
+    if (!s || !s.path) return null;
+    const deep = await parseSessionDetail(s.path);
+    const subagents = this.getSubagents().agents.filter((a) => a.parentSessionId === sessionId);
+    return {
+      sessionId: s.sessionId,
+      projectDir: s.projectDir || null,
+      projectPath: s.projectPath,
+      firstTs: s.firstTs,
+      lastTs: s.lastTs,
+      durationMs: s.durationMs,
+      messageCount: s.messageCount,
+      toolCallCount: s.toolCallCount,
+      totalCost: s.totalCost,
+      models: serializeModels(s.models),
+      primaryModel: primaryModelOf(s.models),
+      prompts: deep?.prompts || [],
+      promptCount: deep?.promptCount || 0,
+      toolsByName: deep?.toolsByName || {},
+      subagents,
+    };
+  }
+
+  /**
    * Cross-session subagent list + per-type leaderboard for the Subagents
    * surface. Type/status/prompt are joined from the parent session's
    * toolUseResult records when available; the agent's own first user message
@@ -565,6 +597,58 @@ export class AggregatesStore extends EventEmitter {
 
     return { agents, byType, totalAgents: agents.length, lastComputedAt: this.lastComputedAt };
   }
+}
+
+/**
+ * Deep-parse one session transcript for the detail view (on-demand — not part
+ * of the always-warm aggregate). Returns the user-prompt timeline and per-tool
+ * usage counts that the rolled-up session record doesn't carry.
+ */
+export async function parseSessionDetail(path) {
+  let buf;
+  try {
+    buf = await readFile(path, 'utf8');
+  } catch {
+    return null;
+  }
+  const prompts = [];
+  const toolsByName = {};
+  let promptCount = 0;
+  for (const line of buf.split('\n')) {
+    if (!line) continue;
+    let obj;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (obj.isSidechain) continue; // subagent traffic — counted on the Subagents surface
+    const msg = obj.message;
+    if (!msg) continue;
+    if (obj.type === 'user' && !obj.isMeta) {
+      let text = null;
+      if (typeof msg.content === 'string') {
+        text = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        const block = msg.content.find((b) => b && b.type === 'text' && typeof b.text === 'string');
+        if (block) text = block.text;
+      }
+      // Skip tool_result-only user lines and harness-injected XML wrappers
+      if (text && !text.startsWith('<')) {
+        promptCount++;
+        if (prompts.length < 100) {
+          prompts.push({ ts: obj.timestamp || null, text: text.slice(0, 500) });
+        }
+      }
+    } else if (obj.type === 'assistant' && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block && block.type === 'tool_use' && block.name) {
+          toolsByName[block.name] = (toolsByName[block.name] || 0) + 1;
+        }
+      }
+    }
+  }
+  return { prompts, promptCount, toolsByName };
 }
 
 /** Map<modelId, tokens> → plain object */
