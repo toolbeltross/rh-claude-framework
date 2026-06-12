@@ -74,6 +74,17 @@ app.get('/api/subagents', (_req, res) => {
   res.json(aggregatesStore.getSubagents());
 });
 
+// Single-agent drill-through: record + tool histogram from the agent transcript.
+app.get('/api/subagents/:id', async (req, res) => {
+  try {
+    const detail = await aggregatesStore.getSubagentDetail(req.params.id);
+    if (!detail) return res.status(404).json({ error: 'agent transcript not found on disk' });
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Claude Code Desktop session titles, keyed by transcript session id.
 // Empty map on machines without the Desktop app — clients must fall back.
 app.get('/api/ccd-sessions', async (_req, res) => {

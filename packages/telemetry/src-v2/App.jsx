@@ -14,6 +14,8 @@ import { useDashboardData } from '../src/hooks/useDashboardData';
 
 export default function App() {
   const [active, setActive] = useState('history');
+  // Cross-surface deep link: { id, ts } nonce → Sessions opens that detail view
+  const [sessionDeepLink, setSessionDeepLink] = useState(null);
   const userNavigated = useRef(false);
   const { aggregates, loading, error, lastUpdated, refresh } = useAggregates();
   // Single live-data WS for the whole app — Header (plan gauges, LIVE chip,
@@ -32,6 +34,14 @@ export default function App() {
     setActive(id);
   };
 
+  // Open a specific session's drill-through from any surface (Live meta strip,
+  // AgentDetail parent link). The ts nonce re-triggers on repeat clicks.
+  const openSessionDetail = (sessionId) => {
+    userNavigated.current = true;
+    setSessionDeepLink({ id: sessionId, ts: Date.now() });
+    setActive('sessions');
+  };
+
   return (
     <div className="h-screen flex bg-gray-950 text-gray-100">
       <Sidebar active={active} onSelect={handleSelect} />
@@ -46,23 +56,31 @@ export default function App() {
           onLiveClick={() => handleSelect('live')}
         />
         <main className="flex-1 overflow-auto">
-          <Surface active={active} aggregates={aggregates} loading={loading} error={error} live={live} />
+          <Surface
+            active={active}
+            aggregates={aggregates}
+            loading={loading}
+            error={error}
+            live={live}
+            sessionDeepLink={sessionDeepLink}
+            onOpenSessionDetail={openSessionDetail}
+          />
         </main>
       </div>
     </div>
   );
 }
 
-function Surface({ active, aggregates, loading, error, live }) {
+function Surface({ active, aggregates, loading, error, live, sessionDeepLink, onOpenSessionDetail }) {
   switch (active) {
     case 'history':
       return <HistorySurface aggregates={aggregates} loading={loading} error={error} />;
     case 'live':
-      return <LiveSurface live={live} />;
+      return <LiveSurface live={live} onOpenDetail={onOpenSessionDetail} />;
     case 'sessions':
-      return <SessionsSurface />;
+      return <SessionsSurface deepLink={sessionDeepLink} />;
     case 'subagents':
-      return <SubagentsSurface />;
+      return <SubagentsSurface onOpenSession={onOpenSessionDetail} />;
     case 'oversight':
       return <OversightSurface />;
     case 'failures':

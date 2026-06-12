@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSessions } from '../hooks/useSessions.js';
 import { useCcdTitles } from '../hooks/useCcdTitles.js';
 import SessionDetail from './SessionDetail.jsx';
@@ -34,7 +34,7 @@ function projectLabel(s) {
  * Surface 2 — Sessions (plan 3.2, v2-ia.md).
  * Browse/filter/search every on-disk session from the live aggregator.
  */
-export default function SessionsSurface() {
+export default function SessionsSurface({ deepLink = null }) {
   const { data, loading, error } = useSessions();
   const ccdTitles = useCcdTitles();
   const [query, setQuery] = useState('');
@@ -42,7 +42,13 @@ export default function SessionsSurface() {
   const [model, setModel] = useState('all');
   const [sort, setSort] = useState('recent');
   const [page, setPage] = useState(0);
-  const [openSession, setOpenSession] = useState(null); // sessionId → drill-through view
+  const [openSession, setOpenSession] = useState(deepLink?.id || null); // sessionId → drill-through view
+
+  // Cross-surface deep link (Live meta strip, AgentDetail parent link).
+  // ts nonce makes repeat clicks on the same session re-open the view.
+  useEffect(() => {
+    if (deepLink?.id) setOpenSession(deepLink.id);
+  }, [deepLink]);
 
   const sessions = data?.sessions || [];
 

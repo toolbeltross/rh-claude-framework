@@ -14,7 +14,7 @@ import { useCcdTitles } from '../hooks/useCcdTitles.js';
  * are v1 components lifted verbatim via cross-tree import (the Phase 1
  * pattern); this file only contributes the session picker + layout.
  */
-export default function LiveSurface({ live }) {
+export default function LiveSurface({ live, onOpenDetail }) {
   const {
     liveSessions,
     sessionIds,
@@ -120,10 +120,19 @@ export default function LiveSurface({ live }) {
           );
         })}
         {liveSession && (
-          <span className="ml-auto text-[10px] text-gray-500 font-mono" title="model · session cost · last event">
-            {liveSession.model?.display_name || liveSession.model?.id || '—'}
-            {' · '}{liveSession.cost?.total_cost_usd != null ? formatUsd(liveSession.cost.total_cost_usd) : '—'}
-            {' · '}{relativeTime(liveSession._lastSeen)}
+          <span className="ml-auto flex items-center gap-2">
+            <span className="text-[10px] text-gray-500 font-mono" title="model · session cost · last event">
+              {liveSession.model?.display_name || liveSession.model?.id || '—'}
+              {' · '}{liveSession.cost?.total_cost_usd != null ? formatUsd(liveSession.cost.total_cost_usd) : '—'}
+              {' · '}{relativeTime(liveSession._lastSeen)}
+            </span>
+            <button
+              onClick={() => onOpenDetail?.(selectedSessionId)}
+              className="text-[10px] px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-gray-200"
+              title="Open this session's full historical detail (transcript-backed — survives the live prune)"
+            >
+              details ›
+            </button>
           </span>
         )}
       </div>

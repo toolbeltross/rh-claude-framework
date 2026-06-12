@@ -103,12 +103,38 @@ export const ALLOWLIST = new Set([
 
 // ─── Dangerous Patterns (always BLOCK) ───────────────────────────────────────
 
+/**
+ * True when an rm target token IS the filesystem root, a bare drive root, or
+ * a home directory itself — as opposed to a file/dir somewhere under them.
+ * The previous regex fired on ANY argument starting with `/` (so
+ * `rm /c/Users/x/Temp/file.zip` was blocked — observed false positives
+ * 2026-06-12); this checks the resolved target, not its first character.
+ */
+function isRmTargetRootOrHome(token) {
+  let t = token.replace(/^["']|["']$/g, ''); // strip quotes
+  if (/^[\\/]+\*?$/.test(t)) return true; // "/", "//", "/*"
+  t = t.replace(/\\/g, '/');
+  t = t.replace(/\/\*$/, ''); // "X/*" → treat as X (rm -rf home/* empties home)
+  t = t.replace(/\/+$/, ''); // trailing slashes
+  if (/^(~|\$HOME|%USERPROFILE%)$/i.test(t)) return true; // home aliases
+  if (/^\/[a-z]$/i.test(t)) return true; // bare drive: /c
+  if (/^[a-z]:$/i.test(t)) return true; // bare drive: C:
+  if (/^(?:[a-z]:|\/[a-z])?\/(?:Users|home)\/[^/]+$/i.test(t)) return true; // home dir itself
+  return false;
+}
+
 /** Patterns that are genuinely dangerous — hard exit 2 block. */
 export const DANGEROUS_PATTERNS = [
   {
-    test: (cmd) => /rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)?(-[a-zA-Z]*r[a-zA-Z]*\s+)?(\/|~\/?\s*$)/i.test(cmd)
-      || /rm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+)?(-[a-zA-Z]*f[a-zA-Z]*\s+)?(\/|~\/?\s*$)/i.test(cmd),
-    message: 'BLOCKED: rm -rf on root or home directory is extremely dangerous.',
+    test: (cmd) => {
+      const m = /(?:^|[;&|]\s*)rm\s+(.+)$/i.exec(cmd);
+      if (!m) return false;
+      return m[1]
+        .split(/\s+/)
+        .filter((tok) => tok && !tok.startsWith('-'))
+        .some(isRmTargetRootOrHome);
+    },
+    message: 'BLOCKED: rm targeting the filesystem root, a drive root, or a home directory is extremely dangerous.',
   },
   {
     test: (cmd) => />\s*~\/\.claude\/settings\.json/.test(cmd),

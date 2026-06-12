@@ -133,6 +133,14 @@ test('GET /api/sessions/:id returns deep detail: prompts, tools, subagents', asy
       // 404 for a pruned/unknown session
       const res = await fetch(`${server.baseUrl}/api/sessions/nope`);
       assert.strictEqual(res.status, 404);
+
+      // Agent drill-through: sidechain lines included, tool histogram present
+      const ad = await getJson(`${server.baseUrl}/api/subagents/agD`);
+      assert.strictEqual(ad.agentType, 'Explore');
+      assert.strictEqual(ad.toolsByName.Read, 1, 'agent transcript tool_use counted');
+      assert.strictEqual(ad.parentSessionId, 'sess-d');
+      const res2 = await fetch(`${server.baseUrl}/api/subagents/nope`);
+      assert.strictEqual(res2.status, 404);
     } finally {
       await server.stop();
     }

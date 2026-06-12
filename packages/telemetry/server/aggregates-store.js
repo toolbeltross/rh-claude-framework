@@ -312,6 +312,7 @@ export class AggregatesStore extends EventEmitter {
         if (agent) {
           agent.projectDir = projectDir;
           agent.parentSessionId = parentSessionId;
+          agent.path = path;
           this.subagents.set(agentId, agent);
         }
       }
@@ -463,6 +464,7 @@ export class AggregatesStore extends EventEmitter {
       const prev = this.subagents.get(agentId);
       agent.projectDir = projectDir || prev?.projectDir || null;
       agent.parentSessionId = parentSessionId || prev?.parentSessionId || null;
+      agent.path = path;
       this.subagents.set(agentId, agent);
     } else {
       this.subagents.delete(agentId);
@@ -531,6 +533,24 @@ export class AggregatesStore extends EventEmitter {
       promptCount: deep?.promptCount || 0,
       toolsByName: deep?.toolsByName || {},
       subagents,
+    };
+  }
+
+  /**
+   * Full drill-through detail for one subagent run: the serialized agent
+   * record + a deep transcript parse (tool histogram; sidechain lines
+   * included since agent transcripts are entirely sidechain).
+   */
+  async getSubagentDetail(agentId) {
+    const a = this.subagents.get(agentId);
+    if (!a || !a.path) return null;
+    const serialized = this.getSubagents().agents.find((x) => x.agentId === agentId);
+    if (!serialized) return null;
+    const deep = await parseSessionDetail(a.path, { includeSidechain: true });
+    return {
+      ...serialized,
+      toolsByName: deep?.toolsByName || {},
+      prompts: deep?.prompts || [],
     };
   }
 
@@ -604,7 +624,7 @@ export class AggregatesStore extends EventEmitter {
  * of the always-warm aggregate). Returns the user-prompt timeline and per-tool
  * usage counts that the rolled-up session record doesn't carry.
  */
-export async function parseSessionDetail(path) {
+export async function parseSessionDetail(path, { includeSidechain = false } = {}) {
   let buf;
   try {
     buf = await readFile(path, 'utf8');
@@ -622,7 +642,9 @@ export async function parseSessionDetail(path) {
     } catch {
       continue;
     }
-    if (obj.isSidechain) continue; // subagent traffic — counted on the Subagents surface
+    // Session transcripts: skip subagent traffic (counted on the Subagents
+    // surface). Agent transcripts: every line is sidechain — include them.
+    if (obj.isSidechain && !includeSidechain) continue;
     const msg = obj.message;
     if (!msg) continue;
     if (obj.type === 'user' && !obj.isMeta) {
