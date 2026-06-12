@@ -1,4 +1,3 @@
-import { useDashboardData } from '../../src/hooks/useDashboardData';
 import ContextWindow from '../../src/components/ContextWindow.jsx';
 import ModelBreakdownMini from '../../src/components/ModelBreakdownMini.jsx';
 import TurnHeartbeat from '../../src/components/TurnHeartbeat.jsx';
@@ -14,7 +13,7 @@ import { formatUsd, relativeTime } from '../lib/format.js';
  * are v1 components lifted verbatim via cross-tree import (the Phase 1
  * pattern); this file only contributes the session picker + layout.
  */
-export default function LiveSurface() {
+export default function LiveSurface({ live }) {
   const {
     liveSessions,
     sessionIds,
@@ -23,7 +22,7 @@ export default function LiveSurface() {
     sessionActivity,
     toolEvents,
     connected,
-  } = useDashboardData();
+  } = live;
 
   const liveSession = selectedSessionId ? liveSessions[selectedSessionId] : null;
 
@@ -59,9 +58,20 @@ export default function LiveSurface() {
           const s = liveSessions[id];
           const activity = sessionActivity[id] || 'idle';
           const selected = id === selectedSessionId;
-          const label = s?.workspace?.project_dir?.split(/[\\/]/).pop()
+          let label = s?.workspace?.project_dir?.split(/[\\/]/).pop()
             || s?.workspace?.current_dir?.split(/[\\/]/).pop()
             || id.slice(0, 8);
+          // Two sessions in the same workspace would render identical pills —
+          // disambiguate with the short session id.
+          const collision = sessionIds.some((other) => {
+            if (other === id) return false;
+            const o = liveSessions[other];
+            const otherLabel = o?.workspace?.project_dir?.split(/[\\/]/).pop()
+              || o?.workspace?.current_dir?.split(/[\\/]/).pop()
+              || other.slice(0, 8);
+            return otherLabel === label;
+          });
+          if (collision) label = `${label} · ${id.slice(0, 8)}`;
           return (
             <button
               key={id}
