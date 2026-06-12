@@ -7,13 +7,13 @@ import { dirname, join, basename } from 'path';
 import { existsSync } from 'fs';
 import { store } from './store.js';
 import { startWatchers } from './watchers.js';
-import { startBroadcaster } from './broadcaster.js';
+import { startBroadcaster, broadcastFrame } from './broadcaster.js';
 import { startPlanDetector } from './plan-detector.js';
 import { startStatusLineWatcher } from './statusline-watcher.js';
 import hookReceiver from './hook-receiver.js';
 import trendsRouter from './trends-router.js';
-import { aggregatesStore } from './aggregates-store.js';
-import { readOversightEvents } from './oversight-bridge.js';
+import { aggregatesStore, decomposeSubagentPath } from './aggregates-store.js';
+import { readOversightEvents, startOversightWatcher } from './oversight-bridge.js';
 
 import {
   PORT,
@@ -49,6 +49,16 @@ app.get('/api/health', (_req, res) => {
 // Output shape matches parser.js:parseStatsCache + lastComputedAt timestamp.
 app.get('/api/aggregates', (_req, res) => {
   res.json(aggregatesStore.getAggregates());
+});
+
+// Per-session detail list (Sessions surface). Same aggregator, un-rolled.
+app.get('/api/sessions', (_req, res) => {
+  res.json(aggregatesStore.getSessions());
+});
+
+// Cross-session subagent list + per-type leaderboard (Subagents surface).
+app.get('/api/subagents', (_req, res) => {
+  res.json(aggregatesStore.getSubagents());
 });
 
 // Oversight events feed — ~/.claude/oversight-events.jsonl read through
@@ -137,7 +147,18 @@ if (existsSync(CLAUDE_PROJECTS_DIR)) {
     ignoreInitial: true, // initial load handled by loadAll()
   });
 
+  // Route subagent transcripts (<projDir>/<sessionId>/subagents/agent-*.jsonl)
+  // to the subagent store. Before this branch existed, the recursive glob fed
+  // them into reloadSession(), silently inflating session aggregates whenever
+  // an active subagent wrote its transcript.
   const handleEvent = (path) => {
+    const sub = decomposeSubagentPath(path);
+    if (sub) {
+      aggregatesStore.reloadSubagent(sub.agentId, path, sub.projectDir, sub.parentSessionId).catch((err) => {
+        console.warn(`[aggregates] reloadSubagent(${sub.agentId}) failed: ${err.message}`);
+      });
+      return;
+    }
     const sessionId = basename(path).replace(/\.jsonl$/, '');
     aggregatesStore.reloadSession(sessionId, path).catch((err) => {
       console.warn(`[aggregates] reloadSession(${sessionId}) failed: ${err.message}`);
@@ -147,6 +168,11 @@ if (existsSync(CLAUDE_PROJECTS_DIR)) {
   projectsWatcher.on('add', handleEvent);
   projectsWatcher.on('change', handleEvent);
   projectsWatcher.on('unlink', (path) => {
+    const sub = decomposeSubagentPath(path);
+    if (sub) {
+      aggregatesStore.removeSubagent(sub.agentId);
+      return;
+    }
     const sessionId = basename(path).replace(/\.jsonl$/, '');
     aggregatesStore.removeSession(sessionId);
   });
@@ -155,6 +181,13 @@ if (existsSync(CLAUDE_PROJECTS_DIR)) {
 } else {
   console.warn(`[aggregates] ${CLAUDE_PROJECTS_DIR} does not exist — aggregator will be empty`);
 }
+
+// Real-time oversight push: watch ~/.claude/oversight-events.jsonl and push
+// appended events to all WS clients. The Oversight surface keeps its 30s poll
+// as fallback (ADDITIVE — both paths stay live per project rules).
+startOversightWatcher((events) => {
+  broadcastFrame('oversightEvent', { events });
+});
 
 // Prune stale live sessions every 5 minutes (manual refresh button handles immediate cleanup)
 setInterval(() => store.pruneStale(), 5 * 60_000);

@@ -57,6 +57,16 @@ export function startBroadcaster(server) {
     });
   });
 
+  // Broadcast subagent-aggregates updates (cross-session Subagents surface).
+  // Payload deliberately omitted — the full list is heavy and the client
+  // refetches GET /api/subagents on this signal.
+  aggregatesStore.on('subagents-update', () => {
+    broadcast({
+      type: 'subagentsAggUpdated',
+      data: { ts: Date.now() },
+    });
+  });
+
   // Broadcast live session updates
   store.on('liveSession', (data) => {
     broadcast({
@@ -182,4 +192,13 @@ function broadcast(message) {
       client.send(json);
     }
   }
+}
+
+/**
+ * Broadcast an arbitrary typed frame from outside this module.
+ * Used by wiring code (e.g. the oversight-events watcher in index.js) that
+ * has no store EventEmitter of its own. No-op until startBroadcaster runs.
+ */
+export function broadcastFrame(type, data) {
+  broadcast({ type, data });
 }

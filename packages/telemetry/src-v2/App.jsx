@@ -5,6 +5,9 @@ import HistorySurface from './components/HistorySurface.jsx';
 import FailuresSurface from './components/FailuresSurface.jsx';
 import OversightSurface from './components/OversightSurface.jsx';
 import TrendsSurface from './components/TrendsSurface.jsx';
+import LiveSurface from './components/LiveSurface.jsx';
+import SessionsSurface from './components/SessionsSurface.jsx';
+import SubagentsSurface from './components/SubagentsSurface.jsx';
 import PlaceholderSurface from './components/PlaceholderSurface.jsx';
 import { useAggregates } from './hooks/useAggregates.js';
 
@@ -30,23 +33,11 @@ function Surface({ active, aggregates, loading, error }) {
     case 'history':
       return <HistorySurface aggregates={aggregates} loading={loading} error={error} />;
     case 'live':
-      return <PlaceholderSurface
-        title="Live"
-        phaseRef="Phase 3.1"
-        hint="Will lift v1's ContextWindow, ModelBreakdownMini, TurnHeartbeat, CurrentPrompt, SubagentTracker. Source: WS liveSessions[activeSession]."
-      />;
+      return <LiveSurface />;
     case 'sessions':
-      return <PlaceholderSurface
-        title="Sessions"
-        phaseRef="Phase 3.2"
-        hint={`Will browse all ${aggregates?.totalSessions ?? '—'} on-disk sessions with filter/search/pagination. Source: GET /api/aggregates (per-session detail to be added).`}
-      />;
+      return <SessionsSurface />;
     case 'subagents':
-      return <PlaceholderSurface
-        title="Subagents"
-        phaseRef="Phase 3.3"
-        hint="Cross-session leaderboard of subagent activity. Source: walking <sessionId>/subagents/agent-*.jsonl files (595 found in current ~/.claude/projects/)."
-      />;
+      return <SubagentsSurface />;
     case 'oversight':
       return <OversightSurface />;
     case 'failures':

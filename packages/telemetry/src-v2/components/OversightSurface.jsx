@@ -9,7 +9,7 @@ const RANGES = [
   { id: 30, label: '30d' },
 ];
 
-// Visual signals per event_type (per Phase 0.6 catalog)
+// Visual signals per event_type (Phase 0.6 catalog + types observed since)
 const EVENT_META = {
   instructions_loaded:         { kind: 'heartbeat', label: 'Instructions loaded',         color: 'text-gray-500' },
   oversight_auto_inject:       { kind: 'warning',   label: 'Auto-injected oversight',    color: 'text-amber-400' },
@@ -17,6 +17,9 @@ const EVENT_META = {
   subagent_orphan_alert:       { kind: 'alert',     label: 'Subagent orphan',            color: 'text-red-400' },
   subagent_protocol_violation: { kind: 'alert',     label: 'Subagent protocol violation', color: 'text-red-400' },
   journal_staleness_alert:     { kind: 'warning',   label: 'Journal stale',              color: 'text-amber-400' },
+  layer3a_rejection:           { kind: 'alert',     label: 'Layer 3a rejection',         color: 'text-red-400' },
+  scribe_row_review_needed:    { kind: 'warning',   label: 'Scribe row needs review',    color: 'text-amber-400' },
+  scribe_db_write_failed:      { kind: 'alert',     label: 'Scribe DB write failed',     color: 'text-red-400' },
 };
 
 export default function OversightSurface() {
@@ -81,7 +84,9 @@ export default function OversightSurface() {
                 <div key={type} className="flex items-center gap-3 py-1.5 px-2 hover:bg-gray-900 rounded">
                   <span className={`text-xs uppercase tracking-wider ${meta.color} w-32`}>{meta.kind || 'event'}</span>
                   <span className="text-sm text-gray-200 flex-1">{meta.label}</span>
-                  <span className="text-xs text-gray-500 font-mono">{type}</span>
+                  {meta.label !== type && (
+                    <span className="text-xs text-gray-500 font-mono">{type}</span>
+                  )}
                   <span className="text-xs text-gray-400 font-mono w-12 text-right">{entry.count}</span>
                   <span className="text-xs text-gray-600 font-mono w-20 text-right">{relativeTime(entry.lastSeen)}</span>
                 </div>

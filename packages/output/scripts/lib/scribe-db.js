@@ -91,11 +91,11 @@ function writeRow(row) {
       ') ON CONFLICT (bucket, row_id) DO UPDATE SET content = EXCLUDED.content, status = EXCLUDED.status, raw_line = EXCLUDED.raw_line, updated_at = now();';
     const res = runSql(sql);
     if (!res.ok) {
-      appendOversightEvent({ event_type: 'scribe_db_write_failed', data: { bucket: row.bucket, row_id: row.row_id, error: res.error } });
+      appendOversightEvent('scribe_db_write_failed', { bucket: row.bucket, row_id: row.row_id, error: res.error });
     }
     return res;
   } catch (e) {
-    try { appendOversightEvent({ event_type: 'scribe_db_write_failed', data: { bucket: row && row.bucket, row_id: row && row.row_id, error: String(e.message || e) } }); } catch {}
+    try { appendOversightEvent('scribe_db_write_failed', { bucket: row && row.bucket, row_id: row && row.row_id, error: String(e.message || e) }); } catch {}
     return { ok: false, error: String(e.message || e) };
   }
 }

@@ -56,6 +56,20 @@ function readEvents(filePath, windowStartMs, windowEndMs) {
     const ts = Date.parse(ev?.timestamp);
     if (!Number.isFinite(ts)) continue;
     if (ts < windowStartMs || ts > windowEndMs) continue;
+    // Normalize double-wrapped events (writer bug 2026-06-11: a whole
+    // {event_type, data} object passed as the eventType argument). A
+    // non-string event_type flows into byType keys and crashes consumers
+    // that render them (telemetry Trends tab, React error #31).
+    if (ev.event_type && typeof ev.event_type === 'object') {
+      const inner = ev.event_type;
+      ev = {
+        ...ev,
+        event_type: typeof inner.event_type === 'string' ? inner.event_type : 'unknown',
+        data: inner.data && typeof inner.data === 'object' ? inner.data : ev.data,
+      };
+    } else if (typeof ev.event_type !== 'string' || !ev.event_type) {
+      ev = { ...ev, event_type: 'unknown' };
+    }
     events.push({ ...ev, _ts: ts });
   }
   return { events, totalLines: lines.length, parsedLines: parsed, fileMissing: false };

@@ -21,9 +21,43 @@
   --color-amber: #fbbf24;
   --color-blue: #60a5fa;
   --color-cyan: #22d3ee;
+  --color-pink: #f472b6;
 }
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--color-gray-900); }
 ::-webkit-scrollbar-thumb { background: var(--color-gray-700); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-gray-600); }
+
+/* Animations + compaction bars — mirror v1 (src/index.css) so lifted live
+   components (ContextWindow, TurnHeartbeat, agent tables) render identically */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px var(--color-green)); }
+  50% { opacity: 0.5; filter: none; }
+}
+.animate-pulse-green { animation: pulse-green 1s ease-in-out 3; }
+
+.context-compacted-bar {
+  background: repeating-linear-gradient(
+    -45deg,
+    #92400e,
+    #92400e 3px,
+    #78350f 3px,
+    #78350f 6px
+  );
+}
+.context-compacted {
+  background: repeating-linear-gradient(
+    -45deg,
+    #92400e,
+    #92400e 1px,
+    #78350f 1px,
+    #78350f 2px
+  );
+}

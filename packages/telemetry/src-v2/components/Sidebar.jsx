@@ -32,7 +32,7 @@ export default function Sidebar({ active, onSelect }) {
         ))}
       </nav>
       <div className="px-4 py-3 border-t border-gray-800 text-[10px] text-gray-600">
-        Phase 3 in progress — most surfaces are placeholders
+        All 7 surfaces live — Phase 4 cutover pending
       </div>
     </aside>
   );

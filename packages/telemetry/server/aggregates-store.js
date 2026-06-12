@@ -90,6 +90,65 @@ async function listAllTranscripts(rootDir) {
   return out;
 }
 
+/**
+ * Walk PROJECTS_DIR two levels deep and return every subagent transcript:
+ * <projDir>/<sessionId>/subagents/agent-*.jsonl
+ */
+async function listAllSubagentTranscripts(rootDir) {
+  const out = [];
+  let projectDirs;
+  try {
+    projectDirs = await readdir(rootDir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const proj of projectDirs) {
+    if (!proj.isDirectory()) continue;
+    const projDirPath = join(rootDir, proj.name);
+    let sessionDirs;
+    try {
+      sessionDirs = await readdir(projDirPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const sess of sessionDirs) {
+      if (!sess.isDirectory()) continue;
+      const subDirPath = join(projDirPath, sess.name, 'subagents');
+      let files;
+      try {
+        files = await readdir(subDirPath);
+      } catch {
+        continue; // no subagents/ child — normal
+      }
+      for (const f of files) {
+        if (f.startsWith('agent-') && f.endsWith('.jsonl')) {
+          out.push({
+            projectDir: proj.name,
+            parentSessionId: sess.name,
+            agentId: f.replace(/^agent-/, '').replace(/\.jsonl$/, ''),
+            path: join(subDirPath, f),
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Identify a subagent transcript path and decompose it.
+ * Returns { projectDir, parentSessionId, agentId } or null if the path is a
+ * regular session transcript. Tolerates both path separators (chokidar emits
+ * forward slashes on Windows when given a forward-slash glob).
+ */
+export function decomposeSubagentPath(filePath) {
+  const m = String(filePath).replace(/\\/g, '/').match(
+    /([^/]+)\/([^/]+)\/subagents\/agent-([^/]+)\.jsonl$/
+  );
+  if (!m) return null;
+  return { projectDir: m[1], parentSessionId: m[2], agentId: m[3] };
+}
+
 // ── Per-session parser ──────────────────────────────────────────────────────
 
 /**
@@ -111,7 +170,9 @@ async function parseTranscript(filePath, sessionId) {
   let messageCount = 0;
   let toolCallCount = 0;
   const models = new Map(); // modelId -> {input,output,cacheRead,cacheWrite}
+  const agentMeta = new Map(); // agentId -> {agentType,status,prompt,...} from toolUseResult records
   let projectPath = null;
+  let firstUserText = null;
 
   for (const line of lines) {
     if (!line) continue;
@@ -129,6 +190,20 @@ async function parseTranscript(filePath, sessionId) {
     }
     if (!projectPath && obj.cwd) projectPath = obj.cwd;
 
+    // Agent-dispatch results live on user-type lines as toolUseResult.
+    // They are the only place the parent records each subagent's type/status,
+    // so capture them here for the cross-session subagent join.
+    const tur = obj.toolUseResult;
+    if (tur && typeof tur === 'object' && tur.agentId) {
+      agentMeta.set(tur.agentId, {
+        agentType: tur.agentType || null,
+        status: tur.status || null,
+        prompt: typeof tur.prompt === 'string' ? tur.prompt.slice(0, 300) : null,
+        totalDurationMs: tur.totalDurationMs ?? null,
+        totalToolUseCount: tur.totalToolUseCount ?? null,
+      });
+    }
+
     const type = obj.type;
     if (type === 'user' || type === 'assistant') {
       messageCount++;
@@ -136,6 +211,16 @@ async function parseTranscript(filePath, sessionId) {
       if (msg) {
         if (type === 'assistant') {
           toolCallCount += countToolUseBlocks(msg.content);
+        }
+        if (type === 'user' && firstUserText === null) {
+          // First user text = the dispatch prompt in subagent transcripts.
+          // Fallback identity for agents whose parent meta is unavailable.
+          if (typeof msg.content === 'string') {
+            firstUserText = msg.content.slice(0, 300);
+          } else if (Array.isArray(msg.content)) {
+            const textBlock = msg.content.find((b) => b && b.type === 'text' && typeof b.text === 'string');
+            if (textBlock) firstUserText = textBlock.text.slice(0, 300);
+          }
         }
         const modelId = msg.model;
         const usage = msg.usage;
@@ -171,6 +256,8 @@ async function parseTranscript(filePath, sessionId) {
     toolCallCount,
     models, // Map<modelId, {input,output,cacheRead,cacheWrite}>
     totalCost,
+    agentMeta, // Map<agentId, {agentType,status,prompt,totalDurationMs,totalToolUseCount}>
+    firstUserText,
   };
 }
 
@@ -181,6 +268,7 @@ export class AggregatesStore extends EventEmitter {
     super();
     this.rootDir = rootDir;
     this.sessions = new Map(); // sessionId -> per-session aggregate
+    this.subagents = new Map(); // agentId -> per-agent aggregate (from subagents/ transcripts)
     this.aggregates = this._empty();
     this.lastComputedAt = null;
     this.loading = false;
@@ -208,14 +296,30 @@ export class AggregatesStore extends EventEmitter {
     try {
       const transcripts = await listAllTranscripts(this.rootDir);
       this.sessions.clear();
-      for (const { sessionId, path } of transcripts) {
+      for (const { sessionId, path, projectDir } of transcripts) {
         const session = await parseTranscript(path, sessionId);
-        if (session) this.sessions.set(sessionId, session);
+        if (session) {
+          session.projectDir = projectDir;
+          this.sessions.set(sessionId, session);
+        }
       }
+
+      const agentTranscripts = await listAllSubagentTranscripts(this.rootDir);
+      this.subagents.clear();
+      for (const { agentId, path, projectDir, parentSessionId } of agentTranscripts) {
+        const agent = await parseTranscript(path, agentId);
+        if (agent) {
+          agent.projectDir = projectDir;
+          agent.parentSessionId = parentSessionId;
+          this.subagents.set(agentId, agent);
+        }
+      }
+
       this._recompute();
       const ms = Date.now() - t0;
-      console.log(`[aggregates] loaded ${this.sessions.size} sessions from ${transcripts.length} transcripts in ${ms}ms`);
+      console.log(`[aggregates] loaded ${this.sessions.size} sessions + ${this.subagents.size} subagents from ${transcripts.length + agentTranscripts.length} transcripts in ${ms}ms`);
       this.emit('update', this.aggregates);
+      this.emit('subagents-update', this.getSubagents());
     } finally {
       this.loading = false;
     }
@@ -330,9 +434,10 @@ export class AggregatesStore extends EventEmitter {
   }
 
   /** Rebuild a single session from its transcript (used by incremental updates) */
-  async reloadSession(sessionId, path) {
+  async reloadSession(sessionId, path, projectDir = null) {
     const session = await parseTranscript(path, sessionId);
     if (session) {
+      session.projectDir = projectDir || this.sessions.get(sessionId)?.projectDir || null;
       this.sessions.set(sessionId, session);
     } else {
       this.sessions.delete(sessionId);
@@ -349,10 +454,138 @@ export class AggregatesStore extends EventEmitter {
     }
   }
 
+  /** Rebuild a single subagent from its transcript (incremental updates) */
+  async reloadSubagent(agentId, path, projectDir = null, parentSessionId = null) {
+    const agent = await parseTranscript(path, agentId);
+    if (agent) {
+      const prev = this.subagents.get(agentId);
+      agent.projectDir = projectDir || prev?.projectDir || null;
+      agent.parentSessionId = parentSessionId || prev?.parentSessionId || null;
+      this.subagents.set(agentId, agent);
+    } else {
+      this.subagents.delete(agentId);
+    }
+    this.emit('subagents-update', this.getSubagents());
+  }
+
+  /** Drop a subagent (file was deleted) */
+  removeSubagent(agentId) {
+    if (this.subagents.delete(agentId)) {
+      this.emit('subagents-update', this.getSubagents());
+    }
+  }
+
   /** Current snapshot (matches parser.js:parseStatsCache shape + extras) */
   getAggregates() {
     return { ...this.aggregates, lastComputedAt: this.lastComputedAt };
   }
+
+  /**
+   * Per-session detail list for the Sessions surface.
+   * Sorted by last activity, newest first.
+   */
+  getSessions() {
+    const sessions = [...this.sessions.values()].map((s) => ({
+      sessionId: s.sessionId,
+      projectDir: s.projectDir || null,
+      projectPath: s.projectPath,
+      firstTs: s.firstTs,
+      lastTs: s.lastTs,
+      durationMs: s.durationMs,
+      messageCount: s.messageCount,
+      toolCallCount: s.toolCallCount,
+      totalCost: s.totalCost,
+      models: serializeModels(s.models),
+      primaryModel: primaryModelOf(s.models),
+    }));
+    sessions.sort((a, b) => String(b.lastTs || '').localeCompare(String(a.lastTs || '')));
+    return { sessions, total: sessions.length, lastComputedAt: this.lastComputedAt };
+  }
+
+  /**
+   * Cross-session subagent list + per-type leaderboard for the Subagents
+   * surface. Type/status/prompt are joined from the parent session's
+   * toolUseResult records when available; the agent's own first user message
+   * is the prompt fallback.
+   */
+  getSubagents() {
+    const agents = [...this.subagents.values()].map((a) => {
+      const meta = this.sessions.get(a.parentSessionId)?.agentMeta?.get(a.sessionId) || null;
+      let totalTokens = 0;
+      for (const tok of a.models.values()) {
+        totalTokens += tok.input + tok.output + tok.cacheRead + tok.cacheWrite;
+      }
+      return {
+        agentId: a.sessionId, // parseTranscript stores the id it was given
+        parentSessionId: a.parentSessionId || null,
+        projectDir: a.projectDir || null,
+        agentType: meta?.agentType || null,
+        status: meta?.status || null,
+        prompt: meta?.prompt || a.firstUserText || null,
+        firstTs: a.firstTs,
+        lastTs: a.lastTs,
+        durationMs: meta?.totalDurationMs ?? a.durationMs,
+        messageCount: a.messageCount,
+        toolCallCount: meta?.totalToolUseCount ?? a.toolCallCount,
+        totalCost: a.totalCost,
+        totalTokens,
+        models: serializeModels(a.models),
+        primaryModel: primaryModelOf(a.models),
+      };
+    });
+    agents.sort((a, b) => String(b.lastTs || '').localeCompare(String(a.lastTs || '')));
+
+    const byTypeMap = new Map();
+    for (const a of agents) {
+      const key = a.agentType || '(unknown)';
+      let row = byTypeMap.get(key);
+      if (!row) {
+        row = { agentType: key, runs: 0, totalCost: 0, totalTokens: 0, totalDurationMs: 0, fails: 0, modelTokens: new Map() };
+        byTypeMap.set(key, row);
+      }
+      row.runs++;
+      row.totalCost += a.totalCost;
+      row.totalTokens += a.totalTokens;
+      row.totalDurationMs += a.durationMs || 0;
+      if (a.status && a.status !== 'completed') row.fails++;
+      if (a.primaryModel) {
+        row.modelTokens.set(a.primaryModel, (row.modelTokens.get(a.primaryModel) || 0) + a.totalTokens);
+      }
+    }
+    const byType = [...byTypeMap.values()].map((r) => ({
+      agentType: r.agentType,
+      runs: r.runs,
+      totalCost: r.totalCost,
+      totalTokens: r.totalTokens,
+      avgDurationMs: r.runs ? Math.round(r.totalDurationMs / r.runs) : 0,
+      fails: r.fails,
+      topModel: [...r.modelTokens.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null,
+    }));
+    byType.sort((a, b) => b.totalCost - a.totalCost);
+
+    return { agents, byType, totalAgents: agents.length, lastComputedAt: this.lastComputedAt };
+  }
+}
+
+/** Map<modelId, tokens> → plain object */
+function serializeModels(models) {
+  const out = {};
+  for (const [id, tok] of models) out[id] = { ...tok };
+  return out;
+}
+
+/** Model with the most total tokens in this transcript */
+function primaryModelOf(models) {
+  let best = null;
+  let bestTokens = -1;
+  for (const [id, tok] of models) {
+    const t = tok.input + tok.output + tok.cacheRead + tok.cacheWrite;
+    if (t > bestTokens) {
+      best = id;
+      bestTokens = t;
+    }
+  }
+  return best;
 }
 
 // ── Singleton ────────────────────────────────────────────────────────────────

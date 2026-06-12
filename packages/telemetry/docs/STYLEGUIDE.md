@@ -38,11 +38,12 @@ The Tailwind `@theme` block is the single hex source. `model-colors.js` mirrors 
 | `cyan` | `#22d3ee` | `text-cyan`, `bg-cyan/10` | **Haiku** model family; cache tokens; active agent count; Haiku model-switch marker |
 | `green` | `#34d399` | `text-green`, `bg-green/10`, `bg-green/[0.03]` | Live/processing dot; output tokens; success tool dots; heartbeat playhead; cost values when explicitly cost-coded; row accent for active rows |
 | `amber` | `#fbbf24` | `text-amber`, `bg-amber/10` | Cache writes; validation-blocked tool dots; elevated latency (p95); high-usage warnings (50–80%); compaction marker in heartbeat; agent-cost emphasis |
+| `pink` | `#f472b6` | `text-pink`, `bg-pink/10` | **Fable** model family (added 2026-06-12 — same reservation rule as the Opus/Sonnet/Haiku trio) |
 | `red` | `#f87171` | `text-red`, `bg-red/10`, `border-red/40` | Errors; failures; critical context (>80%); forced-continuation marker; row accent for orphaned/error rows; "TOTAL FAILURES" card only |
 
 ### Color rules
 
-1. **Reserve the model trio (purple / blue / cyan)** for actual model attribution. Don't paint a "Total Sessions" card purple just because purple looks accent-y — that creates visual ambiguity with Opus.
+1. **Reserve the model colors (pink / purple / blue / cyan)** for actual model attribution. Don't paint a "Total Sessions" card purple just because purple looks accent-y — that creates visual ambiguity with Opus.
 2. **Default metric color is `text-gray-100`.** Use red only when the value represents a failure/alert state. Use green only when the value semantically *is* a success/cost figure that uses the green semantic.
 3. **Status colors are reserved:** green = live/success, amber = warning/blocked, red = error/critical. Don't use them for decoration.
 4. **`/10` background tints + `/30–/40` borders** are the badge/highlight idiom — see §5 Badges.
