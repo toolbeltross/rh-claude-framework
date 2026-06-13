@@ -3,7 +3,7 @@
 // Origin: 2026-05-04 incident (F-10) where rh-oversight init's prior merge
 // logic dropped hook-forwarder.js stop from the Stop chain after rh-telemetry
 // setup had previously added it. Supervisory log silently went 3 days without
-// entries. See OVERSIGHT_SYSTEM.md F-10 + framework PROGRESS.md item 11.
+// entries. See OVERSIGHT_SYSTEM.md F-10 + framework archive/PROGRESS-history-thru-2026-05-16.md item 11.
 
 const assert = require('assert');
 const path = require('path');

@@ -127,7 +127,7 @@ HOME=/tmp/test USERPROFILE=/tmp/test \
 ```
 
 See [`docs/PATTERNS.md`](docs/PATTERNS.md) for the design rationale behind each enforcement mechanism.
-See [`PROGRESS.md`](PROGRESS.md) for current component status and outstanding work.
+See [`SESSION_STATE.md`](SESSION_STATE.md) for current component status and outstanding work.
 
 ## License
 
