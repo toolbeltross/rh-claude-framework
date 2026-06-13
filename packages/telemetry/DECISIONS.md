@@ -103,7 +103,7 @@ Canonical name across all surfaces is `rh-telemetry`:
 - env vars: `RH_TELEMETRY_*` (was `CLAUDE_TELEMETRY_*`) — hard rename, no fallback alias
 - GitHub repo: `toolbeltross/rh-telemetry` (queued; needs `gh auth refresh -s delete_repo` then GitHub UI rename)
 - workspace directory: `toolbeltross-public/rh-telemetry/` (queued; blocked this session by a stubborn `scripts/` lock — needs Claude Code restart to clear)
-- references in `~/.claude/`, `~/.claude/memory-shared/`, `Workspace/.claude/`, `claude-setup-ross/oversight-system/` — all updated
+- references in `~/.claude/`, `~/.claude/memory-shared/`, `<workspace>/.claude/`, `<oversight-dir>` — all updated
 
 ### Why
 

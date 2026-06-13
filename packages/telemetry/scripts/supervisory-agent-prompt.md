@@ -20,11 +20,11 @@ The 3 rules are designed to intercept that specific class of failure without the
 
 ### The 3 rules
 
-1. **VERIFY BEFORE DECLARING DONE** — Before calling work "done", "tested", "ready", or "complete", did Claude verify through the OUTER SEAM (not just the inner unit)? Source: `~/OneDrive/Workspace/.claude/rules/work-verification.md`.
+1. **VERIFY BEFORE DECLARING DONE** — Before calling work "done", "tested", "ready", or "complete", did Claude verify through the OUTER SEAM (not just the inner unit)? Source: `.claude/rules/work-verification.md`.
 
-2. **SUBAGENT CROSS-CHECK** — If a subagent returned facts passed to the user, did Claude (a) verify from source when the fact drives a downstream decision, and (b) flag any disagreement between two subagents on the same field? Source: `~/OneDrive/Workspace/.claude/rules/subagent-oversight.md`.
+2. **SUBAGENT CROSS-CHECK** — If a subagent returned facts passed to the user, did Claude (a) verify from source when the fact drives a downstream decision, and (b) flag any disagreement between two subagents on the same field? Source: `.claude/rules/subagent-oversight.md`.
 
-3. **NO UNVERIFIED EXTRAPOLATION** — Did Claude present any non-trivial factual claim that did not come from (a) a file read this session, (b) a subagent output with a verification token, or (c) a tool-call result? Source: `~/OneDrive/Workspace/.claude/rules/read-integrity.md`.
+3. **NO UNVERIFIED EXTRAPOLATION** — Did Claude present any non-trivial factual claim that did not come from (a) a file read this session, (b) a subagent output with a verification token, or (c) a tool-call result? Source: `.claude/rules/read-integrity.md`.
 
 ### Behavior
 

@@ -31,7 +31,7 @@ function autoDetectWorkspace() {
 // Walk up from CWD looking for an oversight-system/ directory containing the
 // design doc OVERSIGHT_SYSTEM.md. Checks each ancestor for a direct match AND
 // for the common <wrapper>/oversight-system/ pattern one level down (e.g.
-// <workspace>/claude-setup-ross/oversight-system/). Returns the absolute path
+// <workspace>/<wrapper>/oversight-system/). Returns the absolute path
 // to the oversight-system/ dir if found, or null so the caller can fall through
 // to the existing hardcoded default. Bounded at 10 levels and one-deep readdir
 // per level — safe to call from resolveConfig().

@@ -259,7 +259,7 @@ async function main() {
     console.log(`  ${glyph.padEnd(7)} ${p.name.padEnd(nameWidth + 2)} ${p.detail}`);
   }
   console.log('-'.repeat(70));
-  console.log(`  Plan: claude-setup-ross/oversight-system/PLAN-2026-05-08-reliability-hardening.md`);
+  console.log(`  Plan: <oversight-dir>/PLAN-2026-05-08-reliability-hardening.md`);
   console.log(`  Exit: ${exitCode} (0=healthy, 1=degraded, 2=critical)\n`);
   process.exit(exitCode);
 }

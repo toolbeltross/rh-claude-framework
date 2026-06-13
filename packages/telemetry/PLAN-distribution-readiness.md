@@ -125,7 +125,7 @@ These files are superseded and no longer imported or referenced by active code:
 
 ### 4.1 Fix dubious ownership
 - [ ] As admin (admin), decide: keep admin as owner, or chown to user
-- [ ] If keeping admin: user needs `git config --global --add safe.directory C:/Users/user/OneDrive/Workspace/Code/rh-telemetry`
+- [ ] If keeping admin: user needs `git config --global --add safe.directory <path-to>/rh-telemetry`
 - [ ] If transferring to user: `icacls` or `takeown` on the repo directory
 
 ### 4.2 Verify git remote
