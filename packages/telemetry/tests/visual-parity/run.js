@@ -31,8 +31,15 @@ const OUTPUT_DIR = join(__dirname, 'output');
 
 import { PORT, VITE_DEV_PORT } from '../../server/config.js';
 
-// Ports
-const DEV_API_PORT = PORT;            // Express for dev (Vite proxies to this)
+// Ports.
+// IMPORTANT: the dev API server must NOT bind the canonical telemetry port
+// (server/config.js PORT). That port receives LIVE hook traffic from any active
+// Claude Code session (statusLine POSTs every ~2s, PostToolUse events, etc.).
+// If the dev capture server sits on it, those live events land on the dev server
+// only — not prod — producing a large, content-level dev-vs-prod divergence on
+// the (live-data-heavy) session surface. Bind the dev API server on an offset
+// port instead and point Vite's proxy at it via RH_TELEMETRY_PORT.
+const DEV_API_PORT = PORT + 2;        // Express for dev (Vite proxies to this) — off the canonical port
 const PROD_PORT = PORT + 1;           // Express + static for prod
 const VITE_PORT = VITE_DEV_PORT;      // Vite dev server
 
@@ -93,7 +100,9 @@ async function main() {
     console.log('[5/8] Starting Vite dev server on :' + VITE_PORT + '...');
     const viteProc = spawnServer('npx', ['vite', '--port', String(VITE_PORT)], {
       cwd: PROJECT_ROOT,
-      env: { ...process.env },
+      // Point Vite's /api + /ws proxy at the offset dev API port (not the
+      // canonical PORT) so the dev capture is isolated from live hook traffic.
+      env: { ...process.env, RH_TELEMETRY_PORT: String(DEV_API_PORT) },
     });
     children.push(viteProc);
     await waitForServer(`http://127.0.0.1:${VITE_PORT}`, 20000);
