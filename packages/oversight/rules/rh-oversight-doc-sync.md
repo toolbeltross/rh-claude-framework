@@ -44,6 +44,7 @@ When the trigger fires, review and update these artifacts in the same session:
 ## Enforcement
 
 - **In-session manual**: Before declaring oversight-system work "done," verify the corresponding sync target was updated. The work-verification.md "outer-seam" rule applies — a hook script change is not done until the design doc reflects it.
+- **Git-diff checklist (tracked, not just mtime)**: When committing changes that touch a trigger surface, run `git diff --stat <surface>` (and `git log --oneline <surface>` since the design doc's last update) to produce an explicit list of what changed. Reconcile each changed surface against its row in the *Sync points* table above and tick it off in the commit message or PR body. This turns the sync into an auditable checklist item rather than relying solely on the self-test's soft mtime warning — the mtime check tells you *that* something drifted; the diff tells you *what* to reconcile.
 - **Daily regen**: `daily-regen.js` re-runs `generate-state-md.js`, which captures the *current state* (rule/hook/agent inventory). The state doc is self-healing; the design doc is not.
 - **Self-test soft check**: `oversight-self-test.js` may include an mtime sanity check — if any trigger surface is newer than `OVERSIGHT_SYSTEM.md`, emit a soft warning (not a hard fail).
 
