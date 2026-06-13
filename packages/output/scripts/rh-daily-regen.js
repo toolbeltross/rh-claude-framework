@@ -141,6 +141,17 @@ const STEPS = [
     timeoutOverrideMs: 6 * 60_000,  // supervisor dispatch can take up to 5min
   },
   {
+    // P3-1: daily refresh of the cross-session supervisor-trends doc. Aggregates
+    // the last 7 days of oversight-events.jsonl + supervisory-log.md rejections
+    // into ~/.claude/memory-shared/supervisor-trends.md. Lightweight (aggregation
+    // only, no LLM dispatch) so it can sit inside the core pipeline. Runs after
+    // learning-loop (which may add events) and before auto-prune. Previously this
+    // doc only refreshed on manual `rh-oversight supervisor-sweep` invocation.
+    name: "rh-supervisor-sweep",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-supervisor-sweep.js")],
+  },
+  {
     // P1-5 (2026-05-08): daily ephemeral-artifact and aged-scribe-row pruning.
     // Caps settings.json backups at 5 (matches Anthropic's policy). Deletes
     // flag files >24h old. Archives resolved scribe rows >14d. Emits
