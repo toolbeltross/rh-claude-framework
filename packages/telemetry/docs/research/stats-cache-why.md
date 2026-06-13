@@ -7,8 +7,8 @@
 | Claim | Evidence | Verification token |
 |---|---|---|
 | `~/.claude/stats-cache.json` mtime 2026-04-07 18:04:38, 9629 bytes, version 3 | `stat` + Read | File last line (verbatim): `}` (line 464); line 463: `  "totalSpeculationTimeSavedMs": 0` |
-| Cache schema version expected by binary = **3** | `grep -a` on `C:/Users/rossb/.local/share/claude/versions/2.1.145` finds `aEH=3` constant; cache file has `"version": 3` (line 2) | Match — no schema-mismatch migration would be triggered |
-| Claude Code is installed as a **native binary** at `C:/Users/rossb/.local/bin/claude.exe` (227–229 MB PE32+), not npm/Node | `which claude`, `file`, `ls -la C:/Users/rossb/.local/share/claude/versions/` shows 2.1.139, 2.1.143, 2.1.145 | Install dates: 2.1.139 = May 11; 2.1.143 = May 17; 2.1.145 = May 19 |
+| Cache schema version expected by binary = **3** | `grep -a` on `~/.local/share/claude/versions/2.1.145` finds `aEH=3` constant; cache file has `"version": 3` (line 2) | Match — no schema-mismatch migration would be triggered |
+| Claude Code is installed as a **native binary** at `~/.local/bin/claude.exe` (227–229 MB PE32+), not npm/Node | `which claude`, `file`, `ls -la ~/.local/share/claude/versions/` shows 2.1.139, 2.1.143, 2.1.145 | Install dates: 2.1.139 = May 11; 2.1.143 = May 17; 2.1.145 = May 19 |
 | Binary still contains all stats-cache logic — load, stale-check, incremental update, migrate, save | `grep -a` finds: `"stats-cache.json"`, `"Stats cache empty, processing all historical data"`, `"Stats cache stale (${_.lastComputedDate}), processing ${z} to ${f}"`, `"Stats cache saved successfully (lastComputedDate: ${H.lastComputedDate})"`, `"Failed to save stats cache: ${ZH($)}"` | Code path still ships in current version |
 | `~/.claude/settings.json` contains NO flag disabling stats; no `DISABLE_TELEMETRY` / `DISABLE_NONESSENTIAL_TRAFFIC` env vars in current shell | Full read of 239-line file (last-line token: `}`); `env \| grep` returns only `CLAUDECODE`, `CLAUDE_CONTEXT_WINDOW_SIZE`, `CLAUDE_TELEMETRY_URL`, etc. | Clean — no kill-switch active |
 | `~/.claude.json` `installMethod: "native"` (line 3), `numStartups: 227` (line 2); `autoUpdates: false` (line 4) | Partial read (lines 1–100 of larger file) | Sufficient for top-level confirmation |
@@ -87,7 +87,7 @@ Concretely:
 
 ## Alternative hypotheses (ranked by remaining plausibility after evidence)
 
-1. **OneDrive sync interfering with the write (LOW-MEDIUM).** `~/.claude/` is NOT under OneDrive on this machine (it's local `C:/Users/rossb/.claude/` AppData, not `OneDrive/Workspace/`), so the documented OneDrive EBUSY pattern doesn't apply. Binary contains no OneDrive-specific handling. Would need an additional `/usage`-open test that DOES fail to confirm.
+1. **OneDrive sync interfering with the write (LOW-MEDIUM).** `~/.claude/` is NOT under OneDrive on this machine (it's local `~/.claude/` AppData, not `<workspace>/`), so the documented OneDrive EBUSY pattern doesn't apply. Binary contains no OneDrive-specific handling. Would need an additional `/usage`-open test that DOES fail to confirm.
 2. **Silent save failure logged at debug level only (LOW).** Binary has `Failed to save stats cache: ${ZH($)}` at log level (not stderr). User wouldn't see it. But this only matters if `/usage` was being opened — and we have no evidence of that.
 3. **Hook latency forcing the writer to skip (VERY LOW).** No flag or timeout-skip path found in binary string scan around the save call.
 4. **Stale-check predicate bug treating today as not-stale (VERY LOW).** File is 6 weeks old; any reasonable predicate would flag it stale.
@@ -118,10 +118,10 @@ Rationale:
 
 | File / source | Lines read | Verification token |
 |---|---|---|
-| `C:/Users/rossb/.claude/stats-cache.json` | Lines 1–50 + 455–464 of 464; rest verified via `wc -l` | Last line `}` (line 464) |
-| `C:/Users/rossb/.claude/settings.json` | Full 239/239 | Last line `}` (line 238) |
-| `C:/Users/rossb/.claude.json` | Partial 1–100 (large file) | Sufficient for installMethod/numStartups/autoUpdates |
-| `C:/Users/rossb/.claude/cache/changelog.md` | Lines 640–689 + 1153–1182 + 1195–1219 + grep-scanned remainder | Quoted lines 648 + 1207 verbatim |
-| `C:/Users/rossb/.local/share/claude/versions/2.1.145` (binary) | Scanned via `grep -a` for ~15 string patterns; not "read" in source-file sense | Matched strings recorded above |
+| `~/.claude/stats-cache.json` | Lines 1–50 + 455–464 of 464; rest verified via `wc -l` | Last line `}` (line 464) |
+| `~/.claude/settings.json` | Full 239/239 | Last line `}` (line 238) |
+| `~/.claude.json` | Partial 1–100 (large file) | Sufficient for installMethod/numStartups/autoUpdates |
+| `~/.claude/cache/changelog.md` | Lines 640–689 + 1153–1182 + 1195–1219 + grep-scanned remainder | Quoted lines 648 + 1207 verbatim |
+| `~/.local/share/claude/versions/2.1.145` (binary) | Scanned via `grep -a` for ~15 string patterns; not "read" in source-file sense | Matched strings recorded above |
 
 **Subagent telemetry:** 0 compactions; ~31% of 1M Opus window used.
