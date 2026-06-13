@@ -34,8 +34,9 @@ const KNOWN_TOP_LEVEL = new Set([
 // keep installing without a code change in lock-step.
 const KNOWN_PHASES = new Set([
   'SessionStart', 'SessionEnd', 'UserPromptSubmit',
-  'PreToolUse', 'PostToolUse', 'PreCompact',
+  'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PreCompact',
   'Stop', 'SubagentStart', 'SubagentStop', 'Notification',
+  'ConfigChange', 'TaskCompleted', 'InstructionsLoaded', 'PermissionRequest',
 ]);
 
 const VALID_HOOK_TYPES = new Set(['command', 'prompt']);
