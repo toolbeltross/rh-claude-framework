@@ -21,6 +21,16 @@ export default defineConfig({
     outDir: 'dist-v2',
     rollupOptions: {
       input: 'index.v2.html',
+      output: {
+        // Split the charting stack (recharts + its d3 / victory-vendor deps) into
+        // a dedicated chunk so the main bundle stays under the 500 kB warning and
+        // the chart vendor code caches independently of app code.
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](recharts|recharts-scale|victory-vendor|d3-|internmap)/.test(id)) {
+            return 'recharts';
+          }
+        },
+      },
     },
   },
 });
