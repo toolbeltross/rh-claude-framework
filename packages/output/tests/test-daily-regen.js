@@ -180,6 +180,30 @@ const tests = [
         `should exit 2 when pipeline steps all fail in tmp env; stderr: ${r.stderr?.slice(0, 200)}`);
     }),
   },
+
+  // ─── Runtime integration: the sweep step actually executes in sequence ──────
+  // Stronger than the source-text structural tests above: this runs the real
+  // pipeline and asserts the per-step log shows rh-supervisor-sweep being
+  // attempted between learning-loop and auto-prune. Steps fail (scripts absent
+  // in tmp HOME) but each is still attempted + logged, which is what proves the
+  // runner traverses to the step at runtime.
+  {
+    name: 'pipeline run logs rh-supervisor-sweep between learning-loop and auto-prune',
+    fn: () => withTmpEnv((env) => {
+      runScript(env);   // full pipeline, --quiet (still writes daily-regen.log)
+      const logPath = path.join(env.claudeDir, 'scripts', 'daily-regen.log');
+      const logText = fs.readFileSync(logPath, 'utf8');
+      const iLearning = logText.indexOf('rh-learning-loop');
+      const iSweep = logText.indexOf('rh-supervisor-sweep');
+      const iPrune = logText.indexOf('rh-auto-prune');
+      assert.ok(iSweep !== -1,
+        `daily-regen.log must show the rh-supervisor-sweep step ran; log:\n${logText}`);
+      assert.ok(iLearning !== -1 && iPrune !== -1,
+        'log must show learning-loop and auto-prune steps');
+      assert.ok(iLearning < iSweep && iSweep < iPrune,
+        `runtime order must be learning-loop < supervisor-sweep < auto-prune; got ${iLearning}/${iSweep}/${iPrune}`);
+    }),
+  },
 ];
 
 module.exports = { tests };
