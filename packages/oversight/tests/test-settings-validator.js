@@ -101,6 +101,27 @@ const tests = [
     }
   },
   {
+    // Regression for the 5 phases added 2026-06-13 (PR #66). These are real
+    // Claude Code hook phases present in live settings.json; before the fix they
+    // each produced a spurious hooks.phase.unknown warning on every validate run.
+    name: 'recognized phases (incl. PostToolUseFailure/ConfigChange/TaskCompleted/InstructionsLoaded/PermissionRequest) produce no unknown-phase warning',
+    fn: () => {
+      const entry = [{ hooks: [{ type: 'command', command: 'x' }] }];
+      const phases = [
+        'PostToolUseFailure', 'ConfigChange', 'TaskCompleted',
+        'InstructionsLoaded', 'PermissionRequest',
+      ];
+      const hooks = {};
+      for (const p of phases) hooks[p] = entry;
+      const r = validateSettings({ hooks });
+      assert.strictEqual(r.ok, true, formatIssues(r));
+      assert.ok(
+        !codesOf(r.warnings).includes('hooks.phase.unknown'),
+        `expected no unknown-phase warning, got: ${formatIssues(r)}`
+      );
+    }
+  },
+  {
     name: 'phase value must be an array',
     fn: () => {
       const r = validateSettings({ hooks: { Stop: { not: 'array' } } });
