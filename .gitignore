@@ -15,3 +15,7 @@ dist/
 .playwright-mcp/
 /v2-*.png
 /verify-*.png
+
+# c8 coverage output
+coverage/
+.nyc_output/

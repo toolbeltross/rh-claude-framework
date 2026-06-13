@@ -15,8 +15,12 @@
     "test": "npm run test --workspaces",
     "test:oversight": "npm run test -w packages/oversight",
     "test:cli": "npm run test -w packages/cli",
-    "test:telemetry": "npm run test -w packages/telemetry"
+    "test:telemetry": "npm run test -w packages/telemetry",
+    "coverage": "c8 npm test"
   },
   "license": "MIT",
-  "author": "Ross Beveridge"
+  "author": "Ross Beveridge",
+  "devDependencies": {
+    "c8": "^11.0.0"
+  }
 }
