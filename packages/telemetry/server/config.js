@@ -64,6 +64,18 @@ export const WRITE_STABILITY_MS = 1000;
 /** chokidar awaitWriteFinish pollInterval */
 export const WRITE_POLL_MS = 500;
 
+/**
+ * Faster constants for append-only JSONL watchers (transcripts, oversight
+ * events). Their readers tolerate a partially-written last line — the
+ * oversight tail reader only consumes complete lines and the transcript
+ * parser skips unparseable lines — so the conservative 1s write-stability
+ * damping above is unnecessary latency for these sources. ~/.claude is not
+ * under OneDrive, so 1s stat-polling is cheap.
+ */
+export const JSONL_POLL_INTERVAL_MS = 1000;
+export const JSONL_STABILITY_MS = 250;
+export const JSONL_WRITE_POLL_MS = 100;
+
 /** WebSocket heartbeat ping interval */
 export const WS_HEARTBEAT_MS = 30_000;
 

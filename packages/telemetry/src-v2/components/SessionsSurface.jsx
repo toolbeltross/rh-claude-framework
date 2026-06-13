@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSessions } from '../hooks/useSessions.js';
+import { useCcdTitles } from '../hooks/useCcdTitles.js';
+import SessionDetail from './SessionDetail.jsx';
 import { formatN, formatUsd, relativeTime } from '../lib/format.js';
 import { getModelColor, getModelFamily } from '../../src/lib/model-colors';
 
@@ -32,13 +34,21 @@ function projectLabel(s) {
  * Surface 2 — Sessions (plan 3.2, v2-ia.md).
  * Browse/filter/search every on-disk session from the live aggregator.
  */
-export default function SessionsSurface() {
+export default function SessionsSurface({ deepLink = null }) {
   const { data, loading, error } = useSessions();
+  const ccdTitles = useCcdTitles();
   const [query, setQuery] = useState('');
   const [project, setProject] = useState('all');
   const [model, setModel] = useState('all');
   const [sort, setSort] = useState('recent');
   const [page, setPage] = useState(0);
+  const [openSession, setOpenSession] = useState(deepLink?.id || null); // sessionId → drill-through view
+
+  // Cross-surface deep link (Live meta strip, AgentDetail parent link).
+  // ts nonce makes repeat clicks on the same session re-open the view.
+  useEffect(() => {
+    if (deepLink?.id) setOpenSession(deepLink.id);
+  }, [deepLink]);
 
   const sessions = data?.sessions || [];
 
@@ -67,6 +77,16 @@ export default function SessionsSurface() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  if (openSession) {
+    return (
+      <SessionDetail
+        sessionId={openSession}
+        ccdMeta={ccdTitles[openSession] || null}
+        onBack={() => setOpenSession(null)}
+      />
+    );
+  }
 
   if (loading && !data) return <div className="p-12 text-center text-sm text-gray-400">Loading sessions…</div>;
   if (error) return <div className="p-12 text-center text-sm text-red-400">{error}</div>;
@@ -152,11 +172,13 @@ export default function SessionsSurface() {
             <tbody>
               {pageRows.map((s) => {
                 const color = getModelColor(s.primaryModel);
+                const ccdTitle = ccdTitles[s.sessionId]?.title;
                 return (
                   <tr
                     key={s.sessionId}
-                    className="border-b border-gray-800/50 hover:bg-gray-800/40"
-                    title={`${s.sessionId}\n${s.projectPath || s.projectDir || ''}`}
+                    className="border-b border-gray-800/50 hover:bg-gray-800/40 cursor-pointer"
+                    onClick={() => setOpenSession(s.sessionId)}
+                    title={`${ccdTitle ? `“${ccdTitle}”\n` : ''}${s.sessionId}\n${s.projectPath || s.projectDir || ''}\nClick for full detail`}
                   >
                     <td className="px-3 py-1.5 whitespace-nowrap overflow-hidden text-gray-300">{projectLabel(s)}</td>
                     <td className="px-3 py-1.5 font-mono text-gray-400">{s.sessionId.slice(0, 8)}</td>

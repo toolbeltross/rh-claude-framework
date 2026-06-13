@@ -59,7 +59,15 @@ Claude Code hooks:
   UserPromptSubmit──→ hook-forwarder.js → POST /api/prompt → store.updatePrompt() → WebSocket → CurrentPrompt
   SubagentStart   ──→ hook-forwarder.js → POST /api/subagent → store.addSubagent() → WebSocket → SubagentTracker
   SubagentStop    ──→ hook-forwarder.js → POST /api/subagent → store.removeSubagent() → WebSocket → SubagentTracker
+  SessionEnd      ──→ hook-forwarder.js → POST /api/session-end → store.markSessionEnded() (marks ended; entry lingers until stale prune)
+  PermissionRequest─→ hook-forwarder.js → POST /api/permission-request → store.markAwaitingPermission() (cleared by next tool/prompt/turn-end)
   statusLine      ──→ hook-forwarder.js → POST /api/status → store.updateLiveSession() → WebSocket → live tabs
+                      (settings.json statusLine.refreshInterval=2000 → re-fires every 2s mid-turn, not just per API response)
+                      (rate_limits in payload, when CC sends it, overlays planInfo 5h/7d gauges — fresher than the 60s OAuth poll)
+
+  Every hook-forwarder POST is stamped with `entrypoint` (CLAUDE_CODE_ENTRYPOINT) →
+  store keeps it as `_entrypoint` so the UI can distinguish interactive sessions from
+  headless runs (scheduled tasks, script-spawned `claude -p`).
   SessionStart    ──→ start-bg.js (auto-start telemetry server)
   PreCompact      ──→ hook-forwarder.js → POST /api/compact → store.recordCompact()
 ```

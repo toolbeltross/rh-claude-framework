@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSubagents } from '../hooks/useSubagents.js';
 import { formatN, formatUsd, relativeTime } from '../lib/format.js';
 import { getModelColor, getModelFamily } from '../../src/lib/model-colors';
+import AgentDetail from './AgentDetail.jsx';
 
 const RECENT_LIMIT = 50;
 
@@ -48,9 +49,19 @@ function StatusBadge({ status }) {
  * Cross-session leaderboard from <sessionId>/subagents/agent-*.jsonl
  * transcripts, joined with each parent's toolUseResult for type/status.
  */
-export default function SubagentsSurface() {
+export default function SubagentsSurface({ onOpenSession }) {
   const { data, loading, error } = useSubagents();
-  const [expanded, setExpanded] = useState(null);
+  const [openAgent, setOpenAgent] = useState(null); // agentId → drill-through view
+
+  if (openAgent) {
+    return (
+      <AgentDetail
+        agentId={openAgent}
+        onBack={() => setOpenAgent(null)}
+        onOpenSession={onOpenSession}
+      />
+    );
+  }
 
   if (loading && !data) return <div className="p-12 text-center text-sm text-gray-400">Loading subagents…</div>;
   if (error) return <div className="p-12 text-center text-sm text-red-400">{error}</div>;
@@ -127,7 +138,7 @@ export default function SubagentsSurface() {
       </Section>
 
       {/* Recent runs */}
-      <Section title={`Recent agent runs (last ${recent.length} — click a row for prompt detail)`}>
+      <Section title={`Recent agent runs (last ${recent.length} — click a row for full detail)`}>
         {recent.length === 0 ? (
           <div className="flex items-center justify-center py-6 text-xs text-gray-500">No agent runs yet</div>
         ) : (
@@ -146,12 +157,7 @@ export default function SubagentsSurface() {
             </thead>
             <tbody>
               {recent.map((a) => (
-                <RecentRow
-                  key={a.agentId}
-                  agent={a}
-                  expanded={expanded === a.agentId}
-                  onToggle={() => setExpanded(expanded === a.agentId ? null : a.agentId)}
-                />
+                <RecentRow key={a.agentId} agent={a} onOpen={() => setOpenAgent(a.agentId)} />
               ))}
             </tbody>
           </table>
@@ -161,14 +167,14 @@ export default function SubagentsSurface() {
   );
 }
 
-function RecentRow({ agent: a, expanded, onToggle }) {
+function RecentRow({ agent: a, onOpen }) {
   const accent = a.status && a.status !== 'completed' ? 'inset 3px 0 0 var(--color-red)' : undefined;
   return (
     <>
       <tr
         className="border-b border-gray-800/50 hover:bg-gray-800/40 cursor-pointer"
-        onClick={onToggle}
-        title={a.prompt || a.agentId}
+        onClick={onOpen}
+        title={`${a.prompt || a.agentId}\nClick for full detail`}
       >
         <td className="px-3 py-1.5 font-mono text-gray-400" style={accent ? { boxShadow: accent } : undefined}>
           {relativeTime(a.lastTs)}
@@ -183,19 +189,6 @@ function RecentRow({ agent: a, expanded, onToggle }) {
           {a.parentSessionId ? a.parentSessionId.slice(0, 8) : '—'}
         </td>
       </tr>
-      {expanded && (
-        <tr className="border-b border-gray-800/50 bg-gray-950/60">
-          <td colSpan={8} className="px-3 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-gray-600 mb-0.5">Prompt</div>
-            <div className="text-xs text-gray-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
-              {a.prompt || 'No prompt captured for this run'}
-            </div>
-            <div className="mt-2 text-[10px] text-gray-600 font-mono">
-              agent {a.agentId} · {a.messageCount} msgs · {a.toolCallCount} tool calls · project {a.projectDir || '—'}
-            </div>
-          </td>
-        </tr>
-      )}
     </>
   );
 }

@@ -14,14 +14,15 @@ import hookReceiver from './hook-receiver.js';
 import trendsRouter from './trends-router.js';
 import { aggregatesStore, decomposeSubagentPath } from './aggregates-store.js';
 import { readOversightEvents, startOversightWatcher } from './oversight-bridge.js';
+import { getCcdSessionTitles } from './ccd-sessions.js';
 
 import {
   PORT,
   VITE_DEV_PORT,
   CLAUDE_PROJECTS_DIR,
-  FILE_POLL_INTERVAL_MS,
-  WRITE_STABILITY_MS,
-  WRITE_POLL_MS,
+  JSONL_POLL_INTERVAL_MS,
+  JSONL_STABILITY_MS,
+  JSONL_WRITE_POLL_MS,
 } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -56,9 +57,42 @@ app.get('/api/sessions', (_req, res) => {
   res.json(aggregatesStore.getSessions());
 });
 
+// Single-session drill-through: deep transcript parse + this session's
+// subagent runs. 404 when the transcript is gone (pruned by Claude Code).
+app.get('/api/sessions/:id', async (req, res) => {
+  try {
+    const detail = await aggregatesStore.getSessionDetail(req.params.id);
+    if (!detail) return res.status(404).json({ error: 'session not found on disk' });
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cross-session subagent list + per-type leaderboard (Subagents surface).
 app.get('/api/subagents', (_req, res) => {
   res.json(aggregatesStore.getSubagents());
+});
+
+// Single-agent drill-through: record + tool histogram from the agent transcript.
+app.get('/api/subagents/:id', async (req, res) => {
+  try {
+    const detail = await aggregatesStore.getSubagentDetail(req.params.id);
+    if (!detail) return res.status(404).json({ error: 'agent transcript not found on disk' });
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Claude Code Desktop session titles, keyed by transcript session id.
+// Empty map on machines without the Desktop app — clients must fall back.
+app.get('/api/ccd-sessions', async (_req, res) => {
+  try {
+    res.json({ byCliId: await getCcdSessionTitles() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Oversight events feed — ~/.claude/oversight-events.jsonl read through
@@ -139,10 +173,12 @@ aggregatesStore.loadAll().catch((err) => {
 if (existsSync(CLAUDE_PROJECTS_DIR)) {
   const projectsWatcher = chokidar.watch(`${CLAUDE_PROJECTS_DIR.replace(/\\/g, '/')}/**/*.jsonl`, {
     usePolling: true,
-    interval: FILE_POLL_INTERVAL_MS,
+    interval: JSONL_POLL_INTERVAL_MS,
+    // Append-only JSONL: parseTranscript skips a partially-written last
+    // line, so a short stability window is safe and much fresher.
     awaitWriteFinish: {
-      stabilityThreshold: WRITE_STABILITY_MS,
-      pollInterval: WRITE_POLL_MS,
+      stabilityThreshold: JSONL_STABILITY_MS,
+      pollInterval: JSONL_WRITE_POLL_MS,
     },
     ignoreInitial: true, // initial load handled by loadAll()
   });

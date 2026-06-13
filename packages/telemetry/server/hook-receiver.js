@@ -63,6 +63,36 @@ router.post('/status', (req, res) => {
   }
 });
 
+// SessionEnd hook: mark ended (NOT pruned — lingers until stale prune)
+router.post('/session-end', (req, res) => {
+  try {
+    const sessionId = req.body?.session_id || '';
+    if (sessionId) {
+      store.markSessionEnded(sessionId);
+      console.log(`[session-end] ${sessionId.slice(0, 8)}: session ended (kept until stale prune)`);
+    }
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[session-end] Error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// PermissionRequest hook: session is blocked on a user permission decision
+router.post('/permission-request', (req, res) => {
+  try {
+    const sessionId = req.body?.session_id || '';
+    if (sessionId) {
+      store.markAwaitingPermission(sessionId, req.body?.tool_name || null);
+      console.log(`[permission] ${sessionId.slice(0, 8)}: awaiting decision on ${req.body?.tool_name || '?'}`);
+    }
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[permission] Error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Receive turn-end events from Stop hook
 router.post('/turn-end', (req, res) => {
   try {
