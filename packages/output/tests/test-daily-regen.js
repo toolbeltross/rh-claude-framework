@@ -129,6 +129,32 @@ const tests = [
       wasIntentionallySkipped('multi\nline\nnot json at all'), false),
   },
 
+  // ─── STEPS wiring (P3-1: supervisor-sweep in the daily pipeline) ────────────
+
+  {
+    name: 'STEPS includes rh-supervisor-sweep step invoking rh-supervisor-sweep.js',
+    fn: () => {
+      const src = fs.readFileSync(SCRIPT, 'utf8');
+      assert.ok(/name:\s*["']rh-supervisor-sweep["']/.test(src),
+        'STEPS must declare a rh-supervisor-sweep step');
+      assert.ok(/rh-supervisor-sweep\.js/.test(src),
+        'sweep step must invoke rh-supervisor-sweep.js');
+    },
+  },
+  {
+    name: 'rh-supervisor-sweep runs after rh-learning-loop and before rh-auto-prune',
+    fn: () => {
+      const src = fs.readFileSync(SCRIPT, 'utf8');
+      const iLearning = src.indexOf('"rh-learning-loop"');
+      const iSweep = src.indexOf('"rh-supervisor-sweep"');
+      const iPrune = src.indexOf('"rh-auto-prune"');
+      assert.ok(iLearning !== -1 && iSweep !== -1 && iPrune !== -1,
+        'all three step names must be present');
+      assert.ok(iLearning < iSweep && iSweep < iPrune,
+        `expected order learning-loop < supervisor-sweep < auto-prune, got ${iLearning}/${iSweep}/${iPrune}`);
+    },
+  },
+
   // ─── Spawn: --skip-if-today-done guard ─────────────────────────────────────
 
   {
