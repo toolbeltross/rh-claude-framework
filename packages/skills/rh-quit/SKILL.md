@@ -1,6 +1,6 @@
 ---
 name: rh-quit
-description: User-triggered scribe drain at session end. Dispatches rh-scribe-multiscope directly via the Agent tool to curate recommendations, cleanup items, and learnings in one LLM pass. Use when the user invokes /rh-quit, typically at the end of a session before closing.
+description: User-triggered scribe drain at session end. Dispatches rh-scribe-multiscope directly via the Agent tool to curate recommendations, cleanup items, and learnings in one LLM pass, then refreshes the project's SESSION_STATE.md current-facts doc if one is present. Use when the user invokes /rh-quit, typically at the end of a session before closing.
 ---
 
 # rh-quit
@@ -17,7 +17,9 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 3. **Dispatch rh-scribe-multiscope in-process** — use the **Agent tool** (foreground, NOT background) with `subagent_type: rh-scribe-multiscope`. The agent does its own privacy/sentinel checks, categorizes each candidate into recommendations/cleanup/learnings, and writes to all relevant targets in one LLM pass. This is synchronous — the user is waiting. Target completion: <30s if nothing substantive after the agent's own re-triage; <90s for the full write pass.
 
-4. **Report what was captured** — print a summary listing files written, items appended, and confirm "safe to close session."
+4. **Refresh the project current-state doc (opt-in by presence)** — if a `SESSION_STATE.md` exists at the project root (the workspace-standard current-facts tracking doc), reconcile and refresh it so it doesn't drift the way an unmaintained progress log does. This is the mechanism that keeps the tracking doc current; without it, the doc only updates when someone remembers to, which is how it goes stale.
+
+5. **Report what was captured** — print a summary listing files written, items appended, and confirm "safe to close session."
 
 ## Execution steps
 
@@ -63,8 +65,19 @@ When the user invokes `/rh-quit`:
    (especially learnings).
    ```
 
-4. **Print summary:**
+4. **Refresh `SESSION_STATE.md` if it exists** (opt-in by presence — skip silently if the project has no such file):
+   - Read the project-root `SESSION_STATE.md`.
+   - Reconcile its current-facts block against reality:
+     - `git rev-parse --short HEAD` + the latest merged PR (from `git log --oneline -1`) → update the **Branch / HEAD** line.
+     - `git log --oneline <last-verified-stamp>..HEAD` → fold any newly-merged work into the picture; do NOT paste the log (git history is authoritative) — only update what changed in the *current* state.
+     - Scan open `PLAN-*.md` files for unchecked items → keep the **In-flight / outstanding** table accurate.
+     - Update the **Last verified** stamp to today's date (from session context).
+   - Keep it lean (< 100 lines). If a section has grown historical, move it to `archive/` rather than letting the file bloat — that bloat is exactly what this convention exists to prevent.
+   - This is a curation pass, not a blind append. Only the model can do it well; that's why it lives here and not in a hook.
+
+5. **Print summary:**
    - Items appended per scope (recommendations / cleanup / learnings)
+   - Whether `SESSION_STATE.md` was refreshed (and what changed) or skipped (not present)
    - Files modified
    - Confirm **"Safe to close session."**
 

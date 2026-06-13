@@ -82,4 +82,4 @@ node packages/cli/bin/rh-oversight.js init --workspace /path/to/your/workspace
 node packages/cli/bin/rh-oversight.js self-test
 ```
 
-Full documentation: [`docs/PATTERNS.md`](PATTERNS.md) · [`README.md`](../README.md) · [`PROGRESS.md`](../PROGRESS.md)
+Full documentation: [`docs/PATTERNS.md`](PATTERNS.md) · [`README.md`](../README.md) · [`SESSION_STATE.md`](../SESSION_STATE.md)

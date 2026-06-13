@@ -59,10 +59,10 @@
 | ingest | 122 transcripts / 1,677 messages, 36s, 0 errors; re-run = 0 ingested (idempotent) |
 | search | "tilde expansion" → ranked hits w/ snippets incl. session 953913bd; nonsense query → 0 hits |
 | tests | output suite 121/121 incl. RH_TEST_PG=1 real-DB cases |
+| 3.5 daily-regen ingest (live) | ✅ 2026-06-13: `daily-regen.log` shows `[OK] rh-transcript-ingest`; DB at 670 transcripts / 10,608 messages (newest 2026-06-12); idempotent across daily runs |
 
 ## What is PARTIAL (not verified via outer seam)
 | Item | Status | Linked ID |
 |---|---|---|
-| 3.5 daily-regen ingest step | wired + deployed; first live firing happens at next daily-regen run — check validation/regen log tomorrow | — |
-| Phase 4 parity audit + promotion gate | by design: starts after ≥2 weeks of dual-write data | — |
+| Phase 4 parity audit + promotion gate | by design: starts after ≥2 weeks of dual-write data (~2026-06-25) | — |
 | subagent transcripts | main-session JSONLs only; projects/<slug>/<session>/subagents/*.jsonl not ingested (scope decision, revisit if search misses matter) | — |

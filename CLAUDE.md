@@ -7,7 +7,7 @@ Internal reference for Claude Code sessions working on this repo. User-facing do
 ```
 rh-claude-framework/
 ├── package.json                    # npm workspaces root
-├── PROGRESS.md                     # current state + outstanding work
+├── SESSION_STATE.md                # current state (lean, current-facts-only; history → archive/)
 ├── PLAN-*.md                       # in-flight plan files (per-session)
 └── packages/
     ├── shared/                     # @rh/shared — canonical infra

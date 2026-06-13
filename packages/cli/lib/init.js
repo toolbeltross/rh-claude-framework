@@ -84,8 +84,8 @@ function resolveTemplate(templateContent, vars) {
  *
  * The fix preserves any hook the existing chain already has (telemetry's, the
  * user's manual additions, etc.) while still applying the template's own hooks
- * idempotently. See OVERSIGHT_SYSTEM.md F-10 and PROGRESS.md item 11 for
- * background. Test coverage: tests/test-init-merge.js.
+ * idempotently. See OVERSIGHT_SYSTEM.md F-10 and archive/PROGRESS-history-thru-2026-05-16.md
+ * item 11 for background. Test coverage: tests/test-init-merge.js.
  */
 function mergeHooksData(existingHooks, templateHooks) {
   // Identity for an individual hook within a chain — based on what makes it

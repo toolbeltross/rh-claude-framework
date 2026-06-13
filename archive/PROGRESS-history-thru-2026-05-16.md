@@ -1,3 +1,9 @@
+> **ARCHIVED 2026-06-13.** This is the historical append-only progress log, frozen at its last
+> hand-written entry (2026-05-16, PR #47). Kept for decision lineage only. **Current state now lives
+> in [`SESSION_STATE.md`](../SESSION_STATE.md)** (current-facts-only, per the workspace
+> *"Session state files: current facts only, archive history when > 100 lines"* convention).
+> Sessions #48–#76 are recorded in git history, not here. Do not append to this file.
+
 # rh-claude-framework — Progress & Pickup Notes
 
 **Last session:** 2026-05-16 (P1-3 flag flip ✅ + npm test workspace gap ✅, PRs #46–#47)
