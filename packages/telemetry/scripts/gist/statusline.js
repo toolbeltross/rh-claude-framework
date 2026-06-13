@@ -9,13 +9,13 @@
  *
  *   1. rh-telemetry/scripts/statusline-CLI-only.js   ← authoritative
  *   2. rh-telemetry/scripts/gist/statusline.js         (public gist mirror)
- *   3. claude-setup-ross/statusline/STATUSLINE_KIT.md      (embedded in docs)
+ *   3. <user-setup>/statusline/STATUSLINE_KIT.md      (embedded in docs)
  *
  * Verify (Bash / Git Bash on Windows), from the Workspace root:
  *   node -e "const fs=require('fs');
  *     const a=fs.readFileSync('toolbeltross/toolbeltross-public/rh-telemetry/scripts/statusline-CLI-only.js');
  *     const b=fs.readFileSync('toolbeltross/toolbeltross-public/rh-telemetry/scripts/gist/statusline.js');
- *     const md=fs.readFileSync('claude-setup-ross/statusline/STATUSLINE_KIT.md','utf8');
+ *     const md=fs.readFileSync('<user-setup>/statusline/STATUSLINE_KIT.md','utf8');
  *     const embedded=md.match(/\`\`\`javascript\n([\s\S]*?)\n\`\`\`/)[1];
  *     console.log('js mirrors identical:', a.equals(b));
  *     console.log('md embed matches js:', embedded === a.toString().replace(/\n$/,''));"

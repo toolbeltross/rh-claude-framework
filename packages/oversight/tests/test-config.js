@@ -114,7 +114,7 @@ const tests = [
   // ─── autoDetectOversightDir — walk-up helper ──────────────────────────────
   // Added 2026-05-19. Motivation: the hardcoded `~/.claude/oversight` default
   // ENOENT'd on machines where the real oversight-system/ lived elsewhere
-  // (e.g. <workspace>/claude-setup-ross/oversight-system/). The walk now finds
+  // (e.g. <workspace>/<wrapper>/oversight-system/). The walk now finds
   // it automatically — direct match OR one-level-down (the common wrapper
   // pattern).
   {
@@ -146,7 +146,7 @@ const tests = [
     fn: () => {
       withTmpDir((root) => {
         // root/setup-wrapper/oversight-system/OVERSIGHT_SYSTEM.md — the wrapper
-        // pattern used by claude-setup-ross/oversight-system/ on the original
+        // pattern used by <workspace>/<wrapper>/oversight-system/ on the original
         // affected machine.
         const wrapper = path.join(root, 'setup-wrapper');
         const oversightDir = path.join(wrapper, 'oversight-system');

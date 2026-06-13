@@ -28,17 +28,17 @@ test('still blocks rm on home directories and aliases', () => {
   assert.ok(blocked('rm -rf ~/'), 'tilde slash');
   assert.ok(blocked('rm -rf $HOME'), '$HOME');
   assert.ok(blocked('rm -rf %USERPROFILE%'), '%USERPROFILE%');
-  assert.ok(blocked('rm -rf /c/Users/rossb'), 'home via /c path');
-  assert.ok(blocked('rm -rf "C:\\Users\\rossb"'), 'home via quoted Windows path');
+  assert.ok(blocked('rm -rf /c/Users/testuser'), 'home via /c path');
+  assert.ok(blocked('rm -rf "C:\\Users\\testuser"'), 'home via quoted Windows path');
   assert.ok(blocked('rm -rf /home/ross'), 'linux home');
-  assert.ok(blocked('rm -rf /c/Users/rossb/*'), 'glob-everything under home');
+  assert.ok(blocked('rm -rf /c/Users/testuser/*'), 'glob-everything under home');
   assert.ok(blocked('cd /tmp && rm -rf ~'), 'chained command');
 });
 
 test('allows rm on files and subdirectories under home (the false-positive class)', () => {
-  assert.ok(!blocked('rm /c/Users/rossb/AppData/Local/Temp/chrome-win64.zip'), 'single file under home');
-  assert.ok(!blocked('rm /c/Users/rossb/AppData/Local/Temp/a.zip /c/Users/rossb/AppData/Local/Temp/b.zip'), 'multiple files under home');
-  assert.ok(!blocked('rm -rf /c/Users/rossb/AppData/Local/ms-playwright/chromium-1217'), 'recursive on a deep subdir');
+  assert.ok(!blocked('rm /c/Users/testuser/AppData/Local/Temp/chrome-win64.zip'), 'single file under home');
+  assert.ok(!blocked('rm /c/Users/testuser/AppData/Local/Temp/a.zip /c/Users/testuser/AppData/Local/Temp/b.zip'), 'multiple files under home');
+  assert.ok(!blocked('rm -rf /c/Users/testuser/AppData/Local/ms-playwright/chromium-1217'), 'recursive on a deep subdir');
   assert.ok(!blocked('rm -f /tmp/out.log'), 'tmp file');
   assert.ok(!blocked('rm file1.txt file2.txt'), 'relative files');
   assert.ok(!blocked('rm -rf node_modules'), 'relative dir');

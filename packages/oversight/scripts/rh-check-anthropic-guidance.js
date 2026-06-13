@@ -12,7 +12,7 @@
  *
  * Side effects:
  *   - Reads / writes `~/.claude/cache/anthropic-docs-hashes.json`
- *   - Overwrites `claude-setup-ross/environment/GUIDANCE_CHANGES.md`
+ *   - Overwrites `<oversight-dir>/../environment/GUIDANCE_CHANGES.md`
  *   - Makes HTTPS GET requests to docs.claude.com
  *
  * Exits 0 regardless of outcome; failed pages are reported in the output.
@@ -47,7 +47,7 @@ function fetchOnce(url, timeoutMs = 10000, depth = 0) {
   return new Promise((resolve) => {
     const req = https.get(url, {
       headers: {
-        "User-Agent": "claude-setup-ross/daily-regen (docs-drift-check)",
+        "User-Agent": "rh-claude-framework/daily-regen (docs-drift-check)",
         "Accept": "text/html,application/xhtml+xml",
       },
       timeout: timeoutMs,

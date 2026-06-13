@@ -87,7 +87,7 @@ Goal: replace inference with verified facts before committing to v2 shape.
 
 - [x] **0.4 — Tech-stack decision** → `docs/research/v2-stack-decision.md`
   - [x] 4 candidates compared (status quo, shadcn-aligned, SolidJS, SvelteKit)
-  - [x] **Recommendation: Option B — Shadcn-aligned** (React 19 + Vite + Tailwind v4 + shadcn/ui + Radix + Recharts). 100% verbatim component lift from v1; aligns with `claude-setup-ross/shadcn-kit` direction; no runtime dep added.
+  - [x] **Recommendation: Option B — Shadcn-aligned** (React 19 + Vite + Tailwind v4 + shadcn/ui + Radix + Recharts). 100% verbatim component lift from v1; aligns with `<user-setup>/shadcn-kit` direction; no runtime dep added.
   - [x] Subagent disclosed it could not locate `shadcn-kit/`/`html-kit/` in this clone (workspace tree only); recommendation rests on `Workspace/CLAUDE.md` declared direction
 
 - [x] **0.5 — IA proposal** → `docs/research/v2-ia.md`
