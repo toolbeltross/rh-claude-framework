@@ -112,7 +112,17 @@ export default function LiveSurface({ live, onOpenDetail }) {
               ].filter(Boolean).join('\n')}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
-              {label}
+              <span className="truncate max-w-[120px]">{label}</span>
+              {/* Session title as Claude Code Desktop's Recents tab shows it —
+                  promoted from the hover tooltip into the visible label so two
+                  tabs in the same workspace are distinguishable at a glance.
+                  Falls back to just the workspace label on headless runs that
+                  have no Desktop tab (ccdTitle is undefined there). */}
+              {ccdTitle && (
+                <span className="truncate max-w-[150px] text-gray-500" title={ccdTitle}>
+                  “{ccdTitle}”
+                </span>
+              )}
               {origin && origin !== 'claude-desktop' && (
                 <span className="text-[9px] text-gray-600 uppercase">{origin.replace('claude-', '')}</span>
               )}
