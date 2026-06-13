@@ -34,11 +34,11 @@ All 6 types reach v1 **only** via TrendsTab's 7/14/30/N-day aggregation — ther
 
 - `~/.claude/memory-shared/learnings/` — **85 files** (84 `.md` topics + `MEMORY.md` index). NOT surfaced in v1.
 - `recommendations.md` / `cleanup.md` — **5 instances** across workspace:
-  - Workspace root: `C:/Users/rossb/OneDrive/Workspace/{recommendations,cleanup}.md` (351 + 342 lines — active scribe targets)
+  - Workspace root: `<workspace>/{recommendations,cleanup}.md` (351 + 342 lines — active scribe targets)
   - Per-project: `rh-claude-framework/` (15 + 14 lines), `rh-platform-agentbuild/`, `expdate-extractor/`
   - NOT surfaced in v1
 - `~/.claude/oversight/supervisory-log.md` — Layer 3a rejections; aggregated counts shown in Trends but no per-rejection viewer
-- `claude-setup-ross/oversight-system/OVERSIGHT_STATE.md` + `OVERSIGHT_SYSTEM.md` — auto-regen state + hand-authored design doc. NOT surfaced
+- `<oversight-dir>/OVERSIGHT_STATE.md` + `OVERSIGHT_SYSTEM.md` — auto-regen state + hand-authored design doc. NOT surfaced
 
 ### Recommendations table — signal × proposed v2 home
 

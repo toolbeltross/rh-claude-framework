@@ -92,7 +92,7 @@ All flow through `parser.js:parseStatsCache` → `store.stats` → WS `snapshot`
 JSONL with mixed record types.
 
 **Sample verification token (literal last line, abbreviated tail):**
-> `...sourceToolAssistantUUID":"4df9741f-f99f-47f4-bc8a-abeb5ab6ac83","userType":"external","entrypoint":"sdk-cli","cwd":"C:\\Users\\rossb","sessionId":"2aca446f-05ac-4b7b-9725-3382142fd8be","version":"2.1.129","gitBranch":"HEAD"}` — lines 1–96 of 96 read.
+> `...sourceToolAssistantUUID":"4df9741f-f99f-47f4-bc8a-abeb5ab6ac83","userType":"external","entrypoint":"sdk-cli","cwd":"<home>","sessionId":"2aca446f-05ac-4b7b-9725-3382142fd8be","version":"2.1.129","gitBranch":"HEAD"}` — lines 1–96 of 96 read.
 
 **Per-line schema (10 distinct `type` values observed):** `user`, `assistant`, `system`, `attachment`, `agent-setting`, `queue-operation`, `last-prompt`, `progress`, `ai-title`, `file-history-snapshot`.
 
@@ -136,7 +136,7 @@ Per-session aggregate object (sessionId, projectPath, firstTs, lastTs, models[],
 
 **Implementation sketch:** new `server/transcript-aggregator.js` with `loadAll()` (boot), `tail(path)` (incremental), exposes the same `{totalSessions, totalMessages, dailyActivity, hourCounts, dailyModelTokens, firstSessionDate, modelUsage}` shape consumed by `parseStatsCache`. Wire into `store.stats` so existing components require **zero** code changes. Optionally retire `parseStatsCache` once parity is verified (per `rh-replacement-assessment.md` carve-out: stats-cache is a stale fact, not a deliberate decision worth preserving).
 
-**Pitfall to address:** OneDrive sync was disabled in 2026-05 — verify still off. The `~/.claude/projects/` path is at `C:/Users/rossb/.claude/`, NOT under OneDrive, so should be safe — confirmed by path.
+**Pitfall to address:** OneDrive sync was disabled in 2026-05 — verify still off. The `~/.claude/projects/` path is at `~/.claude/`, NOT under OneDrive, so should be safe — confirmed by path.
 
 ## Source registry
 
@@ -148,7 +148,7 @@ Per-session aggregate object (sessionId, projectPath, firstTs, lastTs, models[],
 | `packages/telemetry/server/trends-router.js` | Full 77/77 | OK |
 | `packages/telemetry/server/parser.js` | Full 175/175 | OK |
 | `packages/telemetry/src/components/OverviewTab.jsx` | Head 50 + tail 80 (full coverage, small file) | OK |
-| Sample transcript `~/.claude/projects/C--Users-rossb/2aca446f-...jsonl` | Full 96/96 | Token recorded above |
+| Sample transcript `~/.claude/projects/C--Users-<user>/2aca446f-...jsonl` | Full 96/96 | Token recorded above |
 | `src/hooks/useDashboardData.js` + 28 components | Partial / inferred via grep | Disclosed — see subagent return |
 
 **Cross-references:** 24 endpoints found, 24 audited. 16 WS event types found, 16 audited (1 orphan: `hookPerfEvent` has no reducer case).
