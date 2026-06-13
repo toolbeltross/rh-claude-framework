@@ -28,10 +28,21 @@ export async function captureViews(baseUrl, outputDir, label) {
     });
     const page = await context.newPage();
 
-    // Disable animations for deterministic screenshots
+    // Disable animations for deterministic screenshots.
+    // NOTE: the CSS rule below only stops CSS animations/transitions. Recharts
+    // animates via JavaScript (react-smooth / requestAnimationFrame), which CSS
+    // cannot halt — that produced a non-deterministic ~2.7–3.6% pixel diff on the
+    // chart-heavy session surface (the charts were caught mid-tween at different
+    // frames in the dev vs prod captures). We therefore also hide the recharts
+    // chart containers. `visibility: hidden` removes the nondeterministic chart
+    // pixels while preserving layout (so the rest of the surface still diffs
+    // cleanly). Chart rendering is covered by the browser tier's DOM assertions,
+    // not by this pixel comparison.
     await page.addInitScript(() => {
       const style = document.createElement('style');
-      style.textContent = '*, *::before, *::after { animation: none !important; transition: none !important; }';
+      style.textContent =
+        '*, *::before, *::after { animation: none !important; transition: none !important; } ' +
+        '.recharts-responsive-container, .recharts-wrapper { visibility: hidden !important; }';
       document.head.appendChild(style);
     });
 
