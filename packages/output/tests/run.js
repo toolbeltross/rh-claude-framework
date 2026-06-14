@@ -13,6 +13,7 @@ const SUITES = [
   'test-daily-regen.js',
   'test-generate-env-md.js',
   'test-scribe-db.js',
+  'test-context-db.js',
   'test-transcript-ingest.js',
   'test-scribe-parity-audit.js',
 ];
