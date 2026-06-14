@@ -11,7 +11,7 @@
 - [x] 1.1 `sql/rh_context_schema.sql` — 11 `ctx_*` tables (spine: session, session_attribution, ingest_source; content: memory_artifact, memory_observation; telemetry: oversight_event, telemetry_failure, model_usage, telemetry_snapshot, subagent_run; audit: dualwrite_log) + additive per-turn telemetry columns on `transcript_messages`. Idempotent.
 - [x] 1.2 Applied to live `rh_scribe`; **verified outer seam**: 11 tables created; generated rate columns compute (120k tokens/min from 120k tokens / 60s); uuidv7 PK; generated `body_tsv` matches `websearch_to_tsquery`; generated `total_tokens`; privacy CHECK rejects bad disposition. Probe rows cleaned up.
 - [x] 1.3 `config.contextDb` flag (env `RH_CONTEXT_DB` > `oversight.json:contextDb` > default-off), reusing the existing `scribeDb*` connection (same DB).
-- [ ] 1.4 Config test for the contextDb flag resolution.
+- [x] 1.4 Config test for the contextDb flag resolution (`packages/oversight/tests/test-config.js`; in the 197-pass suite).
 
 ## Phase 2 — scribe_rows key migration (next PR — see assessment below)
 - [x] 2.1 `canonicalSourceFile()` (forward-slash, case-preserved) in `scribe-db.js`, applied in `writeRow` (PR #80). NOTE: parity-audit's `normalizePath()` still lowercases — benign case discrepancy ([steward note]); unify in `@rh/shared` if it ever bites.
@@ -20,12 +20,12 @@
 - [x] 2.4 Parity audit re-run → **no path_drift, no test_pollution** (the started test-pollution chip session purged the leaked temp rows; `UPDATE 0` backslash rows at migration confirms). Supersedes the path-normalization task.
 
 ## Phase 3 — the 3rd write (wiring)
-- [ ] 3.1 `packages/output/scripts/lib/context-db.js` — best-effort writers for memory_artifact / memory_observation / dualwrite_log, same machinery as scribe-db.js (spawnSync psql, dollarQuote, PGCLIENTENCODING=UTF8, swallow+log). No-op when `contextDb` false.
+- [x] 3.1 `packages/output/scripts/lib/context-db.js` — best-effort writers for memory_artifact / memory_observation / dualwrite_log, reusing scribe-db.js machinery (spawnSync psql, dollarQuote, canonicalSourceFile, PGCLIENTENCODING=UTF8, swallow+log). No-op when `contextDb` false. **Unwired** — no live writer calls it yet (gated behind 3.4 privacy gate). PR (this).
 - [ ] 3.2 Wire into `rh-scribe-table-write.js` (after md + rh_scribe writes) → upsert `ctx_memory_artifact` (capture **full session UUID** at write time).
 - [ ] 3.3 Fix the verified append-observation gap: `rh-learnings-write.js` `modeAppendObservation` writes one `ctx_memory_observation` row (incremental).
 - [ ] 3.4 Privacy gate (steward BLOCK 2): `ctx_ingest_source` upsert with content-level scan for prose; default `review-required`; refuse content rows whose source is `review-required`/blocklisted. `blocklist_version` recorded.
 - [ ] 3.5 Telemetry capture → `ctx_model_usage` / `ctx_telemetry_snapshot` / `ctx_subagent_run` at session close (and per-turn columns on transcript_messages during ingest).
-- [ ] 3.6 `context_db_write_failed` oversight event on failure. Tests (flag-off no-op; mock-pg shape; RH_TEST_PG real-DB round-trip).
+- [x] 3.6 `context_db_write_failed` oversight event on failure (emitted by all three writers). Tests `packages/output/tests/test-context-db.js`: flag-off no-op, validation, never-throws, pure SQL-shape (no DB), and RH_TEST_PG real-DB round-trip (upsert-in-place, dup-safe observation via natural key, audit append). Output suite 158/158 incl. PG. PR (this). Note: event only fires once live writers call the lib (3.2/3.3/3.5).
 
 ## Phase 4 — backfill + read-back + confidence
 - [ ] 4.1 One-shot idempotent backfill from canonical files (reuse parity-audit `md_only` worklist). Observations backfilled from `## Observations`. Disclosed gap: no historical telemetry/trend source before capture-start.
@@ -51,9 +51,10 @@ Per `rh-replacement-assessment.md` (modifying a working dedup path).
 | privacy CHECK | bad `privacy_disposition` rejected by constraint |
 | contextDb flag | oversight suite 197/197 incl. flag-resolution test |
 | scribe_rows key migration | constraint swapped on live DB (`scribe_rows_bucket_source_file_row_id_key`); same row_id + 2 source_files coexist; upsert dedups on new key; output suite 148/148 incl. RH_TEST_PG=1 |
+| context-db.js writers (3.1/3.6) | output suite 158/158 incl. RH_TEST_PG=1: artifact upsert-in-place on natural key, observation resolved by natural key + dup-safe, dualwrite audit append; flag-off no-op; never-throws on broken psql; SQL-shape asserted; **zero test residue verified** in ctx_ tables after a clean PG run |
 
 ## What is PARTIAL (not verified via outer seam)
 | Item | Status | Linked ID |
 |---|---|---|
-| the 3rd write itself | not wired — no ctx_ row is written by any live writer yet | Phase 3 |
+| the 3rd write end-to-end | `context-db.js` exists + tested, but **unwired** — no live md writer calls it yet; gated behind the 3.4 privacy gate | Phase 3.2/3.3/3.4/3.5 |
 | backfill / read-back / perf | not started | Phase 4 |
