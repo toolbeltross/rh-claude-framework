@@ -4,10 +4,10 @@
 > `PROGRESS.md`, now frozen at [`archive/PROGRESS-history-thru-2026-05-16.md`](archive/PROGRESS-history-thru-2026-05-16.md)).
 > Per the workspace convention *"Session state files: current facts only, archive history when > 100 lines."*
 > The session-by-session record is **git history** (each session = PRs); this file holds only the live picture.
-> `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here).
+> `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here). It tracks the latest **substantive** PR, not its own doc-only stamp commits (pinning a literal HEAD hash here is self-defeating — a stamp commit becomes the new HEAD and instantly invalidates the stamp).
 
 **Last verified:** 2026-06-13
-**Branch:** `main` — HEAD `da9d10f` (PR #77)
+**Through:** `main`, latest substantive PR **#77** (tracking-standard restructure)
 **Tree:** clean · no open PRs
 
 ## Current state
