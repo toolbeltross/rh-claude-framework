@@ -75,6 +75,11 @@ When the user invokes `/rh-quit`:
    - Keep it lean (< 100 lines). If a section has grown historical, move it to `archive/` rather than letting the file bloat — that bloat is exactly what this convention exists to prevent.
    - This is a curation pass, not a blind append. Only the model can do it well; that's why it lives here and not in a hook.
 
+   **Commit hygiene — REQUIRED if you commit/PR the refresh.** The workspace pattern lands the refresh on a `chore/session-state-refresh-prNN` branch + PR. When you stage:
+   - **Stage ONLY the files this step changed, by explicit path** — `SESSION_STATE.md` and any `PLAN-*.md` you actually edited. **Never `git add -A`, `git add .`, or `git add -u`.**
+   - **Run `git status --short` as a preflight FIRST.** If it lists files you did not edit in this skill — another concurrent session's uncommitted work in the shared checkout — do **not** stage them. Stage only your named paths and list the foreign dirty files in the summary so they are visibly left behind, not silently swept.
+   - **Why:** `/rh-quit` runs at session end, when the working tree may hold a *different* session's in-progress work. A broad add sweeps that unrelated, unreviewed delta into the refresh PR — this is exactly what produced PR #84 (an inert-but-unreviewed context-db delta merged via a `/rh-quit` refresh before its own PR was ready). Scoped, named-path staging is the fix. *(Steward APPROVE-WITH-CONDITIONS C1; oversight failure row F-13.)*
+
 5. **Print summary:**
    - Items appended per scope (recommendations / cleanup / learnings)
    - Whether `SESSION_STATE.md` was refreshed (and what changed) or skipped (not present)
