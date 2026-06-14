@@ -13,6 +13,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLAUDE_JSON = CLAUDE_JSON_PATH;
 const STATS_CACHE = STATS_CACHE_PATH;
 
+// True only when run directly (node telemetry-cli.js …), false when imported by
+// tests. Lets us export the pure helpers without the CLI auto-running on import.
+// Path-normalized compare (Windows separator/case differences).
+function pathsEqual(a, b) {
+  if (!a || !b) return false;
+  const n = (p) => p.replace(/\\/g, '/').toLowerCase();
+  return n(a) === n(b);
+}
+const isMain = pathsEqual(process.argv[1], fileURLToPath(import.meta.url));
+
 // ── Parsing (mirrors server/parser.js) ──────────────────────────────────────
 
 async function readJSON(path) {
@@ -89,41 +99,102 @@ function parseSession(path, proj) {
   };
 }
 
+// Normalize a path for comparison: backslashes→slashes, trailing slash stripped,
+// lowercased (Windows is case-insensitive; OneDrive paths mix separator styles).
+function normalizeDir(p) {
+  if (!p) return '';
+  return String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+// Pick the live session that belongs to the *caller*, not merely whichever
+// session pinged the server most recently. With several concurrent Claude
+// sessions all POSTing live status (statusLine fires every ~2s), max(_lastSeen)
+// is non-deterministic and frequently returns a different session — or even a
+// different project — than the one that invoked this CLI. Priority:
+//   1. exact session_id match  (precise; survives multiple sessions per project)
+//   2. same working directory  (scopes to the right project at least)
+//   3. globally most-recent    (legacy fallback — preserves old behavior)
+// Returns [id, raw] or null. Pure — unit-testable without a server.
+function selectLiveSession(liveSessions, { sessionId, cwd } = {}) {
+  const entries = Object.entries(liveSessions || {});
+  if (entries.length === 0) return null;
+  const byRecency = (a, b) => (b[1]._lastSeen || 0) - (a[1]._lastSeen || 0);
+
+  if (sessionId) {
+    const exact = entries.filter(([id, s]) => (s.session_id || id) === sessionId);
+    if (exact.length) return exact.sort(byRecency)[0];
+  }
+  const normCwd = normalizeDir(cwd);
+  if (normCwd) {
+    const sameCwd = entries.filter(([, s]) => normalizeDir(s.workspace?.current_dir) === normCwd);
+    if (sameCwd.length) return sameCwd.sort(byRecency)[0];
+  }
+  return entries.sort(byRecency)[0];
+}
+
+// Map a raw live-session record (server snapshot shape) to the flat shape the
+// printers consume. Claude Code's statusLine payload nests its real context
+// numbers under context_window.{context_window_size, used_percentage,
+// total_input_tokens, current_usage.*}. The previous mapping read
+// total_tokens / input_tokens / cache_read_tokens etc. — fields that never
+// exist in the payload — so it silently fell back to the 200K default and
+// zeroed the breakdown even for 1M-context Opus sessions. Pure — unit-testable.
+function normalizeLiveSession(raw, id) {
+  const cwd = raw.workspace?.current_dir || '';
+  const cw = raw.context_window;
+  let contextWindow = null;
+  if (cw) {
+    const usage = cw.current_usage || {};
+    const limit = cw.context_window_size || cw._resolvedSize ||
+      resolveContextWindowSize(null, raw.model?.display_name, cw.total_input_tokens) ||
+      DEFAULT_CONTEXT_WINDOW_SIZE;
+    const usedTokens = cw.total_input_tokens ?? 0;
+    const usedPercentage = cw.used_percentage ??
+      (limit > 0 && usedTokens > 0 ? Math.round((usedTokens / limit) * 100) : 0);
+    contextWindow = {
+      usedPercentage,
+      usedTokens,
+      limit,
+      // Composition of the most-recent request (NOT cumulative window
+      // occupancy — cache_read in particular is cumulative and dwarfs the
+      // window, so these must never be summed for a "used" headline).
+      input: usage.input_tokens || 0,
+      output: usage.output_tokens || 0,
+      cacheRead: usage.cache_read_input_tokens || 0,
+      cacheWrite: usage.cache_creation_input_tokens || 0,
+    };
+  }
+  return {
+    sessionId: raw.session_id || id,
+    projectName: cwd ? basename(cwd) : 'unknown',
+    cwd,
+    model: raw.model?.display_name || 'Active',
+    cost: raw.cost?.total_cost_usd ?? 0,
+    contextWindow,
+    _toolCount: raw._toolCount || 0,
+    _lastTool: raw._lastTool || null,
+    _lastSeen: raw._lastSeen || 0,
+    _turnCount: raw._turnCount || 0,
+    _tokensPerTurn: raw._tokensPerTurn || 0,
+    _estimatedTurnsRemaining: raw._estimatedTurnsRemaining ?? null,
+    _activeSubagents: raw._activeSubagents || {},
+    _subagentHistory: raw._subagentHistory || [],
+    _durationMs: raw._durationMs || 0,
+  };
+}
+
 async function fetchLiveSessions() {
   try {
     const res = await fetch(`http://localhost:${PORT}/api/snapshot`, { signal: AbortSignal.timeout(1000) });
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.liveSessions || Object.keys(data.liveSessions).length === 0) return null;
-    // Return the most recently seen live session, normalized to flat properties
-    const entries = Object.entries(data.liveSessions);
-    entries.sort((a, b) => (b[1]._lastSeen || 0) - (a[1]._lastSeen || 0));
-    const raw = entries[0][1];
-    const cwd = raw.workspace?.current_dir || '';
-    return {
-      sessionId: raw.session_id || entries[0][0],
-      projectName: cwd ? basename(cwd) : 'unknown',
-      cwd,
-      model: raw.model?.display_name || 'Active',
-      cost: raw.cost?.total_cost_usd ?? 0,
-      contextWindow: raw.context_window ? {
-        usedPercentage: raw.context_window.used_percentage || 0,
-        input: raw.context_window.input_tokens || 0,
-        output: raw.context_window.output_tokens || 0,
-        cacheRead: raw.context_window.cache_read_tokens || 0,
-        cacheWrite: raw.context_window.cache_write_tokens || 0,
-        limit: raw.context_window.total_tokens || DEFAULT_CONTEXT_WINDOW_SIZE,
-      } : null,
-      _toolCount: raw._toolCount || 0,
-      _lastTool: raw._lastTool || null,
-      _lastSeen: raw._lastSeen || 0,
-      _turnCount: raw._turnCount || 0,
-      _tokensPerTurn: raw._tokensPerTurn || 0,
-      _estimatedTurnsRemaining: raw._estimatedTurnsRemaining ?? null,
-      _activeSubagents: raw._activeSubagents || {},
-      _subagentHistory: raw._subagentHistory || [],
-      _durationMs: raw._durationMs || 0,
-    };
+    const picked = selectLiveSession(data.liveSessions, {
+      sessionId: process.env.CLAUDE_CODE_SESSION_ID,
+      cwd: process.cwd(),
+    });
+    if (!picked) return null;
+    return normalizeLiveSession(picked[1], picked[0]);
   } catch {
     return null;
   }
@@ -161,12 +232,12 @@ function printSummary({ sessions, topSession, liveSession, stats }) {
     // 1. Context — most important
     if (liveSession.contextWindow) {
       const cw = liveSession.contextWindow;
-      const total = (cw.input || 0) + (cw.output || 0) + (cw.cacheRead || 0) + (cw.cacheWrite || 0);
       const limit = cw.limit || DEFAULT_CONTEXT_WINDOW_SIZE;
-      const pct = total > 0 ? Math.round((total / limit) * 100) : 0;
+      const used = cw.usedTokens || 0;
+      const pct = cw.usedPercentage ?? (used > 0 ? Math.round((used / limit) * 100) : 0);
       const turnsLeft = liveSession._estimatedTurnsRemaining;
       const turnsStr = turnsLeft != null ? ` | ~${turnsLeft} turns left` : '';
-      lines.push(`Context: ${pct}% | ${formatTokens(total)}/${formatTokens(limit)}${turnsStr}`);
+      lines.push(`Context: ${pct}% | ${formatTokens(used)}/${formatTokens(limit)}${turnsStr}`);
     }
 
     // 2. Agents — summary line + per-agent cost breakdown
@@ -302,16 +373,16 @@ function printContext({ topSession, liveSession }) {
       const output = cw.output || 0;
       const cacheRead = cw.cacheRead || 0;
       const cacheWrite = cw.cacheWrite || 0;
-      const total = input + output + cacheRead + cacheWrite;
       const limit = cw.limit || DEFAULT_CONTEXT_WINDOW_SIZE;
-      const pct = total > 0 ? ((total / limit) * 100).toFixed(1) : '0.0';
+      const used = cw.usedTokens || 0;
+      const pct = cw.usedPercentage ?? (used > 0 ? Math.round((used / limit) * 100) : 0);
       const cacheTotal = cacheRead + input;
       const cacheHit = cacheTotal > 0 ? ((cacheRead / cacheTotal) * 100).toFixed(1) : '0.0';
 
       lines.push('');
-      lines.push(`Total Tokens: ${formatTokens(total)} / ${formatTokens(limit)} (${pct}%)`);
+      lines.push(`Context Used: ${formatTokens(used)} / ${formatTokens(limit)} (${pct}%)`);
       lines.push('');
-      lines.push('Breakdown:');
+      lines.push('Most recent request:');
       lines.push(`  Input:       ${formatTokens(input).padStart(8)}`);
       lines.push(`  Output:      ${formatTokens(output).padStart(8)}`);
       lines.push(`  Cache Read:  ${formatTokens(cacheRead).padStart(8)}`);
@@ -467,6 +538,7 @@ async function printLive() {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
+if (isMain) {
 const args = process.argv.slice(2);
 const command = (args[0] || 'summary').toLowerCase();
 
@@ -510,3 +582,7 @@ switch (command) {
 }
 
 console.log(output);
+}
+
+// Pure helpers exported for unit testing (no server / no side effects on import).
+export { selectLiveSession, normalizeLiveSession, normalizeDir };
