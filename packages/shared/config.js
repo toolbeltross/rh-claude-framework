@@ -119,6 +119,15 @@ function resolveConfig() {
     // Path to psql; null -> caller probes common install locations.
     scribeDbPsql: process.env.RH_SCRIBE_PSQL || file.scribeDbPsql || null,
 
+    // 2026-06-13: the THIRD parallel write — rich context data model
+    // (DELIBERATION-2026-06-13-context-data-model.md / PLAN-2026-06-13-context-db.md).
+    // ctx_* tables live in the SAME rh_scribe database; this flag gates the
+    // third write independently of scribeDb. OFF by default; enable via
+    // RH_CONTEXT_DB=1 or oversight.json contextDb:true. md stays canonical;
+    // best-effort shadow, never blocks md or the rh_scribe write.
+    contextDb: process.env.RH_CONTEXT_DB === '1' ||
+      (process.env.RH_CONTEXT_DB !== '0' && file.contextDb === true),
+
     configPath: CONFIG_PATH,
   };
 
