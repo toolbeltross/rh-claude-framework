@@ -59,6 +59,8 @@ function lit(val, type) {
     case 'timestamptz': return q + '::timestamptz';
     case 'date':        return q + '::date';
     case 'int':         return q + '::int';
+    case 'bigint':      return q + '::bigint';
+    case 'numeric':     return q + '::numeric';
     case 'jsonb':       return q + '::jsonb';
     case 'text':
     default:            return q;
@@ -367,13 +369,122 @@ function logDualWrite(entry) {
   }
 }
 
+// ---- telemetry capture (Phase 3.5) -----------------------------------------
+//
+// Telemetry rows are token counts / costs / model ids — NOT content — so they
+// are NOT privacy-gated here (the transcript-ingest slug blocklist already
+// excludes private projects before they reach aggregation). source_id is still
+// recorded for provenance/joins.
+
+const MODEL_USAGE_FIELDS = {
+  scope: 'text', session_id: 'uuid', agent_id: 'text', day: 'date', model_id: 'text',
+  input_tokens: 'bigint', output_tokens: 'bigint', cache_read: 'bigint', cache_write: 'bigint',
+  cost_usd: 'numeric', message_count: 'int', ts: 'timestamptz', source_id: 'uuid',
+};
+const SNAPSHOT_FIELDS = {
+  scope: 'text', session_id: 'uuid', day: 'date', primary_model: 'text',
+  wall_ms: 'bigint', api_duration_ms: 'bigint', tool_duration_ms: 'bigint',
+  total_cost: 'numeric', input_tokens: 'bigint', output_tokens: 'bigint',
+  cache_read: 'bigint', cache_write: 'bigint', message_count: 'int', tool_call_count: 'int',
+  lines_added: 'int', lines_removed: 'int', failure_count: 'int', rejection_count: 'int',
+  context_peak_pct: 'numeric', model_mix: 'jsonb', source_id: 'uuid',
+};
+const SUBAGENT_FIELDS = {
+  agent_id: 'text', parent_session_id: 'uuid', agent_type: 'text', status: 'text',
+  first_ts: 'timestamptz', last_ts: 'timestamptz', duration_ms: 'bigint',
+  tool_call_count: 'int', total_cost: 'numeric', total_tokens: 'bigint',
+  primary_model: 'text', source_id: 'uuid',
+};
+
+function _row(fields, obj) {
+  const cols = Object.keys(fields).filter(c => obj[c] !== undefined);
+  return { cols, vals: cols.map(c => lit(obj[c], fields[c])) };
+}
+
+// Build the atomic session-telemetry replace script: delete this session's
+// prior session-scoped model_usage + snapshot, then insert the fresh set.
+// Idempotent across re-ingests. Exported for shape tests.
+function _buildSessionTelemetrySql({ session_id, source_id, day, modelUsage, snapshot }) {
+  const sid = lit(session_id, 'uuid');
+  const stmts = ['BEGIN;',
+    `DELETE FROM ctx_model_usage WHERE scope = 'session' AND session_id = ${sid};`,
+    `DELETE FROM ctx_telemetry_snapshot WHERE scope = 'session' AND session_id = ${sid};`];
+  for (const mu of modelUsage || []) {
+    const r = _row(MODEL_USAGE_FIELDS, { scope: 'session', session_id, model_id: mu.model_id,
+      input_tokens: mu.input_tokens, output_tokens: mu.output_tokens, cache_read: mu.cache_read,
+      cache_write: mu.cache_write, cost_usd: mu.cost_usd, message_count: mu.message_count,
+      ts: snapshot && snapshot.last_ts, source_id });
+    stmts.push(`INSERT INTO ctx_model_usage (${r.cols.join(', ')}) VALUES (${r.vals.join(', ')});`);
+  }
+  if (snapshot) {
+    const r = _row(SNAPSHOT_FIELDS, { scope: 'session', session_id, day,
+      primary_model: snapshot.primary_model, wall_ms: snapshot.wall_ms, total_cost: snapshot.total_cost,
+      input_tokens: snapshot.input_tokens, output_tokens: snapshot.output_tokens,
+      cache_read: snapshot.cache_read, cache_write: snapshot.cache_write,
+      message_count: snapshot.message_count, tool_call_count: snapshot.tool_call_count,
+      model_mix: snapshot.model_mix ? JSON.stringify(snapshot.model_mix) : undefined, source_id });
+    stmts.push(`INSERT INTO ctx_telemetry_snapshot (${r.cols.join(', ')}) VALUES (${r.vals.join(', ')});`);
+  }
+  stmts.push('COMMIT;');
+  return stmts.join('\n');
+}
+
+/**
+ * Replace one session's telemetry (model_usage + snapshot) atomically. Never
+ * throws; no-op when contextDb off. Idempotent — safe to re-run per ingest.
+ * @param {{session_id:string, source_id?:string, day?:string, modelUsage:Array, snapshot:object}} t
+ */
+function writeSessionTelemetry(t) {
+  try {
+    if (!config.contextDb) return { ok: true, skipped: true };
+    if (!t || !t.session_id) return { ok: false, error: 'writeSessionTelemetry: missing session_id' };
+    if (!(t.modelUsage && t.modelUsage.length) && !t.snapshot) return { ok: true, skipped: true };
+    const res = runSql(_buildSessionTelemetrySql(t));
+    if (!res.ok) { appendOversightEvent('context_db_write_failed', { entity: 'ctx_telemetry(session)', session_id: t.session_id, error: res.error }); return res; }
+    return { ok: true };
+  } catch (e) {
+    try { appendOversightEvent('context_db_write_failed', { entity: 'ctx_telemetry(session)', error: String(e.message || e) }); } catch {}
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+function _buildSubagentRunSql(row) {
+  const r = _row(SUBAGENT_FIELDS, row);
+  const updatable = r.cols.filter(c => c !== 'agent_id');
+  const setClause = updatable.map(c => `${c} = EXCLUDED.${c}`).join(', ');
+  return (
+    `INSERT INTO ctx_subagent_run (${r.cols.join(', ')}) VALUES (${r.vals.join(', ')}) ` +
+    (setClause ? `ON CONFLICT (agent_id) DO UPDATE SET ${setClause}` : 'ON CONFLICT (agent_id) DO NOTHING') +
+    `;`
+  );
+}
+
+/**
+ * Upsert one ctx_subagent_run (PK agent_id). Never throws; no-op when off.
+ */
+function upsertSubagentRun(row) {
+  try {
+    if (!config.contextDb) return { ok: true, skipped: true };
+    if (!row || !row.agent_id) return { ok: false, error: 'upsertSubagentRun: missing agent_id' };
+    const res = runSql(_buildSubagentRunSql(row));
+    if (!res.ok) { appendOversightEvent('context_db_write_failed', { entity: 'ctx_subagent_run', agent_id: row.agent_id, error: res.error }); return res; }
+    return { ok: true };
+  } catch (e) {
+    try { appendOversightEvent('context_db_write_failed', { entity: 'ctx_subagent_run', error: String(e.message || e) }); } catch {}
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
 module.exports = {
   upsertMemoryArtifact, insertMemoryObservation, logDualWrite,
   // privacy gate (Phase 3.4):
   upsertIngestSource, classifyDisposition, BLOCKLIST_VERSION,
+  // telemetry capture (Phase 3.5):
+  writeSessionTelemetry, upsertSubagentRun,
   sha256,
   // re-exported scribe-db plumbing (parity with scribe-db's surface):
   runSql, dollarQuote, canonicalSourceFile,
   // exported for shape tests (no live DB needed):
   _buildArtifactSql, _buildObservationSql, _buildDualWriteSql, _buildIngestSql, _cleanSourceGuard, lit,
+  _buildSessionTelemetrySql, _buildSubagentRunSql,
 };

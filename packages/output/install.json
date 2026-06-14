@@ -12,10 +12,10 @@
     {
       "kind": "copyFiles",
       "from": "scripts/lib",
-      "files": ["scribe-db.js", "context-db.js"],
+      "files": ["scribe-db.js", "context-db.js", "cost-rates.js", "transcript-telemetry.js"],
       "to": "scriptsDir/lib",
-      "label": "output canonical libs (scribe-db, context-db)",
-      "_note": "scribe-db.js and context-db.js are output-OWNED canonicals (NOT shims), so the blanket lib exclusion above must not skip them. They are required at load time by rh-scribe-table-write.js / rh-learnings-write.js. Listed by basename; `from` selects the lib subdir. scribe-db.js was historically hand-deployed (PLAN-2026-06-11 Phase 2.3) — this closes that gap. Runs in OUTPUT step (before SHARED), and neither file collides with shared's config/file-lock/env canonicals."
+      "label": "output canonical libs (scribe-db, context-db, cost-rates, transcript-telemetry)",
+      "_note": "These are output-OWNED canonicals (NOT shims), so the blanket lib exclusion above must not skip them. scribe-db.js + context-db.js load with the scribe/learnings writers; cost-rates.js + transcript-telemetry.js load with rh-transcript-ingest.js (Phase 3.5 telemetry capture). Listed by basename; `from` selects the lib subdir. scribe-db.js was historically hand-deployed (PLAN-2026-06-11 Phase 2.3) — this closes that gap. Runs in OUTPUT step (before SHARED), and none collide with shared's config/file-lock/env canonicals."
     }
   ]
 }

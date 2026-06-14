@@ -321,6 +321,91 @@ const tests = [
       }
     },
   },
+
+  // ---- telemetry writers (Phase 3.5) ------------------------------------
+  {
+    name: '_buildSessionTelemetrySql: atomic delete+insert; _buildSubagentRunSql: upsert on agent_id',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      const sql = db._buildSessionTelemetrySql({
+        session_id: '00000000-0000-4000-8000-000000000001',
+        modelUsage: [{ model_id: 'claude-opus-4-8', input_tokens: 100, output_tokens: 50, cache_read: 0, cache_write: 0, cost_usd: 0.01, message_count: 1 }],
+        snapshot: { primary_model: 'claude-opus-4-8', wall_ms: 1000, total_cost: 0.01, input_tokens: 100, output_tokens: 50, cache_read: 0, cache_write: 0, message_count: 1, tool_call_count: 0, model_mix: { 'claude-opus-4-8': 1 }, last_ts: '2026-06-14T08:00:00Z' },
+      });
+      assert.match(sql, /^BEGIN;/);
+      assert.match(sql, /COMMIT;$/);
+      assert.match(sql, /DELETE FROM ctx_model_usage WHERE scope = 'session'/);
+      assert.match(sql, /DELETE FROM ctx_telemetry_snapshot WHERE scope = 'session'/);
+      assert.match(sql, /INSERT INTO ctx_model_usage \(/);
+      assert.match(sql, /INSERT INTO ctx_telemetry_snapshot \(/);
+      assert.match(sql, /::jsonb/, 'model_mix cast to jsonb');
+      assert.match(sql, /::numeric/, 'cost cast to numeric');
+
+      const sub = db._buildSubagentRunSql({ agent_id: 'agent-x', status: 'ok', total_cost: 0.5, total_tokens: 1000 });
+      assert.match(sub, /INSERT INTO ctx_subagent_run \(/);
+      assert.match(sub, /ON CONFLICT \(agent_id\) DO UPDATE SET/);
+      assert.ok(!/agent_id = EXCLUDED\.agent_id/.test(sub), 'PK not in SET clause');
+    },
+  },
+  {
+    name: 'telemetry writers are skipped no-ops when contextDb is off',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      assert.deepStrictEqual(db.writeSessionTelemetry({ session_id: 'x', snapshot: {} }), { ok: true, skipped: true });
+      assert.deepStrictEqual(db.upsertSubagentRun({ agent_id: 'a' }), { ok: true, skipped: true });
+    },
+  },
+  {
+    name: PG ? 'PG: writeSessionTelemetry is idempotent (re-run keeps one snapshot, replaces model_usage)' : 'PG: session telemetry skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const db = freshContextDb({ RH_CONTEXT_DB: '1' });
+      const sid = require('crypto').randomUUID();
+      const payload = {
+        session_id: sid,
+        modelUsage: [
+          { model_id: 'claude-opus-4-8', input_tokens: 1000, output_tokens: 200, cache_read: 0, cache_write: 0, cost_usd: 0.02, message_count: 2 },
+          { model_id: 'claude-haiku-4-5', input_tokens: 10, output_tokens: 5, cache_read: 0, cache_write: 0, cost_usd: 0.0001, message_count: 1 },
+        ],
+        snapshot: { primary_model: 'claude-opus-4-8', wall_ms: 60000, total_cost: 0.0201, input_tokens: 1010, output_tokens: 205, cache_read: 0, cache_write: 0, message_count: 3, tool_call_count: 1, model_mix: { 'claude-opus-4-8': 2, 'claude-haiku-4-5': 1 }, last_ts: '2026-06-14T08:00:00Z' },
+      };
+      try {
+        assert.strictEqual(db.writeSessionTelemetry(payload).ok, true);
+        assert.strictEqual(db.writeSessionTelemetry(payload).ok, true, 're-run');
+        const mu = db.runSql(`SELECT count(*) FROM ctx_model_usage WHERE session_id='${sid}';`);
+        assert.strictEqual(mu.stdout, '2', 'exactly 2 model_usage rows (replaced, not duplicated)');
+        const snap = db.runSql(`SELECT count(*) || '|' || max(primary_model) || '|' || max(input_tokens) FROM ctx_telemetry_snapshot WHERE session_id='${sid}';`);
+        assert.strictEqual(snap.ok, true, snap.error);
+        assert.strictEqual(snap.stdout, '1|claude-opus-4-8|1010', 'exactly one snapshot with expected fields');
+        // generated total_tokens on a model_usage row computes
+        const tot = db.runSql(`SELECT total_tokens FROM ctx_model_usage WHERE session_id='${sid}' AND model_id='claude-opus-4-8';`);
+        assert.strictEqual(tot.stdout, '1200', 'generated total_tokens = 1000+200+0+0');
+        // generated rate column on the snapshot computes (tokens/min over 60s wall)
+        const rate = db.runSql(`SELECT round(tokens_per_min) FROM ctx_telemetry_snapshot WHERE session_id='${sid}';`);
+        assert.strictEqual(rate.stdout, '1215', '(1010+205) tokens over 60000ms = 1215/min');
+      } finally {
+        db.runSql(`DELETE FROM ctx_model_usage WHERE session_id='${sid}';`);
+        db.runSql(`DELETE FROM ctx_telemetry_snapshot WHERE session_id='${sid}';`);
+      }
+    },
+  },
+  {
+    name: PG ? 'PG: upsertSubagentRun inserts then updates in place on agent_id' : 'PG: subagent run skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const db = freshContextDb({ RH_CONTEXT_DB: '1' });
+      const aid = 'test-agent-' + Date.now().toString(36);
+      const sid = require('crypto').randomUUID();
+      try {
+        assert.strictEqual(db.upsertSubagentRun({ agent_id: aid, parent_session_id: sid, agent_type: 'Explore', status: 'orphaned', duration_ms: 1000, total_cost: 0.1, total_tokens: 500, primary_model: 'claude-haiku-4-5' }).ok, true);
+        assert.strictEqual(db.upsertSubagentRun({ agent_id: aid, status: 'ok', duration_ms: 60000, total_cost: 0.3, total_tokens: 1500 }).ok, true);
+        const sel = db.runSql(`SELECT count(*) || '|' || max(status) || '|' || round(max(cost_per_min)::numeric, 2) FROM ctx_subagent_run WHERE agent_id='${aid}';`);
+        assert.strictEqual(sel.stdout, '1|ok|0.30', 'one row, updated; cost_per_min generated (0.3 over 60s = 0.30/min)');
+      } finally {
+        db.runSql(`DELETE FROM ctx_subagent_run WHERE agent_id='${aid}';`);
+      }
+    },
+  },
 ];
 
 module.exports = { tests };
