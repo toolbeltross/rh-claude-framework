@@ -36,6 +36,16 @@ const fs = require('fs');
 const path = require('path');
 const { config } = require('./lib/config');
 const scribeDb = require('./lib/scribe-db');
+const { estimateCost } = require('./lib/cost-rates');
+// Telemetry capture (Phase 3.5) — best-effort, contextDb-gated. Defensive require
+// so an older install missing these libs can't break transcript FTS ingest.
+let contextDb, telemetry;
+try {
+  contextDb = require('./lib/context-db');
+  telemetry = require('./lib/transcript-telemetry');
+} catch {
+  contextDb = null; telemetry = null;
+}
 
 const ARGS = process.argv.slice(2);
 const DRY = ARGS.includes('--dry-run');
@@ -76,23 +86,54 @@ function extractMessage(line) {
   }
   text = text.trim();
   if (!text) return null;
-  return { role: j.type, ts: j.timestamp || null, text: text.slice(0, MAX_MSG_CHARS) };
+  const out = { role: j.type, ts: j.timestamp || null, text: text.slice(0, MAX_MSG_CHARS) };
+  // Per-turn telemetry (Phase 3.5): enrich assistant text rows with usage from
+  // the same line. Cost is estimated (transcript carries no per-line cost).
+  if (j.type === 'assistant' && msg.usage) {
+    const u = msg.usage;
+    out.input_tokens = u.input_tokens || 0;
+    out.output_tokens = u.output_tokens || 0;
+    out.cache_read = u.cache_read_input_tokens || 0;
+    out.cache_write = u.cache_creation_input_tokens || 0;
+    out.model = msg.model || null;
+    out.tool_calls = Array.isArray(msg.content) ? msg.content.filter(b => b && b.type === 'tool_use').length : 0;
+    out.cost_usd = out.model ? estimateCost(out.model, { input: out.input_tokens, output: out.output_tokens, cacheRead: out.cache_read, cacheWrite: out.cache_write }) : null;
+  }
+  return out;
 }
 
-function sqlBatchInsert(sessionId, startTurn, msgs) {
-  const values = msgs.map((m, i) => '(' + [
-    scribeDb.dollarQuote(sessionId),
-    String(startTurn + i),
-    scribeDb.dollarQuote(m.role),
-    m.ts ? scribeDb.dollarQuote(m.ts) + '::timestamptz' : 'NULL',
-    scribeDb.dollarQuote(m.text),
-  ].join(',') + ')').join(',\n');
-  return `INSERT INTO transcript_messages (session_id, turn, role, ts, content) VALUES\n${values};`;
+// withTelemetry adds the per-turn columns (Phase 3.5). Only enable when
+// contextDb is on — those columns are added by the ctx_ schema, which a
+// scribeDb-only install may not have applied.
+function sqlBatchInsert(sessionId, startTurn, msgs, withTelemetry) {
+  const baseCols = ['session_id', 'turn', 'role', 'ts', 'content'];
+  const telCols = ['input_tokens', 'output_tokens', 'cache_read', 'cache_write', 'cost_usd', 'tool_calls'];
+  const cols = withTelemetry ? baseCols.concat(telCols) : baseCols;
+  const intLit = v => (v == null ? 'NULL' : String(v | 0));
+  const values = msgs.map((m, i) => {
+    const v = [
+      scribeDb.dollarQuote(sessionId),
+      String(startTurn + i),
+      scribeDb.dollarQuote(m.role),
+      m.ts ? scribeDb.dollarQuote(m.ts) + '::timestamptz' : 'NULL',
+      scribeDb.dollarQuote(m.text),
+    ];
+    if (withTelemetry) {
+      v.push(
+        intLit(m.input_tokens), intLit(m.output_tokens), intLit(m.cache_read), intLit(m.cache_write),
+        m.cost_usd == null ? 'NULL' : Number(m.cost_usd).toFixed(6),
+        intLit(m.tool_calls),
+      );
+    }
+    return '(' + v.join(',') + ')';
+  }).join(',\n');
+  return `INSERT INTO transcript_messages (${cols.join(', ')}) VALUES\n${values};`;
 }
 
-function ingestFile(slug, file, sessionIdOverride) {
+function ingestFile(slug, file, sessionIdOverride, opts = {}) {
   const sessionId = sessionIdOverride || path.basename(file, '.jsonl');
   const size = fs.statSync(file).size;
+  const withTelemetry = !!(config.contextDb && contextDb && telemetry);
 
   const prev = scribeDb.runSql(
     `SELECT ingested_through || '|' || message_count FROM transcripts WHERE session_id=${scribeDb.dollarQuote(sessionId)};`
@@ -130,7 +171,7 @@ function ingestFile(slug, file, sessionIdOverride) {
 
   for (let i = 0; i < msgs.length; i += BATCH_ROWS) {
     const batch = msgs.slice(i, i + BATCH_ROWS);
-    res = scribeDb.runSql(sqlBatchInsert(sessionId, turn + i, batch), 60000);
+    res = scribeDb.runSql(sqlBatchInsert(sessionId, turn + i, batch, withTelemetry), 60000);
     if (!res.ok) return { sessionId, error: res.error, partialAt: turn + i };
   }
 
@@ -138,6 +179,24 @@ function ingestFile(slug, file, sessionIdOverride) {
     `UPDATE transcripts SET ingested_through=${size}, message_count=${turn + msgs.length}, ingested_at=now() WHERE session_id=${scribeDb.dollarQuote(sessionId)};`
   );
   if (!res.ok) return { sessionId, error: res.error };
+
+  // Part B (Phase 3.5): aggregate the FULL transcript into ctx_ telemetry.
+  // Best-effort, contextDb-gated, never blocks the FTS ingest above. Full-file
+  // (not just the new chunk) so session/subagent totals are complete; the
+  // session writer is idempotent so re-ingests refresh rather than duplicate.
+  if (withTelemetry) {
+    try {
+      const records = telemetry.parseTranscriptTelemetry(buf.toString('utf8'));
+      if (opts.isSubagent) {
+        contextDb.upsertSubagentRun(
+          telemetry.aggregateSubagentRun(records, { agent_id: sessionId, parent_session_id: opts.parentSessionId, agent_type: opts.agentType })
+        );
+      } else {
+        const agg = telemetry.aggregateSession(records);
+        contextDb.writeSessionTelemetry({ session_id: sessionId, modelUsage: agg.modelUsage, snapshot: agg.snapshot });
+      }
+    } catch { /* best-effort; never block ingest */ }
+  }
   return { sessionId, ingested: msgs.length };
 }
 
@@ -179,7 +238,7 @@ function main() {
         for (const sf of fs.readdirSync(subDir)) {
           if (!sf.endsWith('.jsonl')) continue;
           summary.files++;
-          const r = ingestFile(SLUG_PREFIX + slug, path.join(subDir, sf), f + ':' + path.basename(sf, '.jsonl'));
+          const r = ingestFile(SLUG_PREFIX + slug, path.join(subDir, sf), f + ':' + path.basename(sf, '.jsonl'), { isSubagent: true, parentSessionId: f });
           if (r.error) summary.errors.push(`${r.sessionId}: ${r.error}`);
           else if (r.skipped) summary.upToDate++;
           else summary.ingested += r.ingested || r.wouldIngest || 0;
