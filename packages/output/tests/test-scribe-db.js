@@ -52,6 +52,23 @@ const tests = [
     },
   },
   {
+    name: 'canonicalSourceFile collapses backslash + forward-slash spellings of one path to one value',
+    fn: () => {
+      const db = freshScribeDb({ RH_SCRIBE_DB: '0' });
+      const back = 'C:\\Users\\rossb\\OneDrive\\Workspace\\cleanup.md';
+      const fwd = 'C:/Users/rossb/OneDrive/Workspace/cleanup.md';
+      assert.strictEqual(db.canonicalSourceFile(back), fwd, 'backslash spelling normalizes to forward-slash');
+      assert.strictEqual(db.canonicalSourceFile(fwd), fwd, 'forward-slash spelling is unchanged');
+      assert.strictEqual(db.canonicalSourceFile(back), db.canonicalSourceFile(fwd), 'both spellings collapse to one');
+      // case preserved (Windows case-insensitive, but POSIX paths are not)
+      assert.strictEqual(db.canonicalSourceFile('C:\\X\\Y.md'), 'C:/X/Y.md', 'case preserved');
+      // null/empty passthrough
+      assert.strictEqual(db.canonicalSourceFile(null), null);
+      assert.strictEqual(db.canonicalSourceFile(undefined), undefined);
+      assert.strictEqual(db.canonicalSourceFile(''), '');
+    },
+  },
+  {
     name: 'writeRow never throws even with a broken psql path',
     fn: () => {
       const db = freshScribeDb({ RH_SCRIBE_DB: '1', RH_SCRIBE_PSQL: 'Z:/does/not/exist/psql.exe' });
@@ -76,6 +93,31 @@ const tests = [
         assert.strictEqual(sel.stdout, "closed|second version with 'quotes' and $tags$");
       } finally {
         db.runSql(`DELETE FROM scribe_rows WHERE row_id=${db.dollarQuote(rid)};`);
+      }
+    },
+  },
+  {
+    name: PG ? 'PG: two source_file spellings of one path collapse to a single stored spelling' : 'PG: spelling-collapse skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const db = freshScribeDb({ RH_SCRIBE_DB: '1' });
+      const stamp = Date.now().toString(36);
+      const ridA = 'test-pd-a-' + stamp;
+      const ridB = 'test-pd-b-' + stamp;
+      const back = `C:\\Users\\rossb\\tmp\\parity-${stamp}\\cleanup.md`;
+      const fwd = `C:/Users/rossb/tmp/parity-${stamp}/cleanup.md`;
+      try {
+        const a = db.writeRow({ bucket: 'cleanup', row_id: ridA, content: 'row a', status: 'open', source_file: back });
+        const b = db.writeRow({ bucket: 'cleanup', row_id: ridB, content: 'row b', status: 'open', source_file: fwd });
+        assert.strictEqual(a.ok, true, `insert a failed: ${a.error}`);
+        assert.strictEqual(b.ok, true, `insert b failed: ${b.error}`);
+        const sel = db.runSql(`SELECT count(DISTINCT source_file) FROM scribe_rows WHERE row_id IN (${db.dollarQuote(ridA)}, ${db.dollarQuote(ridB)});`);
+        assert.strictEqual(sel.ok, true, `select failed: ${sel.error}`);
+        assert.strictEqual(sel.stdout, '1', 'both rows share one canonical source_file spelling (no path_drift)');
+        const spell = db.runSql(`SELECT DISTINCT source_file FROM scribe_rows WHERE row_id IN (${db.dollarQuote(ridA)}, ${db.dollarQuote(ridB)});`);
+        assert.strictEqual(spell.stdout, fwd, 'canonical spelling is forward-slash');
+      } finally {
+        db.runSql(`DELETE FROM scribe_rows WHERE row_id IN (${db.dollarQuote(ridA)}, ${db.dollarQuote(ridB)});`);
       }
     },
   },

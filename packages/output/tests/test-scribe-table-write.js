@@ -13,6 +13,15 @@ const { spawnSync } = require('child_process');
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'rh-scribe-table-write.js');
 const SENTINEL = '<!-- scribe-done -->';
 
+// rh-scribe-table-write does a best-effort postgres dual-write when the target
+// basename maps to a bucket (recommendations.md / cleanup.md / learnings.md).
+// These tests use a tmp `recs.md` (no bucket → no shadow today), but force the
+// shadow OFF defensively so a future test that targets a real bucket filename
+// can't leak rows into the live rh_scribe DB. The md-file/sentinel logic is
+// what's under test here; the DB shadow is covered (with cleanup) in
+// test-scribe-db.js. Env var wins over oversight.json (see @rh/shared/config).
+const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0' };
+
 function withTmpFile(seed, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-stw-test-'));
   const target = path.join(dir, 'recs.md');
@@ -23,7 +32,7 @@ function withTmpFile(seed, fn) {
 
 function runCli(args, stdinJson) {
   const r = spawnSync('node', [SCRIPT, ...args], {
-    encoding: 'utf8', timeout: 5000, windowsHide: true,
+    encoding: 'utf8', timeout: 5000, windowsHide: true, env: NO_DB_ENV,
     input: stdinJson !== undefined ? JSON.stringify(stdinJson) : '',
   });
   return { exitCode: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
@@ -222,7 +231,7 @@ const tests = [
     name: 'invalid stdin JSON: exit 1 with descriptive error',
     fn: () => withTmpFile('', ({ target }) => {
       const r = spawnSync('node', [SCRIPT, '--target', target], {
-        encoding: 'utf8', timeout: 5000, windowsHide: true,
+        encoding: 'utf8', timeout: 5000, windowsHide: true, env: NO_DB_ENV,
         input: 'not json at all',
       });
       assert.strictEqual(r.status, 1);
