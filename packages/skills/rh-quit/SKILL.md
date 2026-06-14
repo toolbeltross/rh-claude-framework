@@ -68,8 +68,8 @@ When the user invokes `/rh-quit`:
 4. **Refresh `SESSION_STATE.md` if it exists** (opt-in by presence — skip silently if the project has no such file):
    - Read the project-root `SESSION_STATE.md`.
    - Reconcile its current-facts block against reality:
-     - `git rev-parse --short HEAD` + the latest merged PR (from `git log --oneline -1`) → update the **Branch / HEAD** line.
-     - `git log --oneline <last-verified-stamp>..HEAD` → fold any newly-merged work into the picture; do NOT paste the log (git history is authoritative) — only update what changed in the *current* state.
+     - Identify the latest **substantive** merged PR (`git log --oneline` — skip the refresh's own `docs(state):` stamp commits) → update the **Through** line. Do **not** pin a literal commit hash: a stamp commit becomes the new HEAD and would instantly invalidate it.
+     - `git log --oneline` since the last-verified stamp → fold any newly-merged work into the picture; do NOT paste the log (git history is authoritative) — only update what changed in the *current* state.
      - Scan open `PLAN-*.md` files for unchecked items → keep the **In-flight / outstanding** table accurate.
      - Update the **Last verified** stamp to today's date (from session context).
    - Keep it lean (< 100 lines). If a section has grown historical, move it to `archive/` rather than letting the file bloat — that bloat is exactly what this convention exists to prevent.

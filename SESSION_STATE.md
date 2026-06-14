@@ -4,10 +4,10 @@
 > `PROGRESS.md`, now frozen at [`archive/PROGRESS-history-thru-2026-05-16.md`](archive/PROGRESS-history-thru-2026-05-16.md)).
 > Per the workspace convention *"Session state files: current facts only, archive history when > 100 lines."*
 > The session-by-session record is **git history** (each session = PRs); this file holds only the live picture.
-> `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here).
+> `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here). It tracks the latest **substantive** PR, not its own doc-only stamp commits (pinning a literal HEAD hash here is self-defeating — a stamp commit becomes the new HEAD and instantly invalidates the stamp).
 
 **Last verified:** 2026-06-13
-**Branch:** `main` — HEAD `aab4b89` (PR #76)
+**Through:** `main`, latest substantive PR **#77** (tracking-standard restructure)
 **Tree:** clean · no open PRs
 
 ## Current state
@@ -27,6 +27,7 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 ## Recently verified (outer seam)
 
 - **PLAN-2026-06-11 §3.5 — daily-regen transcript ingest** ✅ firing: `daily-regen.log` shows `[OK] rh-transcript-ingest`; Postgres holds **670 transcripts / 10,608 messages** (newest 2026-06-12); `scribe_rows` dual-writing (14 rec / 33 learn / 13 cleanup). Marked ✅ in the plan's VERIFIED table.
+- **`/rh-quit` SESSION_STATE refresh** ✅ exercised end-to-end this session (PR #77): the session-end run advanced this file's HEAD/PR line and stamp — closing the outer-seam gap that couldn't be tested pre-merge.
 
 ## How tracking works here
 
