@@ -14,6 +14,7 @@ const SUITES = [
   'test-generate-env-md.js',
   'test-scribe-db.js',
   'test-transcript-ingest.js',
+  'test-scribe-parity-audit.js',
 ];
 
 let total = 0, failed = 0;

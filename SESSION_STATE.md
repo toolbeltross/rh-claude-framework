@@ -20,7 +20,11 @@ All numbered plan work (P0–P5) is merged. The 5-package monorepo (shared / ove
 
 | Item | Status | Unblocks |
 |---|---|---|
-| [`PLAN-2026-06-11-scribe-postgres-fts.md`](PLAN-2026-06-11-scribe-postgres-fts.md) **Phase 4** — parity audit + DB-primary promotion gate + optional pgvector | Deferred **by design** | ~2026-06-25 (needs ≥2 weeks of clean dual-write data; dual-write started 2026-06-11) |
+| [`PLAN-2026-06-11`](PLAN-2026-06-11-scribe-postgres-fts.md) **4.1b** — one-time backfill of pre-dual-write md rows into `scribe_rows` | **Not built** — now the gating prerequisite | Phase 4.2 |
+| [`PLAN-2026-06-11`](PLAN-2026-06-11-scribe-postgres-fts.md) **4.2** — DB-primary promotion decision | Blocked: parity is **5–8%** (forward-only dual-write), not a time issue | After 4.1b + ≥2 weeks clean parity |
+| Two bugs from the 4.1 audit | Tracked as background tasks | source_file path-normalization (`/` vs `\`); `RH_TEST_PG=1` test rows leaking into the real DB |
+
+**Phase 4.1 (parity audit) shipped** — `rh-scribe-parity-audit.js` + 22 tests; first reading 2026-06-13 showed only 5–8% of md rows are mirrored (`db_only` 0, so DB is a clean subset). The promotion gate was reframed: it needs a **backfill** first, not just elapsed time.
 
 Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 deliverable shipped (`docs/PATTERNS.md` + `docs/SUMMARY.md`); the doc-sync-probe path-resolution follow-up was resolved 2026-06-13 (`rh-oversight-self-test.js` now uses `config.oversightDir`).
 

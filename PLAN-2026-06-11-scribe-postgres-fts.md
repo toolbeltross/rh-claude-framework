@@ -43,11 +43,23 @@
 - [x] 3.4 **Verify (outer seam):** ingest the real transcript corpus; search for a string known to exist (e.g. "tilde expansion" from session 953913bd) and confirm the hit; search for a nonsense string and confirm zero hits; re-run ingester and confirm idempotent (no duplicate messages).
 - [x] 3.5 Hook ingestion into `rh-daily-regen.js` as an optional step (flag-gated, same `scribeDb` flag). **PAUSE POINT:** branch → PR → merge.
 
-## Phase 4 — Confidence evaluation & promotion gate (NOT in this run)
+## Phase 4 — Confidence evaluation & promotion gate
 
-- [ ] 4.1 Parity audit script: md row counts vs `scribe_rows` counts per bucket; report drift.
-- [ ] 4.2 After ≥2 weeks of clean parity: user decision whether DB becomes primary and md becomes the export. Until then md is canonical — per the recommendations.md:261 constraint.
+- [x] 4.1 **Parity audit script** — `packages/output/scripts/rh-scribe-parity-audit.js` (read-only). Per-bucket, per-source-file id-set diff (md ids vs `scribe_rows.row_id`): reports `matched` / `md_only` / `db_only` plus `path_drift` and `test_pollution` warnings. 22 unit tests; first live reading 2026-06-13 (below).
+- [ ] 4.1b **Backfill prerequisite (NEW — surfaced by 4.1).** First audit shows parity is **5–8%**, and the limiting factor is **not** elapsed time but that dual-write is forward-only: ~313 pre-2026-06-11 md rows (rec 181 / cleanup 243 across files) + 27 learnings topic files are `md_only` and will stay that way forever without a one-time backfill. **4.2 cannot pass on the time gate alone — a backfill must run first.** `db_only` is 0 everywhere (DB is a clean subset of md), so a backfill is safe (no conflicting DB-side state).
+- [ ] 4.2 After a backfill + ≥2 weeks of clean ongoing parity: user decision whether DB becomes primary and md becomes the export. Until then md is canonical — per the recommendations.md:261 constraint.
 - [ ] 4.3 Optional: pgvector extension + embeddings for semantic search (deliberately NOT in scope until FTS proves insufficient — recommendations.md:40 constraint).
+
+### 4.1 findings (2026-06-13 first live audit)
+| bucket | md | db | mirrored | notes |
+|---|---|---|---|---|
+| recommendations | 196 | 15 | 8% | 181 `md_only` (backfill gap); `db_only` 0 |
+| cleanup | 257 | 14 | 5% | 243 `md_only`; **path_drift**: `Workspace/cleanup.md` recorded under both `/` and `\` spellings; `db_only` 0 |
+| learnings | 60 | 33 | 55% | 27 `md_only` (pre-dual-write topics + append-observation-only changes never dual-write); **3 test_pollution** rows (AppData/Local/Temp leak) |
+
+Two separable bugs surfaced (tracked as background tasks, not in this PR):
+1. **source_file path normalization** — writers store `source_file` verbatim, so `/` vs `\` spellings of the same file split into two DB groups. Normalize before insert.
+2. **integration-test DB leakage** — `RH_TEST_PG=1` suites in `test-learnings-write` / `test-scribe-table-write` insert rows into the real `rh_scribe` DB without cleanup (the `test-scribe-db` PG test does clean up — copy that pattern, or use a disposable test schema).
 
 ## What is VERIFIED via outer seam
 | Item | Verification |
@@ -60,9 +72,11 @@
 | search | "tilde expansion" → ranked hits w/ snippets incl. session 953913bd; nonsense query → 0 hits |
 | tests | output suite 121/121 incl. RH_TEST_PG=1 real-DB cases |
 | 3.5 daily-regen ingest (live) | ✅ 2026-06-13: `daily-regen.log` shows `[OK] rh-transcript-ingest`; DB at 670 transcripts / 10,608 messages (newest 2026-06-12); idempotent across daily runs |
+| 4.1 parity audit | ✅ 2026-06-13: `rh-scribe-parity-audit.js` run against live DB → 5–8% parity, `db_only` 0; output suite 146/146 (22 new) |
 
 ## What is PARTIAL (not verified via outer seam)
 | Item | Status | Linked ID |
 |---|---|---|
-| Phase 4 parity audit + promotion gate | by design: starts after ≥2 weeks of dual-write data (~2026-06-25) | — |
+| 4.1b backfill of pre-dual-write md rows | NOT built — prerequisite to 4.2; ~313 rec/cleanup rows + 27 learnings need one-time mirror | 4.1b |
+| 4.2 promotion gate (DB-primary) | blocked on 4.1b backfill + ≥2 weeks clean parity; currently 5–8% | 4.2 |
 | subagent transcripts | main-session JSONLs only; projects/<slug>/<session>/subagents/*.jsonl not ingested (scope decision, revisit if search misses matter) | — |
