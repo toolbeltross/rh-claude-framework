@@ -59,6 +59,20 @@ const path = require('path');
 const { withLock } = require(path.join(__dirname, 'lib', 'file-lock'));
 const { withPhase } = require(path.join(__dirname, 'lib', 'phase-timing'));
 const scribeDb = require(path.join(__dirname, 'lib', 'scribe-db'));
+// Defensive: a missing/broken context-db.js must NEVER break the canonical md
+// write. Degrade to no-ops; the 3rd write stays off until the lib is present.
+let contextDb;
+try {
+  contextDb = require(path.join(__dirname, 'lib', 'context-db'));
+} catch {
+  contextDb = {
+    upsertIngestSource: () => ({ ok: true, skipped: true }),
+    upsertMemoryArtifact: () => ({ ok: true, skipped: true }),
+    insertMemoryObservation: () => ({ ok: true, skipped: true }),
+    logDualWrite: () => ({ ok: true, skipped: true }),
+    canonicalSourceFile: (p) => String(p == null ? '' : p).replace(/\\/g, '/'),
+  };
+}
 
 const SENTINEL = '<!-- scribe-done -->';
 
@@ -130,7 +144,44 @@ ${SENTINEL}
     status: 'active',
     source_file: p.topicFile,
   });
-  return { ok: true, mode: 'create', wrote: p.topicFile, dbShadow: dbRes.skipped ? 'off' : (dbRes.ok ? 'written' : 'failed (md unaffected)') };
+  // Context-model 3rd write (Phase 3.2). Best-effort, flag-gated, gate-routed,
+  // FAIL-CLOSED. Register the topic file as a source (content-scanned), then
+  // write the artifact only if mirror-eligible.
+  let ctxRes = { ok: true, skipped: true };
+  try {
+    const src = contextDb.upsertIngestSource({ canonical_path: p.topicFile, source_kind: 'learnings_md', content: body });
+    if (src.skipped) {
+      ctxRes = src;
+    } else if (!src.ok || !src.source_id) {
+      ctxRes = { ok: false, error: 'ingest source registration failed: ' + (src.error || 'no source_id') };
+      contextDb.logDualWrite({ entity_type: 'ctx_ingest_source', entity_natural_key: p.topicFile, result: 'failed', error: src.error, md_source_file: p.topicFile, triggering_writer: 'rh-learnings-write' });
+    } else {
+      ctxRes = contextDb.upsertMemoryArtifact({
+        bucket: 'learnings',
+        row_id: path.basename(p.topicFile, '.md'),
+        source_file: p.topicFile,
+        source_id: src.source_id,
+        memory_type: 'semantic',
+        status: 'active',
+        session_id_short: String(p.originSessionId || '').slice(0, 8) || undefined,
+        ts: p.created || undefined,
+        title: p.name || undefined,
+        body_distilled: body,
+      });
+      contextDb.logDualWrite({
+        entity_type: 'ctx_memory_artifact',
+        entity_natural_key: `learnings|${contextDb.canonicalSourceFile(p.topicFile)}|${path.basename(p.topicFile, '.md')}`,
+        result: ctxRes.gated ? 'skipped' : (ctxRes.ok ? 'ok' : 'failed'),
+        error: ctxRes.ok ? undefined : ctxRes.error,
+        md_source_file: p.topicFile, triggering_writer: 'rh-learnings-write',
+      });
+    }
+  } catch (e) { ctxRes = { ok: false, error: String(e.message || e) }; }
+  return {
+    ok: true, mode: 'create', wrote: p.topicFile,
+    dbShadow: dbRes.skipped ? 'off' : (dbRes.ok ? 'written' : 'failed (md unaffected)'),
+    ctxShadow: ctxRes.skipped ? 'off' : (ctxRes.ok ? 'written' : 'failed (md unaffected)'),
+  };
 }
 
 // --- append-observation ---
@@ -167,7 +218,42 @@ function modeAppendObservation(p) {
     fs.writeFileSync(p.topicFile, newContent, 'utf8');
     return { rowAdded: row.trim() };
   });
-  return { ok: true, mode: 'append-observation', wrote: p.topicFile, ...result };
+  // Context-model 3rd write (Phase 3.3) — closes the verified gap: an
+  // incremental ctx_memory_observation per append. Best-effort, flag-gated,
+  // FAIL-CLOSED, gate-routed; resolves its parent artifact by natural key.
+  let ctxRes = { ok: true, skipped: true };
+  try {
+    let fileContent = '';
+    try { fileContent = fs.readFileSync(p.topicFile, 'utf8'); } catch {}
+    const src = contextDb.upsertIngestSource({ canonical_path: p.topicFile, source_kind: 'learnings_md', content: fileContent });
+    if (src.skipped) {
+      ctxRes = src;
+    } else if (!src.ok || !src.source_id) {
+      ctxRes = { ok: false, error: 'ingest source registration failed: ' + (src.error || 'no source_id') };
+      contextDb.logDualWrite({ entity_type: 'ctx_ingest_source', entity_natural_key: p.topicFile, result: 'failed', error: src.error, md_source_file: p.topicFile, triggering_writer: 'rh-learnings-write' });
+    } else {
+      ctxRes = contextDb.insertMemoryObservation({
+        bucket: 'learnings',
+        source_file: p.topicFile,
+        row_id: path.basename(p.topicFile, '.md'),
+        source_id: src.source_id,
+        obs_date: p.dateIso,
+        session_id_short: p.sessionShort,
+        observation: obs,
+      });
+      contextDb.logDualWrite({
+        entity_type: 'ctx_memory_observation',
+        entity_natural_key: `learnings|${contextDb.canonicalSourceFile(p.topicFile)}|${path.basename(p.topicFile, '.md')}`,
+        result: ctxRes.ok ? (ctxRes.inserted ? 'ok' : 'skipped') : 'failed',
+        error: ctxRes.ok ? undefined : ctxRes.error,
+        md_source_file: p.topicFile, triggering_writer: 'rh-learnings-write',
+      });
+    }
+  } catch (e) { ctxRes = { ok: false, error: String(e.message || e) }; }
+  return {
+    ok: true, mode: 'append-observation', wrote: p.topicFile, ...result,
+    ctxShadow: ctxRes.skipped ? 'off' : (ctxRes.ok ? 'written' : 'failed (md unaffected)'),
+  };
 }
 
 // --- update-sub-index ---

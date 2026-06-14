@@ -30,8 +30,8 @@ const tests = [
     name: 'normalizePath: two spellings of the same path collapse to one key',
     fn: () => {
       assert.strictEqual(
-        A.normalizePath('C:/Users/rossb/OneDrive/Workspace/cleanup.md'),
-        A.normalizePath('C:\\Users\\rossb\\OneDrive\\Workspace\\cleanup.md')
+        A.normalizePath('C:/ws/proj/cleanup.md'),
+        A.normalizePath('C:\\ws\\proj\\cleanup.md')
       );
     },
   },
@@ -41,7 +41,7 @@ const tests = [
       assert.strictEqual(A.isTempPath(path.join(os.tmpdir(), 'x.md')), true);
       assert.strictEqual(A.isTempPath('C:\\Users\\x\\AppData\\Local\\Temp\\rh-lw-test-AbCd\\rh-test-learning.md'), true);
       assert.strictEqual(A.isTempPath('/some/dir/rh-no-rule.md'), true);
-      assert.strictEqual(A.isTempPath('C:/Users/rossb/OneDrive/Workspace/cleanup.md'), false);
+      assert.strictEqual(A.isTempPath('C:/ws/proj/cleanup.md'), false);
     },
   },
   {

@@ -21,7 +21,8 @@ const SENTINEL = '<!-- scribe-done -->';
 // OFF in every child: these suites exercise the md-file logic, not the DB
 // shadow (which is covered with proper cleanup in test-scribe-db.js). Env var
 // wins over oversight.json scribeDb:true (see @rh/shared/config scribeDb).
-const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0' };
+const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0', RH_CONTEXT_DB: '0' };
+const PG = process.env.RH_TEST_PG === '1';
 
 function withTmp(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-lw-test-'));
@@ -332,6 +333,46 @@ const tests = [
       assert.strictEqual(r.exitCode, 1);
       assert.match(JSON.parse(r.stdout).error, /missing topicCount/);
     }),
+  },
+
+  // ───────── context-model 3rd write (Phase 3.2 / 3.3), outer seam ─────────
+  {
+    name: PG ? 'PG: contextDb on — create mirrors a learnings artifact; append-observation attaches a ctx_memory_observation' : 'PG: learnings ctx wiring skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const ctx = require(path.join(__dirname, '..', 'scripts', 'lib', 'context-db'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-lw-ctx-'));
+      const topicFile = path.join(dir, 'rh-ctx-topic-' + Date.now().toString(16).slice(-6) + '.md');
+      const canonical = ctx.canonicalSourceFile(topicFile);
+      const rid = path.basename(topicFile, '.md');
+      const CTX_ENV = { ...process.env, RH_SCRIBE_DB: '0', RH_CONTEXT_DB: '1' };
+      const spawn = (args, payload) => spawnSync('node', [SCRIPT, ...args], { encoding: 'utf8', timeout: 8000, windowsHide: true, env: CTX_ENV, input: JSON.stringify(payload) });
+      try {
+        // create -> artifact
+        const c = spawn(['--mode', 'create'], {
+          topicFile, name: 'Ctx wiring topic', description: 'benign', originSessionId: 'sessctx1',
+          created: '2026-06-14', learning: 'A benign learning with no PII.', sourceSession: 'sessctx1', sourceDate: '2026-06-14',
+        });
+        assert.strictEqual(c.status, 0, `create stderr: ${c.stderr}`);
+        assert.strictEqual(JSON.parse(c.stdout).ctxShadow, 'written', `create ctxShadow: ${c.stdout}`);
+        const art = ctx.runSql(`SELECT count(*) FROM ctx_memory_artifact WHERE bucket='learnings' AND row_id='${rid}' AND source_file='${canonical}';`);
+        assert.strictEqual(art.stdout, '1', 'learnings artifact mirrored');
+
+        // append-observation -> observation attached to that artifact
+        const a = spawn(['--mode', 'append-observation'], {
+          topicFile, dateIso: '2026-06-14', sessionShort: 'sessctx1', observation: 'a benign incremental observation',
+        });
+        assert.strictEqual(a.status, 0, `append stderr: ${a.stderr}`);
+        assert.strictEqual(JSON.parse(a.stdout).ctxShadow, 'written', `append ctxShadow: ${a.stdout}`);
+        const obs = ctx.runSql(`SELECT count(*) FROM ctx_memory_observation o JOIN ctx_memory_artifact m ON m.id=o.artifact_id WHERE m.row_id='${rid}';`);
+        assert.strictEqual(obs.stdout, '1', 'observation attached to its parent artifact');
+      } finally {
+        ctx.runSql(`DELETE FROM ctx_memory_artifact WHERE row_id='${rid}';`); // cascades observations
+        ctx.runSql(`DELETE FROM ctx_ingest_source WHERE canonical_path='${canonical}';`);
+        ctx.runSql(`DELETE FROM ctx_dualwrite_log WHERE entity_natural_key LIKE 'learnings|${canonical}|%';`);
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
   },
 ];
 

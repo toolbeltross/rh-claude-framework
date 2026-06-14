@@ -134,17 +134,17 @@ const tests = [
     name: 'classifyDisposition: private path -> blocklisted-skipped (incl. backslash dir spelling)',
     fn: () => {
       const db = freshContextDb({ RH_CONTEXT_DB: '0' });
-      const priv = ['C:/Users/rossb/OneDrive/Workspace/Personal'];
+      const priv = ['C:/ws/Personal'];
       assert.strictEqual(
-        db.classifyDisposition({ canonicalPath: 'C:/Users/rossb/OneDrive/Workspace/Personal/Financial/x.md', sourceKind: 'scribe_md' }, priv),
+        db.classifyDisposition({ canonicalPath: 'C:/ws/Personal/Financial/x.md', sourceKind: 'scribe_md' }, priv),
         'blocklisted-skipped');
       // dir given with backslashes still matches a forward-slash path
       assert.strictEqual(
-        db.classifyDisposition({ canonicalPath: 'C:/Users/rossb/OneDrive/Workspace/Personal/x.md', sourceKind: 'scribe_md' }, ['C:\\Users\\rossb\\OneDrive\\Workspace\\Personal']),
+        db.classifyDisposition({ canonicalPath: 'C:/ws/Personal/x.md', sourceKind: 'scribe_md' }, ['C:\\ws\\Personal']),
         'blocklisted-skipped');
       // a sibling dir that merely shares a prefix is NOT blocklisted
       assert.notStrictEqual(
-        db.classifyDisposition({ canonicalPath: 'C:/Users/rossb/OneDrive/Workspace/PersonalNotes/x.md', sourceKind: 'scribe_md' }, priv),
+        db.classifyDisposition({ canonicalPath: 'C:/ws/PersonalNotes/x.md', sourceKind: 'scribe_md' }, priv),
         'blocklisted-skipped');
     },
   },

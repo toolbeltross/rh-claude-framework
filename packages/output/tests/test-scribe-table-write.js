@@ -20,7 +20,8 @@ const SENTINEL = '<!-- scribe-done -->';
 // can't leak rows into the live rh_scribe DB. The md-file/sentinel logic is
 // what's under test here; the DB shadow is covered (with cleanup) in
 // test-scribe-db.js. Env var wins over oversight.json (see @rh/shared/config).
-const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0' };
+const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0', RH_CONTEXT_DB: '0' };
+const PG = process.env.RH_TEST_PG === '1';
 
 function withTmpFile(seed, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-stw-test-'));
@@ -245,6 +246,39 @@ const tests = [
       assert.strictEqual(r.exitCode, 1);
       assert.match(r.stderr, /must be an array/);
     }),
+  },
+  {
+    // Outer-seam: invoke the CLI with contextDb ON against a real bucket
+    // filename and confirm the 3rd write lands through the privacy gate.
+    name: PG ? 'PG: contextDb on — clean cleanup row mirrors to ctx_memory_artifact via the gate' : 'PG: ctx wiring skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const ctx = require(path.join(__dirname, '..', 'scripts', 'lib', 'context-db'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-stw-ctx-'));
+      const target = path.join(dir, 'cleanup.md');       // basename → bucket 'cleanup'
+      const canonical = ctx.canonicalSourceFile(target);
+      const rid = 'ctxwire' + Date.now().toString(16).slice(-6);
+      try {
+        const r = spawnSync('node', [SCRIPT, '--target', target, '--id', rid, '--session', 'sesswire', '--text', 'benign cleanup note'], {
+          encoding: 'utf8', timeout: 8000, windowsHide: true,
+          env: { ...process.env, RH_SCRIBE_DB: '0', RH_CONTEXT_DB: '1' },
+        });
+        assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`);
+        const out = JSON.parse(r.stdout);
+        assert.strictEqual(out.ctxShadow, 'written', `expected ctxShadow written; got ${out.ctxShadow}; stderr ${r.stderr}`);
+        const art = ctx.runSql(`SELECT count(*) FROM ctx_memory_artifact WHERE bucket='cleanup' AND row_id='${rid}' AND source_file='${canonical}';`);
+        assert.strictEqual(art.stdout, '1', 'artifact mirrored under the canonical source_file');
+        const disp = ctx.runSql(`SELECT privacy_disposition FROM ctx_ingest_source WHERE canonical_path='${canonical}';`);
+        assert.strictEqual(disp.stdout, 'clean', 'source classified clean (scribe_md, non-private, PII-clean)');
+        const dw = ctx.runSql(`SELECT count(*) FROM ctx_dualwrite_log WHERE entity_natural_key='cleanup|${canonical}|${rid}' AND result='ok';`);
+        assert.strictEqual(dw.stdout, '1', 'dualwrite audit row recorded ok');
+      } finally {
+        ctx.runSql(`DELETE FROM ctx_memory_artifact WHERE row_id='${rid}';`);
+        ctx.runSql(`DELETE FROM ctx_ingest_source WHERE canonical_path='${canonical}';`);
+        ctx.runSql(`DELETE FROM ctx_dualwrite_log WHERE entity_natural_key='cleanup|${canonical}|${rid}';`);
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
   },
 ];
 

@@ -10,7 +10,8 @@
 //                  optional `excludeSubdirs: ["lib", ...]` skips named
 //                  top-level subdirectories (NOT recursive — only top-level
 //                  matches under <pkg>/<from> are excluded).
-//   - copyFiles:   copy listed files from <pkg> root → <paths[to]>
+//   - copyFiles:   copy listed files → <paths[to]>, placed by basename.
+//                  Source dir is <pkg> root, or <pkg>/<from> when `from` is set.
 //   - copySubdirs: copy only subdirectories of <pkg>/<from> (skips top-level files)
 //
 // Path placeholders ("to" values):
@@ -75,10 +76,11 @@ function applyOperation(op, pkgDir, paths, opts) {
 
   if (op.kind === 'copyFiles') {
     if (!opts.dryRun && !fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+    const fromDir = op.from ? path.join(pkgDir, op.from) : pkgDir;
     let count = 0;
     for (const f of op.files) {
-      const src = path.join(pkgDir, f);
-      const destFile = path.join(dest, f);
+      const src = path.join(fromDir, f);
+      const destFile = path.join(dest, path.basename(f));
       if (!fs.existsSync(src)) continue;
       if (opts.dryRun) console.log(`  [dry-run] copy ${src} → ${destFile}`);
       else fs.copyFileSync(src, destFile);

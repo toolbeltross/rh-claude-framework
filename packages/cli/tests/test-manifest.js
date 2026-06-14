@@ -132,6 +132,42 @@ const tests = [
     }),
   },
   {
+    name: 'applyOperation copyFiles + from: copies from a subdir, places by basename',
+    fn: () => withTmpDir((dir) => {
+      const pkgDir = path.join(dir, 'pkg');
+      const dest = path.join(dir, 'dest');
+      fs.mkdirSync(path.join(pkgDir, 'scripts', 'lib'), { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'scripts', 'lib', 'scribe-db.js'), 'canon1');
+      fs.writeFileSync(path.join(pkgDir, 'scripts', 'lib', 'context-db.js'), 'canon2');
+      // a shim that must NOT be selected (not listed)
+      fs.writeFileSync(path.join(pkgDir, 'scripts', 'lib', 'config.js'), 'shim');
+      const n = applyOperation(
+        { kind: 'copyFiles', from: 'scripts/lib', files: ['scribe-db.js', 'context-db.js'], to: 'libDir' },
+        pkgDir,
+        { libDir: dest },
+        { dryRun: false }
+      );
+      assert.strictEqual(n, 2, 'two canonicals copied');
+      assert.strictEqual(fs.readFileSync(path.join(dest, 'scribe-db.js'), 'utf8'), 'canon1', 'placed flat by basename');
+      assert.ok(fs.existsSync(path.join(dest, 'context-db.js')));
+      assert.ok(!fs.existsSync(path.join(dest, 'config.js')), 'unlisted shim not copied');
+      assert.ok(!fs.existsSync(path.join(dest, 'scripts')), 'no nested scripts/lib path created');
+    }),
+  },
+  {
+    name: 'output install.json ships scribe-db + context-db canonicals (not lib shims)',
+    fn: () => {
+      const outManifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'output', 'install.json'), 'utf8'));
+      const cf = outManifest.operations.find(o => o.kind === 'copyFiles' && o.to === 'scriptsDir/lib');
+      assert.ok(cf, 'output manifest has a copyFiles → scriptsDir/lib op');
+      assert.deepStrictEqual([...cf.files].sort(), ['context-db.js', 'scribe-db.js']);
+      assert.strictEqual(cf.from, 'scripts/lib');
+      // and the blanket copyDir still excludes lib (shims stay out)
+      const cd = outManifest.operations.find(o => o.kind === 'copyDir');
+      assert.ok(cd.excludeSubdirs.includes('lib'), 'lib still excluded from the dir copy');
+    },
+  },
+  {
     name: 'applyOperation copySubdirs: copies directories only, skips top-level files',
     fn: () => withTmpDir((dir) => {
       const pkgDir = path.join(dir, 'pkg');

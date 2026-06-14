@@ -8,6 +8,14 @@
       "label": "output script files",
       "excludeSubdirs": ["lib"],
       "_note": "scripts/lib/ contains source-tree-only shims (re-exports from oversight/scripts/lib/ and shared/). At install time, oversight's full lib/ canonicals are already placed in scriptsDir/lib (oversight runs first in install order); the shims must NOT be copied or they'd overwrite the canonicals with broken-post-install relative requires."
+    },
+    {
+      "kind": "copyFiles",
+      "from": "scripts/lib",
+      "files": ["scribe-db.js", "context-db.js"],
+      "to": "scriptsDir/lib",
+      "label": "output canonical libs (scribe-db, context-db)",
+      "_note": "scribe-db.js and context-db.js are output-OWNED canonicals (NOT shims), so the blanket lib exclusion above must not skip them. They are required at load time by rh-scribe-table-write.js / rh-learnings-write.js. Listed by basename; `from` selects the lib subdir. scribe-db.js was historically hand-deployed (PLAN-2026-06-11 Phase 2.3) — this closes that gap. Runs in OUTPUT step (before SHARED), and neither file collides with shared's config/file-lock/env canonicals."
     }
   ]
 }
