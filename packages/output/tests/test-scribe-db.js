@@ -55,8 +55,8 @@ const tests = [
     name: 'canonicalSourceFile collapses backslash + forward-slash spellings of one path to one value',
     fn: () => {
       const db = freshScribeDb({ RH_SCRIBE_DB: '0' });
-      const back = 'C:\\Users\\rossb\\OneDrive\\Workspace\\cleanup.md';
-      const fwd = 'C:/Users/rossb/OneDrive/Workspace/cleanup.md';
+      const back = 'C:\\Users\\testuser\\Workspace\\cleanup.md';
+      const fwd = 'C:/Users/testuser/Workspace/cleanup.md';
       assert.strictEqual(db.canonicalSourceFile(back), fwd, 'backslash spelling normalizes to forward-slash');
       assert.strictEqual(db.canonicalSourceFile(fwd), fwd, 'forward-slash spelling is unchanged');
       assert.strictEqual(db.canonicalSourceFile(back), db.canonicalSourceFile(fwd), 'both spellings collapse to one');
@@ -108,8 +108,8 @@ const tests = [
       const stamp = Date.now().toString(36);
       const ridA = 'test-pd-a-' + stamp;
       const ridB = 'test-pd-b-' + stamp;
-      const back = `C:\\Users\\rossb\\tmp\\parity-${stamp}\\cleanup.md`;
-      const fwd = `C:/Users/rossb/tmp/parity-${stamp}/cleanup.md`;
+      const back = `C:\\Users\\testuser\\tmp\\parity-${stamp}\\cleanup.md`;
+      const fwd = `C:/Users/testuser/tmp/parity-${stamp}/cleanup.md`;
       try {
         const a = db.writeRow({ bucket: 'cleanup', row_id: ridA, content: 'row a', status: 'open', source_file: back });
         const b = db.writeRow({ bucket: 'cleanup', row_id: ridB, content: 'row b', status: 'open', source_file: fwd });
