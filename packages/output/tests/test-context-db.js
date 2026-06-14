@@ -149,6 +149,25 @@ const tests = [
     },
   },
   {
+    name: 'classifyDisposition: bare-name token -> blocklisted ANYWHERE in path OR content (user direction 2026-06-14)',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      const priv = ['troy2025', 'cs2026'];
+      // bare name mid-path, NOT under any private root
+      assert.strictEqual(
+        db.classifyDisposition({ canonicalPath: 'C:/ws/somewhere/troy2025-notes.md', sourceKind: 'scribe_md', content: 'x' }, priv),
+        'blocklisted-skipped');
+      // bare name inside CONTENT even when path is innocuous + a curated kind
+      assert.strictEqual(
+        db.classifyDisposition({ canonicalPath: 'C:/ws/recommendations.md', sourceKind: 'scribe_md', content: 'note about CS2026 budget' }, priv),
+        'blocklisted-skipped');
+      // neither name present -> not blocklisted (no over-block)
+      assert.notStrictEqual(
+        db.classifyDisposition({ canonicalPath: 'C:/ws/recommendations.md', sourceKind: 'scribe_md', content: 'benign row' }, priv),
+        'blocklisted-skipped');
+    },
+  },
+  {
     name: 'classifyDisposition: content scan mandatory (never slug-only) — no content is never clean',
     fn: () => {
       const db = freshContextDb({ RH_CONTEXT_DB: '0' });

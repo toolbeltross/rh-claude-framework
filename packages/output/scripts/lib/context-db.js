@@ -112,10 +112,23 @@ const PROSE_DENY_KINDS = new Set(['prose_md', 'transcript_jsonl']);
 function classifyDisposition({ canonicalPath, sourceKind, content } = {}, privateDirs) {
   const dirs = privateDirs || config.privateDirs || [];
   const p = canonicalSourceFile(canonicalPath || '').toLowerCase();
-  // 1. Hard-exclude private paths — regardless of kind or content.
+  // 1. Hard-exclude private entries — regardless of kind or content.
+  //    Two entry shapes (user direction 2026-06-14, "those names regardless
+  //    where they reside"):
+  //      • path-shaped (absolute, or contains '/') → PREFIX match on the path
+  //      • bare-name token (no separator) → match ANYWHERE in the path OR the
+  //        content (these names recur in many locations, not just as path roots)
+  const lcContent = content == null ? '' : String(content).toLowerCase();
   for (const d of dirs) {
     const nd = canonicalSourceFile(String(d)).toLowerCase().replace(/\/+$/, '');
-    if (nd && (p === nd || p.startsWith(nd + '/'))) return 'blocklisted-skipped';
+    if (!nd) continue;
+    const pathShaped = nd.includes('/') || /^[a-z]:/.test(nd);
+    if (pathShaped) {
+      if (p === nd || p.startsWith(nd + '/')) return 'blocklisted-skipped';
+    } else {
+      // bare token: substring match on path or content (fail toward exclusion)
+      if (p.includes(nd) || lcContent.includes(nd)) return 'blocklisted-skipped';
+    }
   }
   // 2. CONTENT SCAN MANDATORY — never slug-only. No content => never clean.
   if (content == null || content === '') return 'review-required';
