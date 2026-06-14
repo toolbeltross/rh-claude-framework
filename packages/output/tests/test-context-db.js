@@ -129,6 +129,70 @@ const tests = [
     },
   },
 
+  // ---- privacy gate (pure) ----------------------------------------------
+  {
+    name: 'classifyDisposition: private path -> blocklisted-skipped (incl. backslash dir spelling)',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      const priv = ['C:/Users/rossb/OneDrive/Workspace/Personal'];
+      assert.strictEqual(
+        db.classifyDisposition({ canonicalPath: 'C:/Users/rossb/OneDrive/Workspace/Personal/Financial/x.md', sourceKind: 'scribe_md' }, priv),
+        'blocklisted-skipped');
+      // dir given with backslashes still matches a forward-slash path
+      assert.strictEqual(
+        db.classifyDisposition({ canonicalPath: 'C:/Users/rossb/OneDrive/Workspace/Personal/x.md', sourceKind: 'scribe_md' }, ['C:\\Users\\rossb\\OneDrive\\Workspace\\Personal']),
+        'blocklisted-skipped');
+      // a sibling dir that merely shares a prefix is NOT blocklisted
+      assert.notStrictEqual(
+        db.classifyDisposition({ canonicalPath: 'C:/Users/rossb/OneDrive/Workspace/PersonalNotes/x.md', sourceKind: 'scribe_md' }, priv),
+        'blocklisted-skipped');
+    },
+  },
+  {
+    name: 'classifyDisposition: PII content -> review-required; clean kind + no PII -> clean; unknown kind -> review-required',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'note SSN 123-45-6789 here' }), 'review-required');
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'EIN 12-3456789' }), 'review-required');
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'card 4111111111111111' }), 'review-required');
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'totally benign cleanup note' }), 'clean');
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md' }), 'clean');
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/whatever.md', sourceKind: 'unknown_kind' }), 'review-required');
+    },
+  },
+  {
+    name: '_cleanSourceGuard + builders: source_id => EXISTS(clean/redacted) gate; no source_id => ungated',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      assert.strictEqual(db._cleanSourceGuard(null), '');
+      const g = db._cleanSourceGuard('00000000-0000-0000-0000-0000000000ab');
+      assert.match(g, /EXISTS \(SELECT 1 FROM ctx_ingest_source s WHERE s\.source_id = /);
+      assert.match(g, /privacy_disposition IN \('clean','redacted'\)/);
+      assert.match(g, /::uuid/);
+
+      const gatedArt = db._buildArtifactSql({ bucket: 'cleanup', row_id: 'r', source_file: 'C:/w/c.md', source_id: '00000000-0000-0000-0000-0000000000ab', title: 't' });
+      assert.match(gatedArt, /SELECT .* WHERE EXISTS \(SELECT 1 FROM ctx_ingest_source/, 'gated artifact uses SELECT..WHERE EXISTS');
+      assert.ok(!/VALUES \(/.test(gatedArt), 'gated artifact does not use VALUES');
+
+      const ungatedArt = db._buildArtifactSql({ bucket: 'cleanup', row_id: 'r', source_file: 'C:/w/c.md', title: 't' });
+      assert.match(ungatedArt, /VALUES \(/, 'ungated artifact uses VALUES');
+
+      const gatedObs = db._buildObservationSql({ bucket: 'learnings', source_file: 'C:/m/t.md', row_id: 't', observation: 'x', source_id: '00000000-0000-0000-0000-0000000000ab' });
+      assert.match(gatedObs, /AND EXISTS \(SELECT 1 FROM ctx_ingest_source/, 'gated natural-key observation appends the guard');
+    },
+  },
+  {
+    name: '_buildIngestSql: correct table, conflict target, canonical path',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      const sql = db._buildIngestSql({ canonical_path: 'C:/w/cleanup.md', source_kind: 'scribe_md', privacy_disposition: 'clean', blocklist_version: db.BLOCKLIST_VERSION });
+      assert.match(sql, /INSERT INTO ctx_ingest_source \(/);
+      assert.match(sql, /ON CONFLICT \(canonical_path, source_kind\) DO UPDATE SET/);
+      assert.match(sql, /last_verified_at = now\(\)/);
+      assert.match(sql, /RETURNING source_id, privacy_disposition;$/);
+    },
+  },
+
   // ---- PG round-trip (RH_TEST_PG=1) -------------------------------------
   {
     name: PG ? 'PG: artifact upsert inserts then updates in place on the natural key' : 'PG: artifact upsert skipped (RH_TEST_PG!=1)',
@@ -174,6 +238,46 @@ const tests = [
         assert.strictEqual(cnt.stdout, '1', 'exactly one observation row');
       } finally {
         db.runSql(`DELETE FROM ctx_memory_artifact WHERE row_id='${rid}';`); // cascades to observations
+      }
+    },
+  },
+  {
+    name: PG ? 'PG: privacy gate — clean source admits the content write, review-required source withholds it' : 'PG: privacy gate skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const db = freshContextDb({ RH_CONTEXT_DB: '1' });
+      const stamp = Date.now().toString(36);
+      const cleanPath = `C:/test/gate-clean-${stamp}/cleanup.md`;
+      const dirtyPath = `C:/test/gate-dirty-${stamp}/cleanup.md`;
+      const ridClean = 'test-gate-clean-' + stamp;
+      const ridDirty = 'test-gate-dirty-' + stamp;
+      try {
+        // clean source: scribe_md, no PII -> 'clean'
+        const cs = db.upsertIngestSource({ canonical_path: cleanPath, source_kind: 'scribe_md', content: 'benign note' });
+        assert.strictEqual(cs.ok, true, `clean ingest failed: ${cs.error}`);
+        assert.strictEqual(cs.disposition, 'clean');
+        assert.ok(cs.source_id, 'clean source_id returned');
+        // dirty source: PII content -> 'review-required'
+        const ds = db.upsertIngestSource({ canonical_path: dirtyPath, source_kind: 'scribe_md', content: 'acct SSN 123-45-6789' });
+        assert.strictEqual(ds.ok, true, `dirty ingest failed: ${ds.error}`);
+        assert.strictEqual(ds.disposition, 'review-required');
+
+        // content write against the CLEAN source is admitted
+        const okWrite = db.upsertMemoryArtifact({ bucket: 'cleanup', row_id: ridClean, source_file: cleanPath, source_id: cs.source_id, title: 'allowed' });
+        assert.strictEqual(okWrite.ok, true, `clean write failed: ${okWrite.error}`);
+        assert.ok(okWrite.id, 'clean-source write returns an id');
+
+        // content write against the REVIEW-REQUIRED source is withheld by the gate
+        const blocked = db.upsertMemoryArtifact({ bucket: 'cleanup', row_id: ridDirty, source_file: dirtyPath, source_id: ds.source_id, title: 'should-not-land' });
+        assert.strictEqual(blocked.ok, true, `blocked write errored: ${blocked.error}`);
+        assert.strictEqual(blocked.gated, true, 'review-required source is gated');
+        assert.ok(!blocked.id, 'no row id for a gated write');
+
+        const cnt = db.runSql(`SELECT count(*) FROM ctx_memory_artifact WHERE row_id IN ('${ridClean}','${ridDirty}');`);
+        assert.strictEqual(cnt.stdout, '1', 'exactly one artifact landed (the clean one)');
+      } finally {
+        db.runSql(`DELETE FROM ctx_memory_artifact WHERE row_id IN ('${ridClean}','${ridDirty}');`);
+        db.runSql(`DELETE FROM ctx_ingest_source WHERE canonical_path IN ('${cleanPath}','${dirtyPath}');`);
       }
     },
   },
