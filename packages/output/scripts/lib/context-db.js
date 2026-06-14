@@ -72,12 +72,19 @@ function lit(val, type) {
 // defaults to 'review-required' and content writers (below) physically refuse
 // to shadow text unless the source is 'clean'/'redacted'. Dispositions:
 //   blocklisted-skipped — path under a configured private dir; never mirrored
-//   review-required     — default; also where the PII scan or an unknown kind lands
-//   clean               — safe to mirror (non-private path + PII-clean + known kind)
+//   review-required     — default; also: no content scanned, PII hit, big prose
+//                         log, or unknown kind
+//   clean               — safe to mirror (non-private + a curated kind + content
+//                         actually scanned + PII-clean)
 //   redacted            — manually cleaned (never assigned automatically here)
 // Bump BLOCKLIST_VERSION whenever the rules below change so each source row
 // records which ruleset classified it.
-const BLOCKLIST_VERSION = '2026-06-13.1';
+//
+// Policy (user direction 2026-06-14): hard-exclude private paths; CONTENT SCAN,
+// NEVER SLUG-ONLY (a source is never 'clean' without its content being scanned —
+// path/kind alone is insufficient); allow curated structured kinds after a clean
+// scan; default-DENY the big prose logs (manual promotion only).
+const BLOCKLIST_VERSION = '2026-06-14.1';
 
 // Conservative PII signatures (per rh-security.md: no SSNs/EINs/account numbers).
 // False positives are SAFE here — they downgrade to review-required (fail toward
@@ -88,25 +95,33 @@ const PII_PATTERNS = [
   /\b\d{13,19}\b/,               // long account / card numbers
 ];
 
-// Source kinds whose non-private, PII-clean content may be auto-cleaned.
-const AUTO_CLEAN_KINDS = new Set([
-  'scribe_md', 'learnings_md', 'prose_md',
-  'transcript_jsonl', 'oversight_jsonl', 'telemetry_jsonl',
+// Curated, structured kinds: short/templated rows whose content the regex scan
+// can vet with confidence. Eligible for auto-'clean' AFTER a content scan.
+const CURATED_KINDS = new Set([
+  'scribe_md', 'learnings_md', 'oversight_jsonl', 'telemetry_jsonl',
 ]);
+// Big free-text logs: default-DENY even when the regex scan passes — a few
+// patterns aren't enough confidence for prose/conversation. Manual promotion
+// (set privacy_disposition explicitly) is the only path to 'clean' for these.
+const PROSE_DENY_KINDS = new Set(['prose_md', 'transcript_jsonl']);
 
 // Pure: decide a source's privacy disposition. privateDirs is injectable for
 // tests; defaults to config.privateDirs (oversight.json, currently user-owned).
 function classifyDisposition({ canonicalPath, sourceKind, content } = {}, privateDirs) {
   const dirs = privateDirs || config.privateDirs || [];
   const p = canonicalSourceFile(canonicalPath || '').toLowerCase();
+  // 1. Hard-exclude private paths — regardless of kind or content.
   for (const d of dirs) {
     const nd = canonicalSourceFile(String(d)).toLowerCase().replace(/\/+$/, '');
     if (nd && (p === nd || p.startsWith(nd + '/'))) return 'blocklisted-skipped';
   }
-  if (content != null && content !== '') {
-    for (const re of PII_PATTERNS) if (re.test(String(content))) return 'review-required';
-  }
-  return AUTO_CLEAN_KINDS.has(sourceKind) ? 'clean' : 'review-required';
+  // 2. CONTENT SCAN MANDATORY — never slug-only. No content => never clean.
+  if (content == null || content === '') return 'review-required';
+  // 3. PII scan — any hit holds the source for review.
+  for (const re of PII_PATTERNS) if (re.test(String(content))) return 'review-required';
+  // 4. Tier by kind (content has now been scanned clean). Big prose logs and
+  //    unknown kinds default-deny; only curated structured kinds auto-clean.
+  return CURATED_KINDS.has(sourceKind) ? 'clean' : 'review-required';
 }
 
 const INGEST_FIELDS = {

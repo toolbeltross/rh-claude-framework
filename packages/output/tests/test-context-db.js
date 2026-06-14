@@ -149,15 +149,37 @@ const tests = [
     },
   },
   {
-    name: 'classifyDisposition: PII content -> review-required; clean kind + no PII -> clean; unknown kind -> review-required',
+    name: 'classifyDisposition: content scan mandatory (never slug-only) — no content is never clean',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      // a curated kind with NO content scanned must NOT auto-clean
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md' }), 'review-required');
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/t.md', sourceKind: 'learnings_md', content: '' }), 'review-required');
+    },
+  },
+  {
+    name: 'classifyDisposition: PII content -> review-required (SSN/EIN/long-acct)',
     fn: () => {
       const db = freshContextDb({ RH_CONTEXT_DB: '0' });
       assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'note SSN 123-45-6789 here' }), 'review-required');
       assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'EIN 12-3456789' }), 'review-required');
       assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'card 4111111111111111' }), 'review-required');
-      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md', content: 'totally benign cleanup note' }), 'clean');
-      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/cleanup.md', sourceKind: 'scribe_md' }), 'clean');
-      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/whatever.md', sourceKind: 'unknown_kind' }), 'review-required');
+    },
+  },
+  {
+    name: 'classifyDisposition: curated kind + scanned-clean content -> clean; prose logs + unknown default-deny',
+    fn: () => {
+      const db = freshContextDb({ RH_CONTEXT_DB: '0' });
+      // curated structured kinds, content scanned + PII-clean -> clean
+      for (const k of ['scribe_md', 'learnings_md', 'oversight_jsonl', 'telemetry_jsonl']) {
+        assert.strictEqual(db.classifyDisposition({ canonicalPath: `C:/w/x.${k}`, sourceKind: k, content: 'benign structured row' }), 'clean', `${k} should auto-clean after scan`);
+      }
+      // big prose logs default-DENY even when the regex scan passes
+      for (const k of ['prose_md', 'transcript_jsonl']) {
+        assert.strictEqual(db.classifyDisposition({ canonicalPath: `C:/w/x.${k}`, sourceKind: k, content: 'a long benign conversation transcript with no obvious PII' }), 'review-required', `${k} should default-deny`);
+      }
+      // unknown kind -> review-required even with clean content
+      assert.strictEqual(db.classifyDisposition({ canonicalPath: 'C:/w/whatever.md', sourceKind: 'unknown_kind', content: 'benign' }), 'review-required');
     },
   },
   {
