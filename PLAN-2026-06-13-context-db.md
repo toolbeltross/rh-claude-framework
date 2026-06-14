@@ -1,0 +1,59 @@
+# PLAN 2026-06-13 — rh_context: unified context data model (3rd parallel write)
+
+**Source:** [DELIBERATION-2026-06-13-context-data-model.md](DELIBERATION-2026-06-13-context-data-model.md) (14-agent panel).
+**User decisions (2026-06-13):** (1) **extend `rh_scribe`** with `ctx_*`-namespaced tables, not a separate DB; (2) **lean spine + enriched telemetry** — agent/turn/model cost, extended token usage, rate averages (tokens/min, cost/min); defer the graph/PKM layer; (3) **migrate `scribe_rows` key** to `(bucket, source_file, row_id)` with a replacement-assessment (also fixes the live path-drift collision).
+
+**Invariant:** md/jsonl stays CANON. `rh_scribe.scribe_rows` is the existing shadow; `ctx_*` is the new richer shadow, best-effort behind `config.contextDb`, never blocks md or the rh_scribe write. Rollback = DROP the `ctx_*` tables + flag off.
+
+---
+
+## Phase 1 — Schema + config (this PR)
+- [x] 1.1 `sql/rh_context_schema.sql` — 11 `ctx_*` tables (spine: session, session_attribution, ingest_source; content: memory_artifact, memory_observation; telemetry: oversight_event, telemetry_failure, model_usage, telemetry_snapshot, subagent_run; audit: dualwrite_log) + additive per-turn telemetry columns on `transcript_messages`. Idempotent.
+- [x] 1.2 Applied to live `rh_scribe`; **verified outer seam**: 11 tables created; generated rate columns compute (120k tokens/min from 120k tokens / 60s); uuidv7 PK; generated `body_tsv` matches `websearch_to_tsquery`; generated `total_tokens`; privacy CHECK rejects bad disposition. Probe rows cleaned up.
+- [x] 1.3 `config.contextDb` flag (env `RH_CONTEXT_DB` > `oversight.json:contextDb` > default-off), reusing the existing `scribeDb*` connection (same DB).
+- [ ] 1.4 Config test for the contextDb flag resolution.
+
+## Phase 2 — scribe_rows key migration (next PR — see assessment below)
+- [ ] 2.1 Unify `source_file` canonicalization in `@rh/shared` (resolve the writer-vs-auditor case discrepancy) and use it in scribe-db + parity-audit.
+- [ ] 2.2 Migration SQL: normalize existing `scribe_rows.source_file`, dedup any resulting `(bucket, source_file, row_id)` collisions (keep latest), drop `UNIQUE(bucket,row_id)`, add `UNIQUE(bucket, source_file, row_id)`.
+- [ ] 2.3 Update `scribe-db.js` `writeRow` ON CONFLICT target to `(bucket, source_file, row_id)` + canonicalize source_file before insert. Tests.
+- [ ] 2.4 Re-run parity audit → confirm no `path_drift`. (Supersedes the path-normalization background task.)
+
+## Phase 3 — the 3rd write (wiring)
+- [ ] 3.1 `packages/output/scripts/lib/context-db.js` — best-effort writers for memory_artifact / memory_observation / dualwrite_log, same machinery as scribe-db.js (spawnSync psql, dollarQuote, PGCLIENTENCODING=UTF8, swallow+log). No-op when `contextDb` false.
+- [ ] 3.2 Wire into `rh-scribe-table-write.js` (after md + rh_scribe writes) → upsert `ctx_memory_artifact` (capture **full session UUID** at write time).
+- [ ] 3.3 Fix the verified append-observation gap: `rh-learnings-write.js` `modeAppendObservation` writes one `ctx_memory_observation` row (incremental).
+- [ ] 3.4 Privacy gate (steward BLOCK 2): `ctx_ingest_source` upsert with content-level scan for prose; default `review-required`; refuse content rows whose source is `review-required`/blocklisted. `blocklist_version` recorded.
+- [ ] 3.5 Telemetry capture → `ctx_model_usage` / `ctx_telemetry_snapshot` / `ctx_subagent_run` at session close (and per-turn columns on transcript_messages during ingest).
+- [ ] 3.6 `context_db_write_failed` oversight event on failure. Tests (flag-off no-op; mock-pg shape; RH_TEST_PG real-DB round-trip).
+
+## Phase 4 — backfill + read-back + confidence
+- [ ] 4.1 One-shot idempotent backfill from canonical files (reuse parity-audit `md_only` worklist). Observations backfilled from `## Observations`. Disclosed gap: no historical telemetry/trend source before capture-start.
+- [ ] 4.2 Read-back surface (CLI/query helpers + optional telemetry dashboard tab) — the "read usefully back out" bar.
+- [ ] 4.3 Performance check (EXPLAIN ANALYZE on the hot retrieval paths) — the "writes performant" bar.
+- [ ] 4.4 Parity audit extended to `ctx_*`; ≥2 weeks clean before any canon reconsideration. md stays canon until then.
+
+---
+
+## Replacement assessment — `scribe_rows` UNIQUE key migration (Phase 2)
+Per `rh-replacement-assessment.md` (modifying a working dedup path).
+- **What:** change `scribe_rows` conflict key from `UNIQUE(bucket, row_id)` to `UNIQUE(bucket, source_file, row_id)`; normalize existing `source_file` values first.
+- **Evidence:** Phase-4.1 parity audit (2026-06-13) found the same `row_id` from different project copies collapses under the current key, and `Workspace/cleanup.md` is recorded under both `/` and `\` spellings (`path_drift`). Cross-project copies clobber each other on upsert — a live data-correctness bug. Steward flagged it BLOCK 1 for ctx reconciliation.
+- **Value lost:** none functional — the key only widens. Risk: a normalization + dedup pass runs once over live rows (latest-wins on any genuine collision; the dedup choice is logged).
+- **Value gained:** correct per-project row identity; the two shadows (`scribe_rows` and `ctx_memory_artifact`) share the same natural key and reconcile; path-drift eliminated.
+- **Recommendation:** migrate (Phase 2), gated behind its own PR with the normalization+dedup done before the constraint swap; re-run parity audit to confirm.
+
+## What is VERIFIED via outer seam
+| Item | Verification |
+|---|---|
+| ctx_ schema applies to live rh_scribe | 11 tables created; ALTERs on transcript_messages succeeded |
+| generated columns | rate math (tokens/cost per min, avg turn), uuidv7, body_tsv FTS, total_tokens — all correct on probe rows (then deleted) |
+| privacy CHECK | bad `privacy_disposition` rejected by constraint |
+
+## What is PARTIAL (not verified via outer seam)
+| Item | Status | Linked ID |
+|---|---|---|
+| contextDb flag | added; test pending | 1.4 |
+| scribe_rows migration | assessed, not executed | Phase 2 |
+| the 3rd write itself | not wired — no ctx_ row is written by any live writer yet | Phase 3 |
+| backfill / read-back / perf | not started | Phase 4 |

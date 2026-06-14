@@ -59,6 +59,28 @@ const tests = [
     },
   },
   {
+    name: 'config contextDb flag: off by default, RH_CONTEXT_DB=1 enables, =0 forces off',
+    fn: () => {
+      const orig = process.env.RH_CONTEXT_DB;
+      const { resolveConfig, resetCache } = require('../scripts/lib/config');
+      try {
+        delete process.env.RH_CONTEXT_DB;
+        resetCache();
+        assert.strictEqual(resolveConfig().contextDb, false, 'off by default');
+        process.env.RH_CONTEXT_DB = '1';
+        resetCache();
+        assert.strictEqual(resolveConfig().contextDb, true, 'RH_CONTEXT_DB=1 enables');
+        process.env.RH_CONTEXT_DB = '0';
+        resetCache();
+        assert.strictEqual(resolveConfig().contextDb, false, 'RH_CONTEXT_DB=0 forces off');
+      } finally {
+        if (orig === undefined) delete process.env.RH_CONTEXT_DB;
+        else process.env.RH_CONTEXT_DB = orig;
+        resetCache();
+      }
+    },
+  },
+  {
     name: 'writeConfig writes and reads back data',
     fn: () => {
       const { writeConfig, resetCache, CONFIG_PATH } = require('../scripts/lib/config');
