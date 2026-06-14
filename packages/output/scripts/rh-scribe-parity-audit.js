@@ -56,7 +56,7 @@ function isTempPath(p) {
   if (tmp && n.startsWith(tmp)) return true;
   return /(^|\/)(temp|tmp)\//.test(n)
     || /appdata\/local\/temp\//.test(n)
-    || /\/rh-lw-test-|\/rh-test-|\/rh-no-rule\.md$|\/test-config-destruction\.md$/.test(n);
+    || /\/rh-lw-test-|\/rh-test-|\/rh-no-rule\.md$/.test(n);
 }
 
 // Parse pipe-separated psql output (-t -A) into row objects for the given cols.

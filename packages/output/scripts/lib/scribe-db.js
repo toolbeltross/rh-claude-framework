@@ -38,6 +38,20 @@ function findPsql() {
 }
 
 /**
+ * Canonicalize a source_file path to one spelling so the same logical file
+ * is never recorded under multiple spellings (the parity audit flags
+ * backslash-vs-forward-slash divergence as path_drift; confirmed live on
+ * 2026-06-13 for Workspace/cleanup.md). Forward slashes, case preserved —
+ * Windows is case-insensitive but the rest of the codebase uses forward
+ * slashes, and lowercasing would corrupt case-sensitive POSIX paths.
+ * Null/empty passes through unchanged.
+ */
+function canonicalSourceFile(p) {
+  if (!p) return p;
+  return String(p).replace(/\\/g, '/');
+}
+
+/**
  * Dollar-quote a string for safe literal embedding in SQL. Random tag,
  * re-rolled until absent from the payload, so no payload can escape.
  */
@@ -75,6 +89,7 @@ function runSql(sql, timeoutMs = 3000) {
 function writeRow(row) {
   try {
     if (!config.scribeDb) return { ok: true, skipped: true };
+    const sourceFile = canonicalSourceFile(row.source_file);
     const tsLit = row.ts ? dollarQuote(row.ts) + '::timestamptz' : 'NULL';
     const sql =
       'INSERT INTO scribe_rows (bucket, row_id, session_id, ts, content, status, source_file, raw_line) VALUES (' +
@@ -85,7 +100,7 @@ function writeRow(row) {
         tsLit,
         dollarQuote(row.content || ''),
         row.status ? dollarQuote(row.status) : 'NULL',
-        row.source_file ? dollarQuote(row.source_file) : 'NULL',
+        sourceFile ? dollarQuote(sourceFile) : 'NULL',
         row.raw_line ? dollarQuote(row.raw_line) : 'NULL',
       ].join(', ') +
       ') ON CONFLICT (bucket, row_id) DO UPDATE SET content = EXCLUDED.content, status = EXCLUDED.status, raw_line = EXCLUDED.raw_line, updated_at = now();';
@@ -100,4 +115,4 @@ function writeRow(row) {
   }
 }
 
-module.exports = { writeRow, runSql, dollarQuote, findPsql };
+module.exports = { writeRow, runSql, dollarQuote, findPsql, canonicalSourceFile };

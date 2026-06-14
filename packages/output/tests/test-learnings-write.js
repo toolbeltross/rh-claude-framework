@@ -14,6 +14,15 @@ const { spawnSync } = require('child_process');
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'rh-learnings-write.js');
 const SENTINEL = '<!-- scribe-done -->';
 
+// rh-learnings-write `create` does a best-effort postgres dual-write keyed
+// by the topic-file basename. Spawning it with the live env would write rows
+// into the REAL rh_scribe DB (source_file = our tmp topic file) that survive
+// the tmpdir cleanup → test_pollution in the parity audit. Force the shadow
+// OFF in every child: these suites exercise the md-file logic, not the DB
+// shadow (which is covered with proper cleanup in test-scribe-db.js). Env var
+// wins over oversight.json scribeDb:true (see @rh/shared/config scribeDb).
+const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0' };
+
 function withTmp(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-lw-test-'));
   try { return fn(dir); }
@@ -22,7 +31,7 @@ function withTmp(fn) {
 
 function runCli(args, payload) {
   const r = spawnSync('node', [SCRIPT, ...args], {
-    encoding: 'utf8', timeout: 5000, windowsHide: true,
+    encoding: 'utf8', timeout: 5000, windowsHide: true, env: NO_DB_ENV,
     input: payload === undefined ? '' : JSON.stringify(payload),
   });
   return { exitCode: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
@@ -52,7 +61,7 @@ const tests = [
     name: 'empty stdin → exit 1',
     fn: () => {
       const r = spawnSync('node', [SCRIPT, '--mode', 'create'], {
-        encoding: 'utf8', timeout: 3000, input: '',
+        encoding: 'utf8', timeout: 3000, input: '', env: NO_DB_ENV,
       });
       assert.strictEqual(r.status, 1);
       const out = JSON.parse(r.stdout || '{}');
@@ -63,7 +72,7 @@ const tests = [
     name: 'invalid JSON on stdin → exit 1',
     fn: () => {
       const r = spawnSync('node', [SCRIPT, '--mode', 'create'], {
-        encoding: 'utf8', timeout: 3000, input: 'not json',
+        encoding: 'utf8', timeout: 3000, input: 'not json', env: NO_DB_ENV,
       });
       assert.strictEqual(r.status, 1);
       assert.match(JSON.parse(r.stdout).error, /invalid JSON/);
