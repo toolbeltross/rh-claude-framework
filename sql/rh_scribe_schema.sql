@@ -15,7 +15,10 @@ CREATE TABLE IF NOT EXISTS scribe_rows (
   raw_line    text,
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (bucket, row_id)
+  -- Migrated 2026-06-13: includes source_file so per-project copies (same
+  -- row_id, different file) don't clobber each other on upsert. Existing DBs
+  -- migrate via sql/migrations/2026-06-13-scribe-rows-key.sql.
+  UNIQUE (bucket, source_file, row_id)
 );
 
 CREATE TABLE IF NOT EXISTS transcripts (

@@ -83,14 +83,18 @@ const tests = [
       if (!PG) return;
       const db = freshScribeDb({ RH_SCRIBE_DB: '1' });
       const rid = 'test-' + Date.now().toString(36);
+      // Conflict key is (bucket, source_file, row_id) since 2026-06-13; the
+      // upsert only dedupes when source_file matches, so pass one (real writers
+      // always do). A NULL source_file would never upsert-match (by design).
+      const src = 'C:/test/upsert-cleanup.md';
       try {
-        const ins = db.writeRow({ bucket: 'cleanup', row_id: rid, session_id: 'testsess', ts: '2026-06-11T00:00:00Z', content: 'first version', status: 'open' });
+        const ins = db.writeRow({ bucket: 'cleanup', row_id: rid, session_id: 'testsess', ts: '2026-06-11T00:00:00Z', content: 'first version', status: 'open', source_file: src });
         assert.strictEqual(ins.ok, true, `insert failed: ${ins.error}`);
-        const upd = db.writeRow({ bucket: 'cleanup', row_id: rid, content: "second version with 'quotes' and $tags$", status: 'closed' });
+        const upd = db.writeRow({ bucket: 'cleanup', row_id: rid, content: "second version with 'quotes' and $tags$", status: 'closed', source_file: src });
         assert.strictEqual(upd.ok, true, `update failed: ${upd.error}`);
         const sel = db.runSql(`SELECT status || '|' || content FROM scribe_rows WHERE bucket='cleanup' AND row_id=${db.dollarQuote(rid)};`);
         assert.strictEqual(sel.ok, true, `select failed: ${sel.error}`);
-        assert.strictEqual(sel.stdout, "closed|second version with 'quotes' and $tags$");
+        assert.strictEqual(sel.stdout, "closed|second version with 'quotes' and $tags$", 'one row, updated in place (no duplicate)');
       } finally {
         db.runSql(`DELETE FROM scribe_rows WHERE row_id=${db.dollarQuote(rid)};`);
       }

@@ -103,7 +103,12 @@ function writeRow(row) {
         sourceFile ? dollarQuote(sourceFile) : 'NULL',
         row.raw_line ? dollarQuote(row.raw_line) : 'NULL',
       ].join(', ') +
-      ') ON CONFLICT (bucket, row_id) DO UPDATE SET content = EXCLUDED.content, status = EXCLUDED.status, raw_line = EXCLUDED.raw_line, updated_at = now();';
+      // Conflict key migrated 2026-06-13 to (bucket, source_file, row_id) so
+      // per-project copies (same row_id, different file) no longer clobber each
+      // other. source_file is canonicalized above; rows without a source_file
+      // (NULL) simply never upsert-match, which is fine — scribe writers always
+      // pass one. See PLAN-2026-06-13-context-db.md Phase 2.
+      ') ON CONFLICT (bucket, source_file, row_id) DO UPDATE SET content = EXCLUDED.content, status = EXCLUDED.status, raw_line = EXCLUDED.raw_line, updated_at = now();';
     const res = runSql(sql);
     if (!res.ok) {
       appendOversightEvent('scribe_db_write_failed', { bucket: row.bucket, row_id: row.row_id, error: res.error });

@@ -14,10 +14,10 @@
 - [ ] 1.4 Config test for the contextDb flag resolution.
 
 ## Phase 2 — scribe_rows key migration (next PR — see assessment below)
-- [ ] 2.1 Unify `source_file` canonicalization in `@rh/shared` (resolve the writer-vs-auditor case discrepancy) and use it in scribe-db + parity-audit.
-- [ ] 2.2 Migration SQL: normalize existing `scribe_rows.source_file`, dedup any resulting `(bucket, source_file, row_id)` collisions (keep latest), drop `UNIQUE(bucket,row_id)`, add `UNIQUE(bucket, source_file, row_id)`.
-- [ ] 2.3 Update `scribe-db.js` `writeRow` ON CONFLICT target to `(bucket, source_file, row_id)` + canonicalize source_file before insert. Tests.
-- [ ] 2.4 Re-run parity audit → confirm no `path_drift`. (Supersedes the path-normalization background task.)
+- [x] 2.1 `canonicalSourceFile()` (forward-slash, case-preserved) in `scribe-db.js`, applied in `writeRow` (PR #80). NOTE: parity-audit's `normalizePath()` still lowercases — benign case discrepancy ([steward note]); unify in `@rh/shared` if it ever bites.
+- [x] 2.2 Migration `sql/migrations/2026-06-13-scribe-rows-key.sql` (idempotent, transactional): normalize backslash spellings, drop `UNIQUE(bucket,row_id)`, add `UNIQUE(bucket, source_file, row_id)`. Inspection first: 65 rows, 0 NULL source_file, **0 would-be duplicates**. Backed up scribe_rows (pg_dump) before applying.
+- [x] 2.3 `scribe-db.js` ON CONFLICT → `(bucket, source_file, row_id)`; redeployed to `~/.claude/scripts/lib/`; base `sql/rh_scribe_schema.sql` updated for fresh installs; PG upsert test fixed to pass `source_file`.
+- [x] 2.4 Parity audit re-run → **no path_drift, no test_pollution** (the started test-pollution chip session purged the leaked temp rows; `UPDATE 0` backslash rows at migration confirms). Supersedes the path-normalization task.
 
 ## Phase 3 — the 3rd write (wiring)
 - [ ] 3.1 `packages/output/scripts/lib/context-db.js` — best-effort writers for memory_artifact / memory_observation / dualwrite_log, same machinery as scribe-db.js (spawnSync psql, dollarQuote, PGCLIENTENCODING=UTF8, swallow+log). No-op when `contextDb` false.
@@ -49,11 +49,11 @@ Per `rh-replacement-assessment.md` (modifying a working dedup path).
 | ctx_ schema applies to live rh_scribe | 11 tables created; ALTERs on transcript_messages succeeded |
 | generated columns | rate math (tokens/cost per min, avg turn), uuidv7, body_tsv FTS, total_tokens — all correct on probe rows (then deleted) |
 | privacy CHECK | bad `privacy_disposition` rejected by constraint |
+| contextDb flag | oversight suite 197/197 incl. flag-resolution test |
+| scribe_rows key migration | constraint swapped on live DB (`scribe_rows_bucket_source_file_row_id_key`); same row_id + 2 source_files coexist; upsert dedups on new key; output suite 148/148 incl. RH_TEST_PG=1 |
 
 ## What is PARTIAL (not verified via outer seam)
 | Item | Status | Linked ID |
 |---|---|---|
-| contextDb flag | added; test pending | 1.4 |
-| scribe_rows migration | assessed, not executed | Phase 2 |
 | the 3rd write itself | not wired — no ctx_ row is written by any live writer yet | Phase 3 |
 | backfill / read-back / perf | not started | Phase 4 |
