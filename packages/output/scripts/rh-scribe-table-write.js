@@ -40,6 +40,21 @@ const fs = require('fs');
 const path = require('path');
 const { withLock } = require('./lib/file-lock');
 const scribeDb = require('./lib/scribe-db');
+// Defensive: a missing/broken context-db.js (e.g. an older install that predates
+// the lib) must NEVER break the canonical md write. Degrade to no-ops; the 3rd
+// write simply stays off until the lib is present.
+let contextDb;
+try {
+  contextDb = require('./lib/context-db');
+} catch {
+  contextDb = {
+    upsertIngestSource: () => ({ ok: true, skipped: true }),
+    upsertMemoryArtifact: () => ({ ok: true, skipped: true }),
+    insertMemoryObservation: () => ({ ok: true, skipped: true }),
+    logDualWrite: () => ({ ok: true, skipped: true }),
+    canonicalSourceFile: (p) => String(p == null ? '' : p).replace(/\\/g, '/'),
+  };
+}
 
 const SENTINEL = '<!-- scribe-done -->';
 const LOCK_RETRIES = 30;
@@ -196,12 +211,62 @@ function main() {
     }
   }
 
+  // Context-model 3rd write (Phase 3.2, PLAN-2026-06-13-context-db). Best-effort,
+  // flag-gated (contextDb), AFTER md + rh_scribe. Routed through the privacy gate:
+  // register the source (content-scanned), then write each row's artifact only if
+  // the source is mirror-eligible. FAIL-CLOSED: if source registration fails we do
+  // NOT write content ungated. Failures logged by context-db; md never affected.
+  let ctxShadow = { ok: true, skipped: true };
+  if (bucket) {
+    try {
+      const sourceKind = bucket === 'learnings' ? 'learnings_md' : 'scribe_md';
+      let fileContent = '';
+      try { fileContent = fs.readFileSync(targetAbs, 'utf8'); } catch {}
+      const src = contextDb.upsertIngestSource({ canonical_path: targetAbs, source_kind: sourceKind, content: fileContent });
+      if (src.skipped) {
+        ctxShadow = src; // contextDb off — dormant
+      } else if (!src.ok || !src.source_id) {
+        // Fail closed: never write content rows without a registered source.
+        ctxShadow = { ok: false, error: 'ingest source registration failed: ' + (src.error || 'no source_id') };
+        contextDb.logDualWrite({ entity_type: 'ctx_ingest_source', entity_natural_key: targetAbs, result: 'failed', error: src.error, md_source_file: targetAbs, triggering_writer: 'rh-scribe-table-write' });
+      } else {
+        const sourceId = src.source_id;
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i];
+          const art = contextDb.upsertMemoryArtifact({
+            bucket,
+            row_id: String(r.id),
+            source_file: targetAbs,
+            source_id: sourceId,
+            memory_type: bucket === 'learnings' ? 'semantic' : 'procedural',
+            status: r.status || 'open',
+            session_id_short: r.session ? String(r.session).slice(0, 8) : undefined,
+            ts: r.ts || undefined,
+            body_distilled: String(r.text || ''),
+            raw_line: rowLines[i].trimEnd(),
+          });
+          contextDb.logDualWrite({
+            entity_type: 'ctx_memory_artifact',
+            entity_natural_key: `${bucket}|${contextDb.canonicalSourceFile(targetAbs)}|${r.id}`,
+            result: art.skipped ? 'skipped' : (art.gated ? 'skipped' : (art.ok ? 'ok' : 'failed')),
+            error: art.ok ? undefined : art.error,
+            md_source_file: targetAbs,
+            triggering_writer: 'rh-scribe-table-write',
+          });
+          if (!art.ok) ctxShadow = art;
+          else if (!art.skipped && ctxShadow.skipped) ctxShadow = { ok: true, skipped: false };
+        }
+      }
+    } catch (e) { ctxShadow = { ok: false, error: String(e.message || e) }; }
+  }
+
   console.log(JSON.stringify({
     ok: true,
     wrote,
     target: targetAbs,
     sentinelPosition: 'eof',
     dbShadow: dbShadow.skipped ? 'off' : (dbShadow.ok ? 'written' : 'failed (md unaffected)'),
+    ctxShadow: ctxShadow.skipped ? 'off' : (ctxShadow.ok ? 'written' : 'failed (md unaffected)'),
   }));
 }
 
