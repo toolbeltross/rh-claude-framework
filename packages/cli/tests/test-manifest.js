@@ -160,7 +160,10 @@ const tests = [
       const outManifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'output', 'install.json'), 'utf8'));
       const cf = outManifest.operations.find(o => o.kind === 'copyFiles' && o.to === 'scriptsDir/lib');
       assert.ok(cf, 'output manifest has a copyFiles → scriptsDir/lib op');
-      assert.deepStrictEqual([...cf.files].sort(), ['context-db.js', 'scribe-db.js']);
+      // the output-owned canonicals (not shims) must be shipped
+      for (const required of ['context-db.js', 'scribe-db.js', 'cost-rates.js', 'transcript-telemetry.js']) {
+        assert.ok(cf.files.includes(required), `manifest ships ${required}`);
+      }
       assert.strictEqual(cf.from, 'scripts/lib');
       // and the blanket copyDir still excludes lib (shims stay out)
       const cd = outManifest.operations.find(o => o.kind === 'copyDir');
