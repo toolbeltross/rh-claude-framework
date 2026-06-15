@@ -7,7 +7,7 @@
 > `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here). It tracks the latest **substantive** PR, not its own doc-only stamp commits (pinning a literal HEAD hash here is self-defeating — a stamp commit becomes the new HEAD and instantly invalidates the stamp).
 
 **Last verified:** 2026-06-15
-**Through:** `main`, latest substantive PR **#97** (framework-source propagation of the 2026-06-14 placement/scribe edits + 3 previously-untracked rules — `packages/oversight/rules/` now at 18-rule parity with the deployed workspace)
+**Through:** `main`, latest substantive PR **#102** (`/rh-quit` now requires session-authored PRs be merged or explicitly declined before "safe to close")
 **Tree:** clean · no open PRs
 
 ## Current state
@@ -30,6 +30,8 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 
 ## Recently verified (outer seam)
 
+- **PR #102 — `/rh-quit` require-merge gate** ✅ session-authored open PRs must now be merged (default) or explicitly user-declined before the skill prints "safe to close"; "listed as an open item" is no longer sufficient. Closes the gap where the model self-defaulted an open PR to "awaiting merge" and the user had to intervene. Skill-only change; deployed copy at `~/.claude/skills/rh-quit/SKILL.md` synced byte-identical to source.
+- **PR #98 — telemetry session-tab labels (v1 + v2)** ✅ both UIs render the spec format `project (id-slice)` via one shared `src/lib/session-label.js` (prefers stable `project_dir` over volatile `current_dir`); v1 file-session tabs + v2 dev-root (`:5174/` now serves v2) also fixed. Outer-seam: 34/34 telemetry test files; v1 dev + v1 prod (`:7890`) + v2 dev + v2 prod (`:7891`) rendered correct labels, 0 console errors.
 - **PR #97 — placement/scribe propagation into framework source** ✅ ports the 2026-06-14 deployed-copy edits (already live in `~/.claude` + `<workspace>/.claude/rules`) back into the deploy source so `rh-oversight init` no longer clobbers them: NEW `rh-doc-placement.md`; additive `sectionRulesDomainIndex()` in `rh-generate-state-md.js`; scribe canonical-`$WORKSPACE` resolution (recommendations + cleanup) + Step 4b breadcrumb (multiscope); doc-placement back-refs in conventions/cwd-awareness/oversight-doc-sync (+ placement sync-points row + stale "9 rule files" count fix); plus 3 previously-untracked rules added verbatim (throwaway-artifacts, rule-consultation, severity-tiers). Outer-seam: isolated tmp-HOME install copies **19 rule files**, all four new rules land in `<workspace>/.claude/rules/` byte-identical to deployed; suites 197/62/181.
 - **PLAN-2026-06-11 §3.5 — daily-regen transcript ingest** ✅ firing: `daily-regen.log` shows `[OK] rh-transcript-ingest`; Postgres holds **670 transcripts / 10,608 messages** (newest 2026-06-12); `scribe_rows` dual-writing (14 rec / 33 learn / 13 cleanup). Marked ✅ in the plan's VERIFIED table.
 - **`/rh-quit` SESSION_STATE refresh** ✅ exercised end-to-end (PR #77): the session-end run advances this file's HEAD/PR line and stamp — closing the outer-seam gap that couldn't be tested pre-merge.
