@@ -21,7 +21,9 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 5. **Loose-ends sweep** — before declaring "safe to close", verify nothing is left behind that `git status`/`gh pr list` can't see: out-of-git edits (gitignored dirs, `~/.claude/`, non-repo paths), worktrees, branches that `--delete-branch` missed, and the IDE's pending "Create PR" affordance. This exists because "cleaned up" was once declared while a gitignored edit sat unactioned in the IDE source-control panel (F-14).
 
-6. **Report what was captured** — print a summary listing files written, items appended, the loose-ends sweep results, and confirm "safe to close session."
+6. **Resolve session-authored open PRs** — a PR you opened this session must be merged (the default) or explicitly declined by the user before "safe to close." Listing it as an open item is not enough; the model may not self-default to "leave it open." Added 2026-06-15 after a session declared safe-to-close with PR #98 still open, self-labeled "awaiting merge," and the user had to step in.
+
+7. **Report what was captured** — print a summary listing files written, items appended, the loose-ends sweep results, open-PR dispositions, and confirm "safe to close session."
 
 ## Execution steps
 
@@ -83,18 +85,25 @@ When the user invokes `/rh-quit`:
    - **Why:** `/rh-quit` runs at session end, when the working tree may hold a *different* session's in-progress work. A broad add sweeps that unrelated, unreviewed delta into the refresh PR — this is exactly what produced PR #84 (an inert-but-unreviewed context-db delta merged via a `/rh-quit` refresh before its own PR was ready). Scoped, named-path staging is the fix. *(Steward APPROVE-WITH-CONDITIONS C1; oversight failure row F-13.)*
 
 5. **Loose-ends sweep (REQUIRED before declaring "safe to close").** Git/PR commands only see *tracked* state — they cannot see edits in gitignored dirs, `~/.claude/`, or non-repo paths, nor the IDE's "Create PR" affordance. Declaring cleanup from `git status` / `gh pr list` / `git branch` alone is exactly how loose ends slip through (**oversight failure F-14**, 2026-06-14: a `/rh-quit`-adjacent "cleaned up" claim missed a gitignored `OVERSIGHT_SYSTEM.md` edit the IDE was surfacing as `rh-oversight-content +16 [Create PR]`). Run each check and report **resolved or explicitly left, with full paths**, as its own structured section:
-   - **Tracked git state** — `git status --short` in every repo you committed to this session; `git log <upstream>..HEAD` for unpushed commits; `gh pr list --state open` for your unmerged PRs.
+   - **Tracked git state** — `git status --short` in every repo you committed to this session; `git log <upstream>..HEAD` for unpushed commits; `gh pr list --state open` for your unmerged PRs. **Any open PR you authored this session is resolved in step 6 — merely listing it here is NOT sufficient.**
    - **Branch deletion** — for each PR you merged with `--delete-branch`, confirm via `git ls-remote --heads origin` (the *server*, not the local `git branch -r` cache, which `git fetch` doesn't prune) that the branch is actually gone; a worktree-pinned local branch makes `--delete-branch` silently fail.
    - **Worktrees** — `git worktree list`; flag any worktree or `.git/worktrees/` admin folder you created.
    - **Out-of-git edits (SELF-REPORTED — not a filesystem scan):** for each directory OUTSIDE a tracked git checkout that *you wrote to this session* (gitignored dirs e.g. `oversight-system/`, `~/.claude/`, non-repo paths), list each file you wrote and state its disposition — **intentional disk-only** (say why it needs no PR) or **needs-commit** (open item). These never appear in `git status`.
    - **DISCLOSURE to the user (NOT a checkbox you can mark resolved):** the IDE source-control panel may surface a pending "Create PR" affordance for gitignored / out-of-repo files you edited this session that no `git` command reveals. You cannot verify or dismiss it from inside the session — tell the user to review the source-control panel before closing.
 
-6. **Print summary:**
+6. **Resolve session-authored open PRs (REQUIRED — merge-or-decline before "safe to close").** A PR you opened or pushed commits to during this session is *undelivered work*, not a passive loose end. `/rh-quit` MUST NOT self-assign a "leave it open" disposition — that defeats the purpose of the session-end gate. For each open PR you authored this session (`gh pr list --state open --author @me`, cross-checked against PRs you touched):
+   - **Default action is to MERGE it.** Once it is verified (tests / outer-seam green) and mergeable (`gh pr view <N> --json mergeable,mergeStateStatus,statusCheckRollup`), merge it — `gh pr merge <N> --squash --delete-branch` (match the repo's merge convention; squash matches recent fix PRs here). Confirm `state: MERGED` afterward.
+   - **The ONLY alternative is an EXPLICIT user decline.** If the user says to leave it open (external review pending, CI, genuinely WIP), record that decision **verbatim** in the summary; convert to draft if that's the intent. The model may not infer or default this — it must be the user's stated choice this session.
+   - **Do NOT print "safe to close" while a session-authored PR is open without either a recorded merge (with commit SHA) or an explicit user decline.** "Listed as an open item" is NOT sufficient — that was the gap before 2026-06-15 (the model self-defaulted PR #98 to "awaiting merge" instead of merging or asking; the user had to intervene).
+   - **Detached-HEAD / worktree-locked-`main` gotcha** (learned 2026-06-15): `gh pr merge --delete-branch` needs a real branch checked out and tries to switch to the default branch afterward. If `main` is checked out in another worktree, that post-merge switch fails. Merge from the PR branch *without* `--delete-branch`, then delete the remote branch (`git push origin --delete <branch>`) and move local off it (`git switch --detach origin/main && git branch -D <branch>`).
+
+7. **Print summary:**
    - Items appended per scope (recommendations / cleanup / learnings)
    - Whether `SESSION_STATE.md` was refreshed (and what changed) or skipped (not present)
    - **Loose-ends sweep** results (its own section — every item above, resolved or left, with paths)
+   - **Open-PR resolution** — each session-authored PR with its disposition (merged + commit SHA, or user-declined quoted verbatim)
    - Files modified
-   - Confirm **"Safe to close session."** — only after the loose-ends sweep is clean or its open items are explicitly listed.
+   - Confirm **"Safe to close session."** — only after **(a)** the loose-ends sweep is clean or its open items are explicitly listed, AND **(b)** every session-authored PR has been merged or explicitly declined by the user per step 6. A still-open session PR with no recorded decline **BLOCKS** this line.
 
 ## What was removed (do not recreate)
 
