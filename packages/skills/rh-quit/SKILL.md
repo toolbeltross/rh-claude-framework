@@ -19,7 +19,9 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 4. **Refresh the project current-state doc (opt-in by presence)** — if a `SESSION_STATE.md` exists at the project root (the workspace-standard current-facts tracking doc), reconcile and refresh it so it doesn't drift the way an unmaintained progress log does. This is the mechanism that keeps the tracking doc current; without it, the doc only updates when someone remembers to, which is how it goes stale.
 
-5. **Report what was captured** — print a summary listing files written, items appended, and confirm "safe to close session."
+5. **Loose-ends sweep** — before declaring "safe to close", verify nothing is left behind that `git status`/`gh pr list` can't see: out-of-git edits (gitignored dirs, `~/.claude/`, non-repo paths), worktrees, branches that `--delete-branch` missed, and the IDE's pending "Create PR" affordance. This exists because "cleaned up" was once declared while a gitignored edit sat unactioned in the IDE source-control panel (F-14).
+
+6. **Report what was captured** — print a summary listing files written, items appended, the loose-ends sweep results, and confirm "safe to close session."
 
 ## Execution steps
 
@@ -80,11 +82,19 @@ When the user invokes `/rh-quit`:
    - **Run `git status --short` as a preflight FIRST.** If it lists files you did not edit in this skill — another concurrent session's uncommitted work in the shared checkout — do **not** stage them. Stage only your named paths and list the foreign dirty files in the summary so they are visibly left behind, not silently swept.
    - **Why:** `/rh-quit` runs at session end, when the working tree may hold a *different* session's in-progress work. A broad add sweeps that unrelated, unreviewed delta into the refresh PR — this is exactly what produced PR #84 (an inert-but-unreviewed context-db delta merged via a `/rh-quit` refresh before its own PR was ready). Scoped, named-path staging is the fix. *(Steward APPROVE-WITH-CONDITIONS C1; oversight failure row F-13.)*
 
-5. **Print summary:**
+5. **Loose-ends sweep (REQUIRED before declaring "safe to close").** Git/PR commands only see *tracked* state — they cannot see edits in gitignored dirs, `~/.claude/`, or non-repo paths, nor the IDE's "Create PR" affordance. Declaring cleanup from `git status` / `gh pr list` / `git branch` alone is exactly how loose ends slip through (**oversight failure F-14**, 2026-06-14: a `/rh-quit`-adjacent "cleaned up" claim missed a gitignored `OVERSIGHT_SYSTEM.md` edit the IDE was surfacing as `rh-oversight-content +16 [Create PR]`). Run each check and report **resolved or explicitly left, with full paths**, as its own structured section:
+   - **Tracked git state** — `git status --short` in every repo you committed to this session; `git log <upstream>..HEAD` for unpushed commits; `gh pr list --state open` for your unmerged PRs.
+   - **Branch deletion** — for each PR you merged with `--delete-branch`, confirm via `git ls-remote --heads origin` (the *server*, not the local `git branch -r` cache, which `git fetch` doesn't prune) that the branch is actually gone; a worktree-pinned local branch makes `--delete-branch` silently fail.
+   - **Worktrees** — `git worktree list`; flag any worktree or `.git/worktrees/` admin folder you created.
+   - **Out-of-git edits (SELF-REPORTED — not a filesystem scan):** for each directory OUTSIDE a tracked git checkout that *you wrote to this session* (gitignored dirs e.g. `oversight-system/`, `~/.claude/`, non-repo paths), list each file you wrote and state its disposition — **intentional disk-only** (say why it needs no PR) or **needs-commit** (open item). These never appear in `git status`.
+   - **DISCLOSURE to the user (NOT a checkbox you can mark resolved):** the IDE source-control panel may surface a pending "Create PR" affordance for gitignored / out-of-repo files you edited this session that no `git` command reveals. You cannot verify or dismiss it from inside the session — tell the user to review the source-control panel before closing.
+
+6. **Print summary:**
    - Items appended per scope (recommendations / cleanup / learnings)
    - Whether `SESSION_STATE.md` was refreshed (and what changed) or skipped (not present)
+   - **Loose-ends sweep** results (its own section — every item above, resolved or left, with paths)
    - Files modified
-   - Confirm **"Safe to close session."**
+   - Confirm **"Safe to close session."** — only after the loose-ends sweep is clean or its open items are explicitly listed.
 
 ## What was removed (do not recreate)
 
