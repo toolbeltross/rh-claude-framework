@@ -7,7 +7,7 @@
 > `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here). It tracks the latest **substantive** PR, not its own doc-only stamp commits (pinning a literal HEAD hash here is self-defeating — a stamp commit becomes the new HEAD and instantly invalidates the stamp).
 
 **Last verified:** 2026-06-15
-**Through:** `main`, latest substantive PR **#93** (telemetry CLI — live-session caller-scoping + `context_window` field fix)
+**Through:** `main`, latest substantive PR **#97** (framework-source propagation of the 2026-06-14 placement/scribe edits + 3 previously-untracked rules — `packages/oversight/rules/` now at 18-rule parity with the deployed workspace)
 **Tree:** clean · no open PRs
 
 ## Current state
@@ -30,6 +30,7 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 
 ## Recently verified (outer seam)
 
+- **PR #97 — placement/scribe propagation into framework source** ✅ ports the 2026-06-14 deployed-copy edits (already live in `~/.claude` + `<workspace>/.claude/rules`) back into the deploy source so `rh-oversight init` no longer clobbers them: NEW `rh-doc-placement.md`; additive `sectionRulesDomainIndex()` in `rh-generate-state-md.js`; scribe canonical-`$WORKSPACE` resolution (recommendations + cleanup) + Step 4b breadcrumb (multiscope); doc-placement back-refs in conventions/cwd-awareness/oversight-doc-sync (+ placement sync-points row + stale "9 rule files" count fix); plus 3 previously-untracked rules added verbatim (throwaway-artifacts, rule-consultation, severity-tiers). Outer-seam: isolated tmp-HOME install copies **19 rule files**, all four new rules land in `<workspace>/.claude/rules/` byte-identical to deployed; suites 197/62/181.
 - **PLAN-2026-06-11 §3.5 — daily-regen transcript ingest** ✅ firing: `daily-regen.log` shows `[OK] rh-transcript-ingest`; Postgres holds **670 transcripts / 10,608 messages** (newest 2026-06-12); `scribe_rows` dual-writing (14 rec / 33 learn / 13 cleanup). Marked ✅ in the plan's VERIFIED table.
 - **`/rh-quit` SESSION_STATE refresh** ✅ exercised end-to-end (PR #77): the session-end run advances this file's HEAD/PR line and stamp — closing the outer-seam gap that couldn't be tested pre-merge.
 - **PR #80 — scribe path-canonicalization + test-leak isolation** ✅ output suite green (unit + `RH_TEST_PG=1`); live-DB `test_pollution` purged to **0** (5 leaked rows deleted across two cleanups), and the real learning mis-named `test-config-destruction` renamed → `tests-clobber-real-config` and re-mirrored. Tests now spawn children with `RH_SCRIBE_DB=0` so the best-effort shadow can't leak.
