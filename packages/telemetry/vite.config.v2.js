@@ -4,8 +4,23 @@ import tailwindcss from '@tailwindcss/vite';
 
 const API_PORT = process.env.RH_TELEMETRY_PORT || 7890;
 
+// Dev-only: Vite serves `index.html` (the v1 entry) at `/` by default, so the
+// v2 dev server on :5174 would render v1 unless you knew to hit /index.v2.html.
+// Rewrite the bare root / index.html requests to the v2 entry so `/` is v2 in dev.
+// (The production build already uses index.v2.html as its rollup input.)
+const serveV2AtRoot = {
+  name: 'serve-v2-at-root',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use((req, _res, next) => {
+      if (req.url === '/' || req.url === '/index.html') req.url = '/index.v2.html';
+      next();
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [serveV2AtRoot, react(), tailwindcss()],
   server: {
     host: '127.0.0.1',
     port: 5174,

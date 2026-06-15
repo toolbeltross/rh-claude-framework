@@ -10,7 +10,7 @@ import SessionMetaStrip from './components/SessionMetaStrip';
 import MicroDashboard from './components/MicroDashboard';
 import { StatusLineModal } from './components/StatusLineBanner';
 import PlanUsage from './components/PlanUsage';
-import { sessionLabel } from './lib/session-label.js';
+import { sessionLabel, sessionLabelFromParts } from './lib/session-label.js';
 import { MODEL_COLORS } from './lib/model-colors';
 
 const MICRO_THRESHOLD = 480;
@@ -555,16 +555,17 @@ export default function App() {
             {/* Active file tab if selected from overflow */}
             {activeFileId && (() => {
               const s = fileSessions[activeFileId];
-              const label = `${s.projectName || activeFileId.slice(0, 8)} (${s.primaryModel})`;
+              const label = sessionLabelFromParts(s.projectName, activeFileId);
               return (
                 <TabButton
                   key={activeFileId}
                   active
                   onClick={() => setActiveTab(activeFileId)}
                 >
-                  <span className="inline-flex items-center gap-1.5 max-w-[180px]" title={label}>
+                  <span className="inline-flex items-center gap-1.5 max-w-[180px]" title={`${label} · ${s.primaryModel}`}>
                     <span className="inline-block w-2 h-2 rounded-full bg-gray-500 shrink-0" />
                     <span className="truncate">{label}</span>
+                    <span className="text-gray-600 shrink-0">{s.primaryModel}</span>
                   </span>
                 </TabButton>
               );
@@ -637,7 +638,8 @@ export default function App() {
                             <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
                               isStale ? 'bg-gray-700' : 'bg-gray-500'
                             }`} />
-                            <span className="truncate">{s.projectName || id.slice(0, 8)} ({s.primaryModel})</span>
+                            <span className="truncate">{sessionLabelFromParts(s.projectName, id)}</span>
+                            <span className="text-[10px] text-gray-600 shrink-0">{s.primaryModel}</span>
                             {isShown && <span className="text-[9px] text-gray-600 ml-auto">shown</span>}
                           </button>
                         );

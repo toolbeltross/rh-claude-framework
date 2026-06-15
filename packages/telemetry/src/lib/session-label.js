@@ -31,3 +31,16 @@ export function sessionLabel(s, id) {
   const proj = sessionProject(s) || slice;
   return proj === slice ? slice : `${proj} (${slice})`;
 }
+
+/**
+ * Same "project (id-slice)" format for parsed/file (historical) sessions, which
+ * expose a precomputed `projectName` (from parser.js) rather than a live
+ * `workspace` object. Keeps v1's file-session tabs consistent with the live
+ * tabs, and disambiguates two sessions in the same project (previously they
+ * could render an identical "project (model)" label).
+ */
+export function sessionLabelFromParts(projectName, id) {
+  const slice = id.slice(0, 8);
+  const proj = projectName || slice;
+  return proj === slice ? slice : `${proj} (${slice})`;
+}
