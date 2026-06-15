@@ -6,15 +6,15 @@
 > The session-by-session record is **git history** (each session = PRs); this file holds only the live picture.
 > `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here). It tracks the latest **substantive** PR, not its own doc-only stamp commits (pinning a literal HEAD hash here is self-defeating — a stamp commit becomes the new HEAD and instantly invalidates the stamp).
 
-**Last verified:** 2026-06-13
-**Through:** `main`, latest substantive PR **#83** (context-db Phase 3.1 — `ctx_*` best-effort writers)
+**Last verified:** 2026-06-15
+**Through:** `main`, latest substantive PR **#93** (telemetry CLI — live-session caller-scoping + `context_window` field fix)
 **Tree:** clean · no open PRs
 
 ## Current state
 
-All numbered plan work (P0–P5) is merged; the 5-package monorepo (shared / oversight / output / skills / cli / telemetry) is stable and installs clean. Two plans are active: the Postgres scribe/FTS sidecar ([`PLAN-2026-06-11`](PLAN-2026-06-11-scribe-postgres-fts.md), remaining phase deferred by design — see below) and the unified **context-db** model ([`PLAN-2026-06-13`](PLAN-2026-06-13-context-db.md)), advancing fast: Phase 1 schema + `contextDb` flag (PR #81), Phase 2 `scribe_rows` key → `(bucket, source_file, row_id)` (PR #82), Phase 3.1 `ctx_*` writers (PR #83). The two 4.1-audit bugs — `source_file` path-normalization and `RH_TEST_PG` test-row leakage — were fixed in PR #80.
+All numbered plan work (P0–P5) is merged; the 5-package monorepo (shared / oversight / output / skills / cli / telemetry) is stable and installs clean. Two plans are active: the Postgres scribe/FTS sidecar ([`PLAN-2026-06-11`](PLAN-2026-06-11-scribe-postgres-fts.md), remaining phase deferred by design — see below) and the unified **context-db** model ([`PLAN-2026-06-13`](PLAN-2026-06-13-context-db.md)), advancing fast: Phases 1–3.1 merged (PRs #81–#83), then 3.2/3.3 writer wiring + gate-policy tightening (PRs #85, #87–#88), 3.5 telemetry capture in transcript-ingest (PRs #90–#91), and a privacy-classifier bare-name match (PR #92). The two 4.1-audit bugs — `source_file` path-normalization and `RH_TEST_PG` test-row leakage — were fixed in PR #80. The telemetry dashboard CLI got a multi-session correctness fix (PR #93 — see Recently verified).
 
-**Tests (verified 2026-06-13):** oversight **197** · cli **59 passing / 1 known-failing** (zero-hardcoded-paths hygiene — see In-flight) · output **163** — otherwise green. (`telemetry/` has its own suite.)
+**Tests (verified 2026-06-15):** oversight **197** · cli **62 passing / 0 failing** (zero-hardcoded-paths hygiene now green — resolved) · output **181** — all green. (`telemetry/` has its own suite.)
 
 ## In-flight / outstanding
 
@@ -22,8 +22,7 @@ All numbered plan work (P0–P5) is merged; the 5-package monorepo (shared / ove
 |---|---|---|
 | [`PLAN-2026-06-11`](PLAN-2026-06-11-scribe-postgres-fts.md) **4.1b** — one-time backfill of pre-dual-write md rows into `scribe_rows` | **Not built** — gating prerequisite | Phase 4.2 |
 | [`PLAN-2026-06-11`](PLAN-2026-06-11-scribe-postgres-fts.md) **4.2** — DB-primary promotion decision | Blocked: parity ~5–8% (forward-only dual-write) | After 4.1b + ≥2 weeks clean parity |
-| [`PLAN-2026-06-13`](PLAN-2026-06-13-context-db.md) context-db **Phase 3.2+** | In progress — Phases 1–3.1 merged (PRs #81–#83) | continuing |
-| cli `zero-hardcoded-paths` hygiene test **failing** — 7 machine-specific refs in shipped `packages/telemetry/` (DECISIONS.md / docs / `package.json` URL) | Regression from the context-db PRs; flagged as a background task | green cli suite |
+| [`PLAN-2026-06-13`](PLAN-2026-06-13-context-db.md) context-db **Phase 3.6+** | In progress — Phases 1–3.5 merged (PRs #81–#92: writers, gate policy, telemetry capture, privacy classifier) | continuing |
 
 **Phase 4.1 (parity audit) shipped** — `rh-scribe-parity-audit.js` + 22 tests; first reading 2026-06-13 showed only 5–8% of md rows are mirrored (`db_only` 0, so DB is a clean subset). The promotion gate was reframed: it needs a **backfill** first, not just elapsed time.
 
@@ -34,6 +33,8 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 - **PLAN-2026-06-11 §3.5 — daily-regen transcript ingest** ✅ firing: `daily-regen.log` shows `[OK] rh-transcript-ingest`; Postgres holds **670 transcripts / 10,608 messages** (newest 2026-06-12); `scribe_rows` dual-writing (14 rec / 33 learn / 13 cleanup). Marked ✅ in the plan's VERIFIED table.
 - **`/rh-quit` SESSION_STATE refresh** ✅ exercised end-to-end (PR #77): the session-end run advances this file's HEAD/PR line and stamp — closing the outer-seam gap that couldn't be tested pre-merge.
 - **PR #80 — scribe path-canonicalization + test-leak isolation** ✅ output suite green (unit + `RH_TEST_PG=1`); live-DB `test_pollution` purged to **0** (5 leaked rows deleted across two cleanups), and the real learning mis-named `test-config-destruction` renamed → `tests-clobber-real-config` and re-mirrored. Tests now spawn children with `RH_SCRIBE_DB=0` so the best-effort shadow can't leak.
+- **cli `zero-hardcoded-paths` hygiene regression — resolved** ✅ the machine-specific refs in shipped `packages/` were replaced with placeholders (`C:/ws/…`) via PRs #87/#88; cli suite back to **62 passing / 0 failing**. The earlier `fix/identity-refs-…` PR (#86) was closed as superseded.
+- **PR #93 — telemetry CLI multi-session correctness** ✅ `scripts/telemetry-cli.js` now scopes the live session to the caller (`CLAUDE_CODE_SESSION_ID` → CWD → most-recent) instead of global `max(_lastSeen)`, and reads the real `context_window.{context_window_size, used_percentage, total_input_tokens, current_usage.*}` fields (was reading non-existent `total_tokens`, silently defaulting 1M Opus to 200K). New unit test (9 cases); full telemetry suite 34/34 files; outer-seam CLI run confirmed correct session at 1.0M window.
 
 ## How tracking works here
 
@@ -49,8 +50,8 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 ```bash
 cd C:/Users/rossb/OneDrive/Workspace/toolbeltross/toolbeltross-public/rh-claude-framework
 node packages/oversight/tests/run.js   # 197 expected
-node packages/cli/tests/run.js         # 60 total — 1 known-failing (zero-hardcoded-paths hygiene)
-node packages/output/tests/run.js      # 163 expected
+node packages/cli/tests/run.js         # 62 expected — all green
+node packages/output/tests/run.js      # 181 expected
 node packages/cli/bin/rh-oversight.js init --dry-run
 git status && git log origin/main..HEAD --oneline   # tree clean, nothing unpushed
 grep -r "rossb\|C:/Users/rossb" --include="*.js" --include="*.md" packages/   # must be empty
