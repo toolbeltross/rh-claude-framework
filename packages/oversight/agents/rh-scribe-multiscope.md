@@ -74,6 +74,12 @@ Walk through the tail. For each substantive item (not pleasantries), assign it t
 - Speculation that wasn't tested or grounded in evidence
 - Decisions made (those go to DECISIONS.md, not here)
 
+### Step 4b — Rule-domain breadcrumb (helps the promotion step)
+For any recommendation or learning that proposes a **durable convention** (something that should eventually become or extend a workspace rule), append a breadcrumb to the END of its `text` so whoever promotes it knows where it should be codified: ` → candidate home: <rule>.md`. Match by domain — most usefully:
+- **File/folder placement** (where docs / data / temp / project-tracking / artifacts belong; "should live in", "belongs at", root clutter, `tmp/`, Key Directories): ` → candidate home: rh-doc-placement.md`
+- Throwaway/screenshot routing specifically: ` → candidate home: rh-throwaway-artifacts.md`
+- For other domains, consult the **Rules Domain Index** in `OVERSIGHT_STATE.md` (auto-generated keyword→rule map) and name the matching rule. If no rule clearly owns it, omit the breadcrumb. This is a hint, not hard routing — never drop or re-route the item itself.
+
 ### Step 5 — For each bucket with ≥1 candidate, run the write phase
 
 Skip the write phase entirely for buckets with zero candidates — don't open the file, don't touch the sentinel.

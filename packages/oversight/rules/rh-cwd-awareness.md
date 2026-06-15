@@ -48,7 +48,7 @@ Before answering a task that touches subproject-specific resources:
 ## Failure modes this rule mitigates
 
 - **Silent project-specific-agent unavailability** — Claude appears to have the agent fleet listed in the project's CLAUDE.md but cannot dispatch them because they didn't load at SessionStart.
-- **Path-resolution drift** — auto-detect functions resolve workspace from CWD walk-up; CWD outside the workspace causes fallback to defaults that may be wrong.
+- **Path-resolution drift** — auto-detect functions resolve workspace from CWD walk-up; CWD outside the workspace causes fallback to defaults that may be wrong. This is the mechanism behind workspace-scoped artifacts (scribe logs, oversight HTML) misfiring into a project root when a tool resolves its output path from the session CWD; `rh-doc-placement.md` defines where those artifacts belong (workspace root) and what to do when they leak.
 - **Permission-overhead blindness** — project-local allowlists silently not applying, so every command pays evaluation overhead (or prompts) the project owner already decided to waive.
 
 ## Origin

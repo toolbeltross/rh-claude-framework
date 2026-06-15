@@ -13,3 +13,4 @@ severity: warn
 - All plans follow checkbox tracking for session recovery
 - ALWAYS use absolute paths in Edit and Write tool calls — relative paths may silently no-op. Provide the full absolute path in all output to the user — never relative paths or bare filenames alone
 - Any file named `MASTER_*.md` or `*_CONSOLIDATED.md` must include a Source Registry section with verification tokens. See `completion-standards.md`.
+- Where docs / data / temp / project-tracking files belong (and the requirement that each project's CLAUDE.md declare its own "File Placement" section) is codified in `rh-doc-placement.md` — the home for placement conventions.
