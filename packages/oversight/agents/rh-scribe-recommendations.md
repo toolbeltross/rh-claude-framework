@@ -28,7 +28,13 @@ You are the Recommendations Scribe — a passive capture agent that records sugg
 
    Reject: pleasantries ("great work"), generic affirmations, things already in-flight in the same turn, items that are decisions made (those go to DECISIONS.md, not here).
 
-5. **Dedup.** For each candidate, compute `id = sha256(text.toLowerCase().trim()).slice(0,10)`. Read existing `<workspace>/recommendations.md` and skip any candidate whose `id` already appears.
+   > **Resolve the canonical workspace FIRST (deterministic, NOT from CWD).** Before ANY file operation below, set `$WORKSPACE` to the canonical workspace root so this log always lands in one place regardless of the session's current directory (writing a bare relative `recommendations.md` lands it in whatever project root you happen to be in — a misfire). Run once and reuse:
+   > ```bash
+   > WORKSPACE=$(node -e "console.log(require(require('os').homedir()+'/.claude/scripts/lib/config').config.workspace)")
+   > ```
+   > Every reference to `recommendations.md` in the steps below means **`"$WORKSPACE/recommendations.md"`** — use the resolved absolute path in all reads, the sentinel `grep -v` one-liner, and the `>>` append. Never a bare relative filename.
+
+5. **Dedup.** For each candidate, compute `id = sha256(text.toLowerCase().trim()).slice(0,10)`. Read existing `"$WORKSPACE/recommendations.md"` and skip any candidate whose `id` already appears.
 
 6. **Sentinel-hygiene check (B8 — added 2026-04-29).** Before appending:
    - Read the last 5 lines of `recommendations.md`.

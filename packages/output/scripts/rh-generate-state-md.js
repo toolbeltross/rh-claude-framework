@@ -242,6 +242,34 @@ function sectionRulesInPlace() {
   return lines.join("\n");
 }
 
+// Auto-generated "which rule owns which domain" index, from each rule's
+// keywords:/description: frontmatter. Answers "where does a new convention of
+// type X go?" without hand-maintenance (e.g., placement conventions →
+// rh-doc-placement.md). Never stale — regenerated on every state-doc build.
+function sectionRulesDomainIndex() {
+  const lines = ["## Rules Domain Index", ""];
+  const rulesDir = config.rulesDir;
+  const files = listFiles(rulesDir, ".md");
+  lines.push(
+    "Auto-generated from each rule's `keywords:` / `description:` frontmatter. " +
+    "Use this to find which rule owns a domain before codifying a new convention " +
+    "(e.g., placement conventions → `rh-doc-placement.md`; throwaway-`tmp/` → `rh-throwaway-artifacts.md`)."
+  );
+  lines.push("");
+  lines.push("| Rule File | Severity | Domain (keywords / description) |");
+  lines.push("|---|---|---|");
+  for (const f of files) {
+    const name = path.basename(f);
+    const fm = extractFrontmatter(f);
+    const kw = mdEscape((fm.keywords || "").replace(/^\[|\]$/g, "")).slice(0, 180);
+    const sev = mdEscape(fm.severity || "—");
+    const domain = kw || mdEscape(fm.description).slice(0, 140) || "—";
+    lines.push(`| \`${name}\` | ${sev} | ${domain} |`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 function sectionHooksActive() {
   const lines = ["## Hooks Active", ""];
   const settings = readJSON(config.settingsPath);
@@ -504,6 +532,7 @@ function main() {
     sectionHeader(),
     sectionFailureMitigation(),
     sectionRulesInPlace(),
+    sectionRulesDomainIndex(),
     sectionHooksActive(),
     sectionOversightAgents(),
     sectionSupervisoryLog(),

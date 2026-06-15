@@ -16,7 +16,7 @@ When changes touch any of the **oversight-defining surfaces** below, the corresp
 |---|---|
 | `~/.claude/scripts/` | Oversight enforcement scripts (consolidation-guard.js, agent-oversight-guard.js, agent-result-guard.js, read-audit.js, layer3a-capture.js, oversight-self-test.js, generate-state-md.js, daily-regen.js, lib/oversight-events.js) |
 | `~/.claude/agents/` | Agent definitions used by the workspace (supervisor.md, source-verifier.md, facilitator.md, etc.) |
-| `Workspace/.claude/rules/` | The 9 workspace rule files |
+| `Workspace/.claude/rules/` | The workspace rule files (18 as of 2026-06-14; see the auto-generated Rules Domain Index in `OVERSIGHT_STATE.md` for the current list) |
 | `~/.claude/settings.json` | Hooks configuration (PreToolUse / PostToolUse / Stop / SessionStart / etc.) |
 | Telemetry hook-forwarder script | Cross-environment telemetry forwarder used by the oversight feed |
 
@@ -38,6 +38,7 @@ When the trigger fires, review and update these artifacts in the same session:
 | Edit to existing guard script's behavior | Failure-mode mitigation table (does this still close the failure it's listed under?) |
 | New agent in `~/.claude/agents/` | "Oversight-Related Agents" |
 | New rule in `Workspace/.claude/rules/` | "Rules In Place" + the failure-to-rule mapping |
+| New/changed **placement convention** (where docs/data/temp/project-tracking files belong) | Codify in `Workspace/.claude/rules/rh-doc-placement.md` (extend its Categories table) — NOT a new rule file; then sync "Rules In Place" if the rule's coverage changed. `rh-doc-placement.md` is the single home for placement conventions. |
 | New hook entry in `settings.json` | "Hooks Active" |
 | Telemetry / event-type addition (e.g., new oversight_events.jsonl event_type) | Supervisor data sources section |
 
