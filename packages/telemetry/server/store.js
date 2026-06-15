@@ -310,6 +310,26 @@ class Store extends EventEmitter {
     // Stamped by hook-forwarder from CLAUDE_CODE_ENTRYPOINT.
     data._entrypoint = data.entrypoint || existing._entrypoint || null;
 
+    // Merge-not-clobber for model / context_window. A status post can legitimately
+    // arrive WITHOUT these fields — e.g. a toolPiggyback post whose transcript parse
+    // couldn't resolve the model, or a statusLine payload with empty fields. Because
+    // we replace the session object wholesale below, an empty incoming post would
+    // otherwise wipe previously-good values: the live tab's model dot + context gauge
+    // blank to (none)/0%, and a session that then goes idle stays stuck there until a
+    // fresh good post arrives (which never comes if it's quiet). Observed 2026-06-15
+    // (session 2780e600 stuck at (none)/0% for 18 min; 0d1eced5 flickering). Carry the
+    // last-known value forward instead.
+    const incomingModel = data.model?.display_name || data.model?.id || '';
+    if (!incomingModel && (existing.model?.display_name || existing.model?.id)) {
+      data.model = existing.model;
+    }
+    const incomingCtxTokens = data.context_window?.total_input_tokens ?? 0;
+    const incomingCtxPct = data.context_window?.used_percentage ?? 0;
+    const incomingHasCtx = !!data.context_window && (incomingCtxTokens > 0 || incomingCtxPct > 0);
+    if (!incomingHasCtx && existing.context_window) {
+      data.context_window = existing.context_window;
+    }
+
     // Plan-quota overlay: newer Claude Code builds include rate_limits
     // (five_hour / seven_day used_percentage + resets_at) in the statusline
     // payload after every API response — fresher than the 60s OAuth poll.

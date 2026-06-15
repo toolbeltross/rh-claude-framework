@@ -90,6 +90,34 @@ test('updateLiveSession: marks _fromStatusLine and preserves prior _toolCount', 
   assert.strictEqual(live._toolCount, 2, 'tool count should be preserved across statusLine update');
 });
 
+test('updateLiveSession: empty post does not clobber prior model/context_window', () => {
+  const s = new Store();
+  // Good statusLine post establishes model + context.
+  s.updateLiveSession({
+    session_id: 'abc',
+    model: { display_name: 'Opus', id: 'claude-opus-4-8' },
+    context_window: { context_window_size: 1000000, total_input_tokens: 340000, used_percentage: 34, current_usage: {} },
+  });
+  // Empty post (e.g. toolPiggyback whose transcript parse resolved no model/ctx).
+  s.updateLiveSession({ session_id: 'abc' });
+  let live = s.data.liveSessions.abc;
+  assert.strictEqual(live.model?.display_name, 'Opus', 'model preserved when incoming post lacks it');
+  assert.strictEqual(live.context_window?.used_percentage, 34, 'context preserved when incoming post lacks it');
+  // A post carrying explicitly-empty fields must also not clobber.
+  s.updateLiveSession({ session_id: 'abc', model: { display_name: '' }, context_window: { used_percentage: 0, total_input_tokens: 0 } });
+  live = s.data.liveSessions.abc;
+  assert.strictEqual(live.model?.display_name, 'Opus', 'model preserved against explicitly-empty model');
+  assert.strictEqual(live.context_window?.used_percentage, 34, 'context preserved against explicitly-empty context');
+  // A fresh GOOD post still updates.
+  s.updateLiveSession({
+    session_id: 'abc',
+    model: { display_name: 'Opus', id: 'claude-opus-4-8' },
+    context_window: { context_window_size: 1000000, total_input_tokens: 410000, used_percentage: 41, current_usage: {} },
+  });
+  live = s.data.liveSessions.abc;
+  assert.strictEqual(live.context_window?.used_percentage, 41, 'a good post still updates context');
+});
+
 test('updateLiveSession: tracks context history', () => {
   const s = new Store();
   s.updateLiveSession({

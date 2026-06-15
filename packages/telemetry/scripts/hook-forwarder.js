@@ -180,10 +180,27 @@ function readHead(filePath, maxBytes = 8192) {
   }
 }
 
-/** Derive the agent transcript path from the session transcript path + agent ID */
+/** Derive the agent transcript path from the session transcript path + agent ID.
+ *
+ * Current Claude Code layout (verified 2026-06-15): the main session transcript
+ * lives at  projects/<slug>/<sessionId>.jsonl  and agent transcripts are nested
+ * under a session-id directory:  projects/<slug>/<sessionId>/subagents/agent-<id>.jsonl
+ * So the session dir is the transcript path with its `.jsonl` extension stripped.
+ *
+ * The previous derivation used dirname(transcriptPath)/subagents, which dropped the
+ * <sessionId> segment and produced projects/<slug>/subagents/... — a path that never
+ * existed (4,059 'agent-transcript-not-found' misses observed), so live-agent
+ * telemetry for ACTIVE subagents never parsed. We try the nested layout first and
+ * fall back to the old sibling layout so older/alternate layouts still resolve.
+ */
 function deriveAgentTranscriptPath(sessionTranscriptPath, agentId) {
   if (!sessionTranscriptPath || !agentId) return '';
-  return join(dirname(sessionTranscriptPath), 'subagents', `agent-${agentId}.jsonl`);
+  const file = `agent-${agentId}.jsonl`;
+  const nested = join(sessionTranscriptPath.replace(/\.jsonl$/i, ''), 'subagents', file);
+  const sibling = join(dirname(sessionTranscriptPath), 'subagents', file);
+  if (existsSync(nested)) return nested;
+  if (existsSync(sibling)) return sibling;
+  return nested; // prefer current-layout path for the not-found debug line
 }
 
 /**

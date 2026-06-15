@@ -17,7 +17,21 @@ export default function OverviewTab({ stats, sessions, onSelectSession, displayM
     ? new Date(stats.firstSessionDate).toISOString().slice(0, 10)
     : '—';
   const totalCost = sessions?.reduce((sum, s) => sum + (s.cost || 0), 0) ?? 0;
-  const totalTokens = sessions?.reduce((sum, s) => sum + (s.tokens?.total || 0), 0) ?? 0;
+  // Total Tokens: prefer the historical all-time figure from stats.modelUsage
+  // (input + output across every model). This matches the Daily Token chart below
+  // and is consistent with the Total Sessions / Total Messages cards, which also
+  // come from `stats`. The per-session `sessions[]` list only carries each project's
+  // *last* session tokens from .claude.json (sparse, frequently 0), which is why this
+  // card read 0. Cache tokens are excluded deliberately — they dwarf real usage
+  // (~9.5B vs ~43M) and would make the headline number meaningless.
+  const statsTokens = stats?.modelUsage
+    ? Object.values(stats.modelUsage).reduce(
+        (sum, m) => sum + (m.inputTokens || 0) + (m.outputTokens || 0),
+        0
+      )
+    : 0;
+  const sessionTokens = sessions?.reduce((sum, s) => sum + (s.tokens?.total || 0), 0) ?? 0;
+  const totalTokens = statsTokens > 0 ? statsTokens : sessionTokens;
 
   return (
     <div className="grid grid-cols-12 gap-3">
@@ -28,7 +42,7 @@ export default function OverviewTab({ stats, sessions, onSelectSession, displayM
         <MetricCard label="Total Sessions" value={totalSessions} color="text-gray-100" tooltip="Cumulative number of Claude Code sessions across all projects" />
         <MetricCard label="Total Messages" value={totalMessages} color="text-gray-100" tooltip="Total conversation messages exchanged across all sessions" />
         {isTokenMode ? (
-          <MetricCard label="Total Tokens" value={formatTokens(totalTokens)} color="text-gray-100" tooltip="Sum of tokens consumed across all tracked sessions" />
+          <MetricCard label="Total Tokens" value={formatTokens(totalTokens)} color="text-gray-100" tooltip="All-time input + output tokens across every model (from stats cache; excludes cache-read/write tokens). Matches the Daily Token chart." />
         ) : (
           <MetricCard label="Total Cost" value={`$${totalCost.toFixed(2)}`} color="text-gray-100" tooltip="Sum of API costs across all tracked sessions" />
         )}
