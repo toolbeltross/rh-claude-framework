@@ -174,8 +174,13 @@ export default function AgentActivity({ liveSession }) {
     if (a.tokens) return sum + (a.tokens.input || 0) + (a.tokens.output || 0);
     return sum;
   }, 0), [history]);
-  const sessionCost = liveSession?.cost?.total_cost_usd ?? 0;
-  const pctOfSession = sessionCost > 0 ? Math.round((totalCost / sessionCost) * 100) : 0;
+  // `total_cost_usd` from the statusLine payload is MAIN-THREAD cost only — it does
+  // not include subagent spend. Dividing agent cost by it alone produced a misleading
+  // ratio >100% (e.g. 1900%) on fan-out-heavy sessions. Express instead as the
+  // subagents' share of TOTAL session spend (main thread + agents) — a bounded 0–100%.
+  const mainThreadCost = liveSession?.cost?.total_cost_usd ?? 0;
+  const totalSpend = mainThreadCost + totalCost;
+  const pctOfSession = totalSpend > 0 ? Math.round((totalCost / totalSpend) * 100) : 0;
 
   // Health indicators
   const orphanedCount = useMemo(() => history.filter(a => a.status === 'orphaned').length, [history]);
@@ -224,8 +229,8 @@ export default function AgentActivity({ liveSession }) {
         <HeaderSep />
 
         <div className="flex items-center gap-3">
-          <HeaderStat value={formatCost(totalCost)} label="agent cost" color="text-amber" title={`Total agent cost: ${formatCost(totalCost)} — ${pctOfSession}% of ${formatCost(sessionCost)} session total`} />
-          <HeaderMiniStat value={`${pctOfSession}%`} label="of session" title={`${pctOfSession}% of total session cost attributed to subagents`} />
+          <HeaderStat value={formatCost(totalCost)} label="agent cost" color="text-amber" title={`Total agent cost: ${formatCost(totalCost)} — ${pctOfSession}% of ${formatCost(totalSpend)} total spend (main thread ${formatCost(mainThreadCost)} + agents ${formatCost(totalCost)})`} />
+          <HeaderMiniStat value={`${pctOfSession}%`} label="of total" title={`Subagents accounted for ${pctOfSession}% of total session spend (main thread ${formatCost(mainThreadCost)} + agents ${formatCost(totalCost)})`} />
           <HeaderMiniStat value={formatTokens(totalTokens)} label="tokens" title={`Total tokens across all completed agents: ${totalTokens.toLocaleString()}`} />
         </div>
 
