@@ -379,7 +379,7 @@ rh-telemetry session <n>  — details for project <n>
 
 ```
 === projectname (live) ===
-Context: 45% | 90K/200K | ~12 turns left     ← most important
+Context: 24% | 242K/1.0M | ~12 turns left    ← most important (live: real reported window)
 Agents: 2 active (Explore, Plan) | 3 completed | $1.24 (28.9%)
   Explore        Haiku     $0.02    8.0K  1m30s
   Plan           Sonnet    $0.18   22.0K  3m10s
@@ -445,7 +445,7 @@ Four-tier test harness. Plain Node `assert` scripts — no test framework, no ne
 
 ## Known Issues / TODO
 
-- Context window defaults to 200K for file-based sessions; 1M-context models detected via model display name containing "(1M context)"
+- Context window: **live** sessions (CLI `context`/`summary`) read the real reported window from the statusLine payload (`context_window.context_window_size` + `used_percentage`) as of PR #93 — a 1M Opus session shows `/1.0M`, not the default. **File-based** sessions (parser.js path) still default to 200K; 1M detected only via model display name containing "(1M context)". Deriving the file-based window from the model id is an open follow-up.
 - Build warning: bundle >500KB (Recharts is large) — could code-split
 - Supervisory agent Stop hook (Layer 3b): schema supported, not wired — parked pending cost/benefit review (see `scripts/supervisory-agent-prompt.md:50`)
 - Not yet published to npm — `npm publish` when ready
