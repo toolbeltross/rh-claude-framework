@@ -227,6 +227,26 @@ function probeSelfTestStatus() {
   return { name: 'self-test', level: 'warn', detail: 'no recent self-test result' };
 }
 
+// Daily guidance digest freshness — the rh-daily-guidance step (a daily-regen
+// step) writes cowork/daily-digest-<date>.md once/day. This is the piggy-backed
+// "first session didn't see the update" alert: warn when the digest goes >=2d
+// stale (the automated guidance run has stopped); info when none exists yet (so
+// a fresh install doesn't false-alarm before the first run).
+function probeDailyDigest() {
+  const dir = path.join(config.workspace, 'cowork');
+  let latest = null;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      const m = f.match(/^daily-digest-(\d{4}-\d{2}-\d{2})\.md$/);
+      if (m && (!latest || m[1] > latest)) latest = m[1];
+    }
+  } catch { /* no cowork dir */ }
+  if (!latest) return { name: 'daily-digest', level: 'info', detail: 'no daily digest yet (rh-daily-guidance step)' };
+  const ageD = Math.floor((Date.now() - Date.parse(latest + 'T00:00:00Z')) / (24 * 3_600_000));
+  const level = ageD >= 2 ? 'warn' : 'ok';
+  return { name: 'daily-digest', level, detail: `last ${latest} (${ageD}d ago)` + (ageD >= 2 ? ' — daily guidance run may have stopped' : '') };
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -238,6 +258,7 @@ async function main() {
     probeTelemetryServer(),
     Promise.resolve(probeRecentAlerts()),
     Promise.resolve(probeScribeBacklog()),
+    Promise.resolve(probeDailyDigest()),
     Promise.resolve(probeSubagentOrphans()),
   ]);
 

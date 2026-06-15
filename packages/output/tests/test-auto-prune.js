@@ -270,6 +270,39 @@ const tests = [
     }),
   },
 
+  {
+    name: 'C6: prefixed terminal statuses (closed:/stale:) + old → archived (broadened beyond bare resolved)',
+    fn: () => withTmpEnv((env) => {
+      const cleanupMd = path.join(env.home, 'cleanup.md');
+      const oldDate = new Date(Date.now() - 30 * DAY_MS).toISOString().slice(0, 10);
+      const content = [
+        `| c10dab01 | ${oldDate} | sessAAAA | done last month | closed: shipped in PR #12 (2026-05-01) |`,
+        `| 57a1eab2 | ${oldDate} | sessBBBB | aged status note | stale: overtaken by events (2026-05-01) |`,
+        `| 0badcab3 | ${oldDate} | sessCCCC | dispositioned via UI | resolved: did it (2026-05-01) |`,
+      ].join('\n') + '\n';
+      fs.writeFileSync(cleanupMd, content);
+      const r = runScript(env, ['--apply', '--json']);
+      assert.strictEqual(r.exitCode, 0, `stderr: ${r.stderr}`);
+      const res = JSON.parse(r.stdout).scribe_files.find(f => f.file === 'cleanup.md');
+      assert.strictEqual(res.archived_count, 3, 'closed:/stale:/resolved: prefixed rows all archive');
+      for (const id of ['c10dab01', '57a1eab2', '0badcab3']) assert.ok(res.archived_ids.includes(id), `${id} archived`);
+    }),
+  },
+  {
+    name: 'C6: text cell mentions "resolved" but status is open → NOT archived (status-cell-specific)',
+    fn: () => withTmpEnv((env) => {
+      const cleanupMd = path.join(env.home, 'cleanup.md');
+      const oldDate = new Date(Date.now() - 30 * DAY_MS).toISOString().slice(0, 10);
+      const content = `| abcd1234 | ${oldDate} | sessDDDD | we have not resolved this yet | open |\n`;
+      fs.writeFileSync(cleanupMd, content);
+      const r = runScript(env, ['--apply', '--json']);
+      const res = JSON.parse(r.stdout).scribe_files.find(f => f.file === 'cleanup.md');
+      assert.strictEqual(res.archived_count, 0, 'open row not archived despite "resolved" in text cell');
+      assert.strictEqual(res.stale_open_count, 1, 'it is an old open row → stale-flagged instead');
+      assert.ok(fs.readFileSync(cleanupMd, 'utf-8').includes('abcd1234'), 'row preserved in source');
+    }),
+  },
+
   // ───────── default mode + dry-run safety ─────────
   {
     name: 'default mode (no flags) is dry-run (mode field === "dry-run")',

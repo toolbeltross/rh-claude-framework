@@ -120,4 +120,90 @@ function writeRow(row) {
   }
 }
 
-module.exports = { writeRow, runSql, dollarQuote, findPsql, canonicalSourceFile };
+/**
+ * Read scribe rows as an array of objects. Never throws.
+ * @param {{bucket?:string, status?:string, sourceFile?:string, limit?:number}} opts
+ * @returns {{ok:boolean, rows?:object[], skipped?:boolean, error?:string}}
+ *   skipped:true when scribeDb is off (caller should fall back to md-parse).
+ */
+function readRows(opts = {}) {
+  try {
+    if (!config.scribeDb) return { ok: true, skipped: true, rows: [] };
+    const where = [];
+    if (opts.bucket) where.push('bucket = ' + dollarQuote(opts.bucket));
+    if (opts.status) where.push('status = ' + dollarQuote(opts.status));
+    if (opts.sourceFile) where.push('source_file = ' + dollarQuote(canonicalSourceFile(opts.sourceFile)));
+    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    const limitSql = Number.isInteger(opts.limit) && opts.limit > 0 ? 'LIMIT ' + opts.limit : '';
+    // json_agg over a subquery → a single JSON blob on stdout, so row content
+    // containing pipes/newlines never collides with psql's field/row delimiters.
+    const sql =
+      "SELECT coalesce(json_agg(row_to_json(t)), '[]'::json) FROM (" +
+      'SELECT bucket, row_id, session_id, ts, content, status, source_file, ' +
+      'proposed_disposition, proposed_rationale, proposed_followup, proposed_at ' +
+      'FROM scribe_rows ' + whereSql + ' ORDER BY ts ASC NULLS FIRST ' + limitSql +
+      ') t;';
+    const res = runSql(sql);
+    if (!res.ok) {
+      appendOversightEvent('scribe_db_read_failed', { op: 'readRows', error: res.error });
+      return { ok: false, error: res.error };
+    }
+    let rows;
+    try { rows = JSON.parse(res.stdout || '[]'); } catch (e) {
+      return { ok: false, error: 'unparseable json: ' + String(e.message || e) };
+    }
+    return { ok: true, rows: Array.isArray(rows) ? rows : [] };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
+ * Write the LLM-proposed disposition columns for one row. Propose-only —
+ * never touches `status`. Matches on the natural key (bucket, source_file,
+ * row_id). Never throws.
+ * @param {{bucket:string, source_file:string, row_id:string, disposition:string, rationale?:string, followup?:string}} p
+ */
+function setProposal(p) {
+  try {
+    if (!config.scribeDb) return { ok: true, skipped: true };
+    const sql =
+      'UPDATE scribe_rows SET ' +
+      'proposed_disposition = ' + dollarQuote(p.disposition || '') + ', ' +
+      'proposed_rationale = ' + (p.rationale ? dollarQuote(p.rationale) : 'NULL') + ', ' +
+      'proposed_followup = ' + (p.followup ? dollarQuote(p.followup) : 'NULL') + ', ' +
+      'proposed_at = now(), updated_at = now() ' +
+      'WHERE bucket = ' + dollarQuote(p.bucket) +
+      ' AND source_file = ' + dollarQuote(canonicalSourceFile(p.source_file)) +
+      ' AND row_id = ' + dollarQuote(p.row_id) + ';';
+    const res = runSql(sql);
+    if (!res.ok) appendOversightEvent('scribe_db_write_failed', { op: 'setProposal', row_id: p.row_id, error: res.error });
+    return res;
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
+ * Update the canonical `status` of one row in the shadow. Called AFTER the
+ * md write by rh-scribe-row-update.js; the md file stays canonical. Never
+ * throws. Matches on (bucket, source_file, row_id).
+ * @param {{bucket:string, source_file:string, row_id:string, status:string}} p
+ */
+function setStatus(p) {
+  try {
+    if (!config.scribeDb) return { ok: true, skipped: true };
+    const sql =
+      'UPDATE scribe_rows SET status = ' + dollarQuote(p.status) + ', updated_at = now() ' +
+      'WHERE bucket = ' + dollarQuote(p.bucket) +
+      ' AND source_file = ' + dollarQuote(canonicalSourceFile(p.source_file)) +
+      ' AND row_id = ' + dollarQuote(p.row_id) + ';';
+    const res = runSql(sql);
+    if (!res.ok) appendOversightEvent('scribe_db_write_failed', { op: 'setStatus', row_id: p.row_id, error: res.error });
+    return res;
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+module.exports = { writeRow, readRows, setProposal, setStatus, runSql, dollarQuote, findPsql, canonicalSourceFile };

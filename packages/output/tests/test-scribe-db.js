@@ -78,6 +78,41 @@ const tests = [
     },
   },
   {
+    name: 'readRows / setProposal / setStatus are skipped no-ops when scribeDb flag is off',
+    fn: () => {
+      const db = freshScribeDb({ RH_SCRIBE_DB: '0' });
+      assert.deepStrictEqual(db.readRows({ status: 'open' }), { ok: true, skipped: true, rows: [] });
+      assert.deepStrictEqual(db.setProposal({ bucket: 'cleanup', source_file: 'x', row_id: 'y', disposition: 'stale' }), { ok: true, skipped: true });
+      assert.deepStrictEqual(db.setStatus({ bucket: 'cleanup', source_file: 'x', row_id: 'y', status: 'resolved' }), { ok: true, skipped: true });
+    },
+  },
+  {
+    name: PG ? 'PG: setProposal sets proposed_* without touching status; setStatus flips status; readRows reads back' : 'PG: proposal/status roundtrip skipped (RH_TEST_PG!=1)',
+    fn: () => {
+      if (!PG) return;
+      const db = freshScribeDb({ RH_SCRIBE_DB: '1' });
+      const rid = 'test-prop-' + Date.now().toString(36);
+      const src = 'C:/test/prop-cleanup.md';
+      try {
+        assert.strictEqual(db.writeRow({ bucket: 'cleanup', row_id: rid, ts: '2026-06-15T00:00:00Z', content: 'a row', status: 'open', source_file: src }).ok, true);
+        const p = db.setProposal({ bucket: 'cleanup', source_file: src, row_id: rid, disposition: 'stale', rationale: 'no longer relevant', followup: '' });
+        assert.strictEqual(p.ok, true, `setProposal failed: ${p.error}`);
+        let read = db.readRows({ bucket: 'cleanup', status: 'open', sourceFile: src });
+        assert.strictEqual(read.ok, true, `readRows failed: ${read.error}`);
+        const row = read.rows.find(r => r.row_id === rid);
+        assert.ok(row, 'row present in readRows');
+        assert.strictEqual(row.status, 'open', 'setProposal did NOT change status');
+        assert.strictEqual(row.proposed_disposition, 'stale', 'proposal recorded');
+        const s = db.setStatus({ bucket: 'cleanup', source_file: src, row_id: rid, status: 'resolved: done' });
+        assert.strictEqual(s.ok, true, `setStatus failed: ${s.error}`);
+        read = db.readRows({ bucket: 'cleanup', sourceFile: src });
+        assert.strictEqual(read.rows.find(r => r.row_id === rid).status, 'resolved: done', 'status flipped');
+      } finally {
+        db.runSql(`DELETE FROM scribe_rows WHERE row_id=${db.dollarQuote(rid)};`);
+      }
+    },
+  },
+  {
     name: PG ? 'PG: upsert inserts then conflict-updates a real row' : 'PG: skipped (RH_TEST_PG!=1)',
     fn: () => {
       if (!PG) return;
