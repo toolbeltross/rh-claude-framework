@@ -10,6 +10,7 @@ import SessionMetaStrip from './components/SessionMetaStrip';
 import MicroDashboard from './components/MicroDashboard';
 import { StatusLineModal } from './components/StatusLineBanner';
 import PlanUsage from './components/PlanUsage';
+import { sessionLabel } from './lib/session-label.js';
 import { MODEL_COLORS } from './lib/model-colors';
 
 const MICRO_THRESHOLD = 480;
@@ -526,9 +527,9 @@ export default function App() {
             {/* Live session tabs */}
             {sessionIds.map((id) => {
               const s = liveSessions[id];
-              const model = s?.model?.display_name || '?';
-              const cwd = s?.workspace?.current_dir || '';
-              const projName = cwd ? cwd.split(/[\\/]/).pop() : id.slice(0, 8);
+              // Spec format "project (id-slice)" — shared with v2 via session-label.js.
+              // Prefers stable project_dir over current_dir (the old volatile source).
+              const projName = sessionLabel(s, id);
               const processing = isSessionProcessing(id);
               const slStalled = data.statusLineState?.stalled;
               const dotClass = slStalled

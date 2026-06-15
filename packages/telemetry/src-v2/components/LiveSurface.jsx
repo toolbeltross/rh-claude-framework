@@ -5,6 +5,7 @@ import CurrentPrompt from '../../src/components/CurrentPrompt.jsx';
 import AgentActivity from '../../src/components/AgentActivity.jsx';
 import ToolActivity from '../../src/components/ToolActivity.jsx';
 import { formatUsd, relativeTime } from '../lib/format.js';
+import { sessionLabel } from '../../src/lib/session-label.js';
 import { useCcdTitles } from '../hooks/useCcdTitles.js';
 
 /**
@@ -60,20 +61,8 @@ export default function LiveSurface({ live, onOpenDetail }) {
           const s = liveSessions[id];
           const activity = sessionActivity[id] || 'idle';
           const selected = id === selectedSessionId;
-          let label = s?.workspace?.project_dir?.split(/[\\/]/).pop()
-            || s?.workspace?.current_dir?.split(/[\\/]/).pop()
-            || id.slice(0, 8);
-          // Two sessions in the same workspace would render identical pills —
-          // disambiguate with the short session id.
-          const collision = sessionIds.some((other) => {
-            if (other === id) return false;
-            const o = liveSessions[other];
-            const otherLabel = o?.workspace?.project_dir?.split(/[\\/]/).pop()
-              || o?.workspace?.current_dir?.split(/[\\/]/).pop()
-              || other.slice(0, 8);
-            return otherLabel === label;
-          });
-          if (collision) label = `${label} · ${id.slice(0, 8)}`;
+          // Spec format "project (id-slice)" — shared with v1 via session-label.js.
+          const label = sessionLabel(s, id);
           // Hover shows the same English title Claude Code Desktop displays.
           // Sessions with no Desktop title are typically headless runs
           // (scheduled tasks, script-spawned `claude -p`) — say so, since
