@@ -25,7 +25,7 @@ rh-claude-framework/
     │   ├── agents/                 # rh-*.md agent definitions (copied to ~/.claude/agents/)
     │   ├── rules/                  # workspace rule files (copied to <workspace>/.claude/rules/)
     │   ├── templates/journals.json # runtime journal config (NOT an install template)
-    │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (76 tests)
+    │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (197 tests)
     │
     ├── output/                     # @rh/output — rendered artifacts + scribe writers
     │   ├── scripts/rh-render-md-html.js        # md → styled HTML, withLock-wrapped writes
@@ -47,7 +47,7 @@ rh-claude-framework/
     │   ├── lib/init.js             # install logic + mergeHooksData (F-10 fix) + pre-write validator gate (P2-4)
     │   ├── lib/settings-cli.js     # `rh-oversight settings <sub>` (validate/show/diff/merge/backup/restore)
     │   ├── templates/              # settings.json + CLAUDE.md templates
-    │   └── tests/                  # init-merge + cross-package-contract + settings-cli (43 tests)
+    │   └── tests/                  # init-merge + cross-package-contract + settings-cli (62 tests)
     │
     └── telemetry/                  # rh-telemetry (migrated 2026-05-04; canonical home — standalone repo archived)
         ├── server/trends-router.js          # GET /api/trends — cross-package wrap of supervisor-sweep (P3-2)
@@ -79,9 +79,9 @@ rh-claude-framework/
 
 | Surface | Command |
 |---|---|
-| Oversight tests | `node packages/oversight/tests/run.js` (76 tests) |
-| CLI tests | `node packages/cli/tests/run.js` (43 tests) |
-| Output tests | `node packages/output/tests/run.js` (1 test — concurrent write stress) |
+| Oversight tests | `node packages/oversight/tests/run.js` (197 tests) |
+| CLI tests | `node packages/cli/tests/run.js` (62 tests) |
+| Output tests | `node packages/output/tests/run.js` (181 tests) |
 | All workspace tests | `npm test` |
 | Dry-run install | `node packages/cli/bin/rh-oversight.js init --dry-run` |
 | Real install against tmp HOME | `HOME=/tmp/test USERPROFILE=/tmp/test node packages/cli/bin/rh-oversight.js init --workspace /tmp/test-ws` |
@@ -104,9 +104,9 @@ The "tmp HOME" pattern is the outer-seam verification per `rh-work-verification.
 
 ```bash
 cd C:/Users/rossb/OneDrive/Workspace/toolbeltross/toolbeltross-public/rh-claude-framework
-node packages/oversight/tests/run.js   # 76 expected
-node packages/cli/tests/run.js         # 43 expected
-node packages/output/tests/run.js      # 1 expected
+node packages/oversight/tests/run.js   # 197 expected
+node packages/cli/tests/run.js         # 62 expected
+node packages/output/tests/run.js      # 181 expected
 node packages/cli/bin/rh-oversight.js init --dry-run
 grep -r "rossb\|C:/Users/rossb" --include="*.js" --include="*.md" packages/   # must be empty
 ```
