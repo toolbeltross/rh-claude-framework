@@ -135,15 +135,31 @@ function ingestFile(slug, file, sessionIdOverride, opts = {}) {
   const size = fs.statSync(file).size;
   const withTelemetry = !!(config.contextDb && contextDb && telemetry);
 
-  const prev = scribeDb.runSql(
-    `SELECT ingested_through || '|' || message_count FROM transcripts WHERE session_id=${scribeDb.dollarQuote(sessionId)};`
-  );
-  if (!prev.ok) return { sessionId, error: prev.error };
-  let offset = 0, turn = 0;
-  if (prev.stdout) {
-    const [o, c] = prev.stdout.split('|');
-    offset = FULL ? 0 : parseInt(o, 10) || 0;
-    turn = FULL ? 0 : parseInt(c, 10) || 0;
+  // Offset/turn come from a preloaded map (opts.offsets) so the incremental
+  // pass issues ONE psql query for all sessions instead of one per file (the
+  // per-file SELECT made the read-only floor scale with file count — ~56s at
+  // 380 files on Windows, where psql cold-start dominates). Falls back to a
+  // per-file SELECT when no map is supplied (direct callers, or a failed bulk
+  // load) so the function stays correct standalone.
+  let offset = 0, turn = 0, hadPrev = false;
+  if (opts.offsets instanceof Map) {
+    const rec = opts.offsets.get(sessionId);
+    if (rec) {
+      hadPrev = true;
+      offset = FULL ? 0 : rec.ingested_through;
+      turn = FULL ? 0 : rec.message_count;
+    }
+  } else {
+    const prev = scribeDb.runSql(
+      `SELECT ingested_through || '|' || message_count FROM transcripts WHERE session_id=${scribeDb.dollarQuote(sessionId)};`
+    );
+    if (!prev.ok) return { sessionId, error: prev.error };
+    if (prev.stdout) {
+      hadPrev = true;
+      const [o, c] = prev.stdout.split('|');
+      offset = FULL ? 0 : parseInt(o, 10) || 0;
+      turn = FULL ? 0 : parseInt(c, 10) || 0;
+    }
   }
   if (offset >= size) return { sessionId, skipped: 'up-to-date' };
 
@@ -160,7 +176,7 @@ function ingestFile(slug, file, sessionIdOverride, opts = {}) {
   // Upsert transcript header first (FK target), reset on --full.
   const tsFirst = msgs.length && msgs[0].ts ? scribeDb.dollarQuote(msgs[0].ts) + '::timestamptz' : 'NULL';
   const tsLast = msgs.length && msgs[msgs.length - 1].ts ? scribeDb.dollarQuote(msgs[msgs.length - 1].ts) + '::timestamptz' : 'NULL';
-  const header = (FULL && prev.stdout
+  const header = (FULL && hadPrev
     ? `DELETE FROM transcript_messages WHERE session_id=${scribeDb.dollarQuote(sessionId)};\n`
     : '') +
     `INSERT INTO transcripts (session_id, project_slug, path, first_ts, last_ts, message_count, ingested_through)
@@ -216,6 +232,30 @@ function main() {
   const patterns = loadBlockPatterns();
   const summary = { projects: 0, files: 0, ingested: 0, upToDate: 0, blockedProjects: 0, errors: [] };
 
+  // Bulk-load every stored offset in ONE query instead of one psql spawn per
+  // transcript file. On Windows psql cold-start (~150ms) dominated, so the
+  // per-file SELECT made the incremental pass scale with file count (~56s at
+  // 380 files) and overran the daily-regen step timeout. One query keeps the
+  // floor flat. Best-effort: on any failure `offsets` stays null and ingestFile
+  // falls back to its per-file SELECT, preserving the old behavior exactly.
+  let offsets = null;
+  {
+    const r = scribeDb.runSql(
+      "SELECT coalesce(json_agg(json_build_object('s', session_id, 'o', ingested_through, 'm', message_count)), '[]'::json) FROM transcripts;",
+      30000
+    );
+    if (r.ok) {
+      try {
+        offsets = new Map(
+          JSON.parse(r.stdout || '[]').map(x => [x.s, {
+            ingested_through: parseInt(x.o, 10) || 0,
+            message_count: parseInt(x.m, 10) || 0,
+          }])
+        );
+      } catch { offsets = null; }
+    }
+  }
+
   for (const slug of fs.readdirSync(projectsDir)) {
     const dir = path.join(projectsDir, slug);
     if (!fs.statSync(dir).isDirectory()) continue;
@@ -226,7 +266,7 @@ function main() {
       const fp = path.join(dir, f);
       if (f.endsWith('.jsonl')) {
         summary.files++;
-        const r = ingestFile(SLUG_PREFIX + slug, fp);
+        const r = ingestFile(SLUG_PREFIX + slug, fp, undefined, { offsets });
         if (r.error) summary.errors.push(`${r.sessionId}: ${r.error}`);
         else if (r.skipped) summary.upToDate++;
         else summary.ingested += r.ingested || r.wouldIngest || 0;
@@ -238,7 +278,7 @@ function main() {
         for (const sf of fs.readdirSync(subDir)) {
           if (!sf.endsWith('.jsonl')) continue;
           summary.files++;
-          const r = ingestFile(SLUG_PREFIX + slug, path.join(subDir, sf), f + ':' + path.basename(sf, '.jsonl'), { isSubagent: true, parentSessionId: f });
+          const r = ingestFile(SLUG_PREFIX + slug, path.join(subDir, sf), f + ':' + path.basename(sf, '.jsonl'), { isSubagent: true, parentSessionId: f, offsets });
           if (r.error) summary.errors.push(`${r.sessionId}: ${r.error}`);
           else if (r.skipped) summary.upToDate++;
           else summary.ingested += r.ingested || r.wouldIngest || 0;
