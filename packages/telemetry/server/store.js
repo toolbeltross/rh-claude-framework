@@ -9,6 +9,7 @@ import { FailureStore } from './failure-store.js';
 import { FailureAlerter } from './failure-alerting.js';
 import { HookPerfStore } from './hook-perf-store.js';
 import { estimateCost } from './cost-rates.js';
+import { getSessionTitle } from './session-title.js';
 
 class Store extends EventEmitter {
   constructor() {
@@ -411,6 +412,11 @@ class Store extends EventEmitter {
     // Preserve subagent tracking state
     data._activeSubagents = existing._activeSubagents || {};
     data._subagentHistory = existing._subagentHistory || [];
+
+    // Preserve the derived session title (computed once from the first prompt in
+    // getSnapshot). Without this, the wholesale replace would wipe it every
+    // statusLine post and the tab would flicker back to the fallback label.
+    if (existing._sessionTitle !== undefined) data._sessionTitle = existing._sessionTitle;
 
     // Preserve prompt tracking state
     data._currentPrompt = existing._currentPrompt || null;
@@ -1097,6 +1103,18 @@ class Store extends EventEmitter {
 
   /** Get full snapshot for initial load */
   getSnapshot() {
+    // Attach a heuristic session title (derived from the first user prompt) for
+    // tab labels. getSessionTitle caches per session, so this is a Map hit after
+    // the first compute; `undefined` means "transcript not ready yet" — leave the
+    // field unset so it's retried on a later snapshot (and the UI falls back to
+    // the project/id label until then).
+    for (const id of Object.keys(this.data.liveSessions)) {
+      const s = this.data.liveSessions[id];
+      if (s._sessionTitle === undefined) {
+        const t = getSessionTitle(id);
+        if (t !== undefined) s._sessionTitle = t; // string | null
+      }
+    }
     return { ...this.data };
   }
 }
