@@ -182,6 +182,19 @@ const STEPS = [
     args: [path.join(SCRIPTS_DIR, "rh-scribe-triage.js")],
     timeoutOverrideMs: 6 * 60_000,  // supervisor dispatch can take up to 5min
   },
+  {
+    // PLAN-2026-06-15: automated daily guidance + health digest (fully
+    // headless, no manual paste). Pre-computes local checks in Node (no Bash
+    // for the LLM) and dispatches the rh-daily-guidance agent (WebFetch/
+    // WebSearch/Read/Write/Glob — Bash absent; writes bounded to cowork/ by the
+    // agent). Idempotent (SKIPs if today's cowork/daily-digest-<date>.md
+    // exists). Steward APPROVE-WITH-CONDITIONS C1-C4. Runs LAST — heaviest LLM
+    // step, and it references the local checks the earlier steps produced.
+    name: "rh-daily-guidance",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-daily-guidance.js")],
+    timeoutOverrideMs: 9 * 60_000,  // web acquisition + synthesis (8min dispatch + headroom)
+  },
 ];
 
 // ───────────────────────── Runner ─────────────────────────
