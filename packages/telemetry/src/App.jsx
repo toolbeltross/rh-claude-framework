@@ -527,9 +527,24 @@ export default function App() {
             {/* Live session tabs */}
             {sessionIds.map((id) => {
               const s = liveSessions[id];
-              // Spec format "project (id-slice)" — shared with v2 via session-label.js.
-              // Prefers stable project_dir over current_dir (the old volatile source).
+              // Tab label: heuristic title from the session's first prompt (server-
+              // derived, _sessionTitle) so it maps to the IDE "Recents" name; falls
+              // back to the spec "project (id-slice)" label when no good title.
               const projName = sessionLabel(s, id);
+              const label = s._sessionTitle || projName;
+              // Everything else lives in the hover.
+              const cwd = s.workspace?.current_dir || s.workspace?.project_dir || '';
+              const ctxPct = s.context_window?.used_percentage;
+              const cost = s.cost?.total_cost_usd;
+              const tokTotal = s.context_window?.total_input_tokens;
+              const hover = [
+                projName,
+                cwd && `cwd: ${cwd}`,
+                `session: ${id}`,
+                (ctxPct != null) && `context: ${ctxPct}% used`,
+                (typeof cost === 'number') && `cost: $${cost.toFixed(2)}`,
+                (typeof tokTotal === 'number' && tokTotal > 0) && `tokens: ${tokTotal.toLocaleString()}`,
+              ].filter(Boolean).join('\n');
               const processing = isSessionProcessing(id);
               const slStalled = data.statusLineState?.stalled;
               const dotClass = slStalled
@@ -544,9 +559,9 @@ export default function App() {
                   active={activeTab === id}
                   onClick={() => handleSessionTab(id)}
                 >
-                  <span className="inline-flex items-center gap-1.5 max-w-[180px]" title={projName}>
+                  <span className="inline-flex items-center gap-1.5 max-w-[180px]" title={hover}>
                     <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotClass}`} title={dotTitle} />
-                    <span className="truncate">{projName}</span>
+                    <span className="truncate">{label}</span>
                   </span>
                 </TabButton>
               );
