@@ -22,7 +22,7 @@ This framework closes those gaps with hooks, rules, agents, and a dashboard — 
 | **12 workspace rules** | Completion standards, context discipline, read integrity, subagent oversight, work verification, and others — loaded via `CLAUDE.md` hierarchy. |
 | **`rh-oversight` CLI** | Install, self-test, health check, settings merge/validate/backup, cross-session supervisor sweep. |
 | **Telemetry dashboard** | Real-time monitoring of hook events, enforcement blocks, subagent patterns, and session trends. React + Recharts. |
-| **343 tests** | Oversight (177), CLI (54), output (112). Self-test: 37/37 hard pass on every install. |
+| **460 tests** | Oversight (197), CLI (62), output (201). Self-test: 37/37 hard pass on every install. |
 
 ## Install
 
@@ -43,6 +43,28 @@ node packages/cli/bin/rh-oversight.js init --workspace /path/to/your/workspace
 7. Writes a starter `<workspace>/CLAUDE.md` if one doesn't exist
 
 Flags: `--dry-run`, `--skip-hooks`.
+
+> `npm install` also builds the telemetry dashboard bundles via the root `prepare` script (requires devDependencies — don't use `--omit=dev` if you want the dashboard). See **Telemetry dashboard** below.
+
+## Telemetry dashboard
+
+The dashboard is built automatically on `npm install` (root `prepare` → `build:dashboard`, which builds both the v1 and v2 bundles). Start the server:
+
+```bash
+node packages/telemetry/server/index.js                       # v1 UI → http://localhost:7890
+RH_TELEMETRY_UI=v2 node packages/telemetry/server/index.js     # v2 UI (launch-time selection)
+```
+
+To rebuild manually after frontend changes:
+
+```bash
+npm run build:dashboard                       # both bundles, from the repo root
+# or, inside packages/telemetry:
+npm run build        # v1 → dist/
+npm run build:v2     # v2 → dist-v2/
+```
+
+> Global install (`npm install -g rh-telemetry`) is **planned once the package is published to npm** — it is not published yet. Use the clone path above until then.
 
 ## Verify
 
@@ -111,9 +133,9 @@ Target wall-clock: < 90s for a typical session.
 
 ```bash
 # Tests by package
-node packages/oversight/tests/run.js   # 177 tests
-node packages/cli/tests/run.js         # 54 tests
-node packages/output/tests/run.js      # 112 tests (incl. 16-way concurrent stress)
+node packages/oversight/tests/run.js   # 197 tests
+node packages/cli/tests/run.js         # 62 tests
+node packages/output/tests/run.js      # 201 tests (incl. 16-way concurrent stress)
 
 # All workspaces
 npm test

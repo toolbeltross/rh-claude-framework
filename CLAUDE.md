@@ -81,7 +81,7 @@ rh-claude-framework/
 |---|---|
 | Oversight tests | `node packages/oversight/tests/run.js` (197 tests) |
 | CLI tests | `node packages/cli/tests/run.js` (62 tests) |
-| Output tests | `node packages/output/tests/run.js` (181 tests) |
+| Output tests | `node packages/output/tests/run.js` (201 tests) |
 | All workspace tests | `npm test` |
 | Dry-run install | `node packages/cli/bin/rh-oversight.js init --dry-run` |
 | Real install against tmp HOME | `HOME=/tmp/test USERPROFILE=/tmp/test node packages/cli/bin/rh-oversight.js init --workspace /tmp/test-ws` |
@@ -106,7 +106,7 @@ The "tmp HOME" pattern is the outer-seam verification per `rh-work-verification.
 cd C:/Users/rossb/OneDrive/Workspace/toolbeltross/toolbeltross-public/rh-claude-framework
 node packages/oversight/tests/run.js   # 197 expected
 node packages/cli/tests/run.js         # 62 expected
-node packages/output/tests/run.js      # 181 expected
+node packages/output/tests/run.js      # 201 expected
 node packages/cli/bin/rh-oversight.js init --dry-run
 grep -r "rossb\|C:/Users/rossb" --include="*.js" --include="*.md" packages/   # must be empty
 ```

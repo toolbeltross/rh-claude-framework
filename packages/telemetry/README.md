@@ -91,22 +91,38 @@ Each panel on the dashboard corresponds to a specific phenomenon that the Claude
 - **Hook-forwarder Self-Health** — `/api/hook-health` endpoint + chip surfaces when the hook pipeline itself breaks
 - **Cross-platform** — works with CLI, VS Code, Desktop, WSL, PowerShell, bash
 
-## Quick Install
+## Install & Run
+
+Clone the monorepo and install — the dashboard bundles build automatically (root `prepare` script):
 
 ```bash
-npm install -g rh-telemetry
-rh-telemetry setup    # configures hooks + installs /telemetry skill
-rh-telemetry start    # starts dashboard server on :7890
+git clone https://github.com/toolbeltross/rh-claude-framework.git
+cd rh-claude-framework
+npm install                                   # installs deps + builds the dashboard
+node packages/telemetry/server/index.js       # serve on http://localhost:7890 (v1 UI)
 ```
 
 Then open http://localhost:7890 in your browser.
 
-## Alternative: Clone & Dev
+To configure Claude Code hooks + skills (live tool feed, validation, prompt capture, agents):
+
+```bash
+cd packages/telemetry
+npm run setup-hooks       # configure Claude Code hooks
+npm run install-skills    # install /rh-telemetry skill
+```
+
+> A global install (`npm install -g rh-telemetry`, then `rh-telemetry setup` / `rh-telemetry start`) is **planned once the package is published to npm** — it is not published yet. Use the clone path above until then.
+
+## Development (live reload)
+
+For frontend work with hot-module reload:
 
 ```bash
 git clone https://github.com/toolbeltross/rh-claude-framework.git
-cd rh-claude-framework/packages/telemetry
-npm install
+cd rh-claude-framework
+npm install               # installs deps + builds the dashboard
+cd packages/telemetry
 npm run setup-hooks       # configure Claude Code hooks
 npm run install-skills    # install /rh-telemetry skill
 npm run dev               # Vite on :5173, API on :7890
