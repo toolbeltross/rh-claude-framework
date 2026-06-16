@@ -7,7 +7,7 @@
 > `/rh-quit` refreshes the "Last verified" stamp + the In-flight table at session end — see [How tracking works](#how-tracking-works-here). It tracks the latest **substantive** PR, not its own doc-only stamp commits (pinning a literal HEAD hash here is self-defeating — a stamp commit becomes the new HEAD and instantly invalidates the stamp).
 
 **Last verified:** 2026-06-16
-**Through:** `main`, latest substantive PR **#109** (scribe-backlog disposition UI + automated daily guidance); also landed this window: telemetry dashboard data fixes (**#104**), session-tab heuristic titles (**#108**, identity-ref test-fixture follow-up **#111**)
+**Through:** `main`, latest substantive PR **#113** (public-release installability: root LICENSE, `prepare` dashboard build, `prepublishOnly` v1+v2, README/test-count reconcile); prior window: scribe-backlog disposition UI + daily guidance (**#109**), telemetry dashboard data fixes (**#104**), session-tab heuristic titles (**#108**/**#111**)
 **Tree:** clean · no open PRs
 
 ## Current state
@@ -30,6 +30,7 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 
 ## Recently verified (outer seam)
 
+- **PR #113 — public-release installability** ✅ five fresh-clone blockers fixed: added root `LICENSE` (MIT); root `prepare` → `build:dashboard` builds both v1+v2 bundles on `npm install` (gitignored `dist/`+`dist-v2/` now exist after a clean clone, so `GET /` serves the dashboard instead of 404); `prepublishOnly` builds v1+v2 (tarball shipped an unbuilt `dist-v2/`); both READMEs reconciled so the clone path is primary and `npm install -g rh-telemetry` is demoted to "planned once published" (package unpublished); test counts corrected to measured **197/62/201** (README said 343/177-54-112, CLAUDE.md said 181 output). Outer-seam: cloned HEAD → `npm install` (prepare built both bundles) → `node server/index.js` → `GET /` **HTTP 200** for both v1 and v2 (was 404). Launch-time v1/v2 selection unchanged. Caveat documented: `npm install --omit=dev` fails the prepare build (vite is a devDep).
 - **PR #104 — telemetry dashboard data fixes** ✅ four data bugs found by live-monitoring: Overview Total Tokens=0 → sum `stats.modelUsage` (43.0M); active-agent live telemetry blank → `deriveAgentTranscriptPath` dropped the `<sessionId>` dir (4,059 not-found misses); agent-cost "% of session" >100% → bounded "% of total spend"; live-session model/ctx clobbered to (none)/0% by empty status posts → `updateLiveSession` merge-not-clobber (preserves model/ctx/`_sessionTitle`/`_compactEvents`). Outer-seam: rendered UI + live `/api/status` probe + telemetry unit 19/19.
 - **PRs #108 + #111 — telemetry session-tab heuristic titles** ✅ live tabs show a short title from each session's first prompt (server `session-title.js`, no-LLM, falls back to `project (id-slice)` for structured/automated prompts); cwd/session-id/ctx/cost/tokens moved to hover. **#111** fixed #108's test fixtures hardcoding `C:/Users/rossb/…` (tripped the cli `test-no-identity-refs` gate). Outer-seam: rendered tab ("…first prompt" title) + identity gate exit 0 on merged `main`.
 - **PR #109 — scribe-backlog disposition UI + automated daily guidance** ✅ (peer session) merged after rebase onto current `main`; author verified live pipeline run + `/scribe` UI round-trip; output suite **201** green. Cross-session coordinated via scoped explicit-path staging — no commit contamination.
@@ -56,7 +57,7 @@ Nothing else is open. The old PROGRESS "open queue" is fully closed: P5-1 delive
 cd C:/Users/rossb/OneDrive/Workspace/toolbeltross/toolbeltross-public/rh-claude-framework
 node packages/oversight/tests/run.js   # 197 expected
 node packages/cli/tests/run.js         # 62 expected — all green
-node packages/output/tests/run.js      # 181 expected
+node packages/output/tests/run.js      # 201 expected
 node packages/cli/bin/rh-oversight.js init --dry-run
 git status && git log origin/main..HEAD --oneline   # tree clean, nothing unpushed
 grep -r "rossb\|C:/Users/rossb" --include="*.js" --include="*.md" packages/   # must be empty
