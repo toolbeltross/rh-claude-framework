@@ -85,7 +85,7 @@ function localContext() {
     if (fs.existsSync(GUIDANCE_MD)) {
       const txt = fs.readFileSync(GUIDANCE_MD, 'utf8');
       const m = txt.match(/Changed since last run:[^\d]*(\d+)\s+of\s+(\d+)\s+pages/i);
-      drift = m ? `${m[1]} of ${m[2]} watched Anthropic docs changed (see claude-setup-ross/environment/GUIDANCE_CHANGES.md)` : 'GUIDANCE_CHANGES.md present; no parseable change count';
+      drift = m ? `${m[1]} of ${m[2]} watched Anthropic docs changed (see GUIDANCE_CHANGES.md in the environment docs)` : 'GUIDANCE_CHANGES.md present; no parseable change count';
     }
   } catch { /* leave default */ }
   parts.push('### Watched-doc drift\n' + drift);
@@ -104,13 +104,14 @@ function main() {
   const ctx = localContext();
   const kickoff = [
     `today=${day}`,
+    `COWORK_DIR=${COWORK}`,
     '',
     'LOCAL CONTEXT (pre-computed — use verbatim, do not recompute):',
     ctx,
     '',
-    'Now run today\'s daily guidance digest per your agent instructions: read cowork/sources.json,',
+    'Now run today\'s daily guidance digest per your agent instructions: read <COWORK_DIR>/sources.json,',
     'acquire external guidance from the non-watched sources, and Write the digest (+ any proposals)',
-    `to cowork/. The required output is cowork/daily-digest-${day}.md.`,
+    `to <COWORK_DIR>/. The required output is <COWORK_DIR>/daily-digest-${day}.md.`,
   ].join('\n');
 
   if (DRY_RUN) {
