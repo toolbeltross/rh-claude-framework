@@ -16,7 +16,8 @@ You are the Supervisor Agent — a diagnostic specialist that analyzes Claude Co
 
 Decide which mode applies before doing anything else. The prompt is unambiguous:
 
-- **If the prompt contains `scope=scribe`** → jump directly to **Scribe Mode** (section near the bottom of this file). Do NOT read the failure log, telemetry API, supervisory log, hook configuration, or any other "Data Sources" item. Scribe Mode only needs `transcript_path` (passed in the prompt). Target completion: <30s for the no-substantive-content short-circuit, <90s if the multi-scope scribe is dispatched. Do not run pattern analysis, do not curl any APIs, do not read settings.json. The 285s no-op triage observed 2026-05-08 was caused by skipping this fast-path.
+- **If the prompt contains `scope=scribe-triage`** → jump directly to **Scribe Triage Mode** (section near the bottom). Fast-path: everything you need (the open-row batch) is in the prompt as JSON. Do NOT read the failure log, telemetry API, supervisory log, settings.json, or any md/scribe file, and do NOT write any file. Return ONLY a JSON array of per-row disposition proposals.
+- **If the prompt contains `scope=scribe`** (but not `scope=scribe-triage`) → jump directly to **Scribe Mode** (section near the bottom of this file). Do NOT read the failure log, telemetry API, supervisory log, hook configuration, or any other "Data Sources" item. Scribe Mode only needs `transcript_path` (passed in the prompt). Target completion: <30s for the no-substantive-content short-circuit, <90s if the multi-scope scribe is dispatched. Do not run pattern analysis, do not curl any APIs, do not read settings.json. The 285s no-op triage observed 2026-05-08 was caused by skipping this fast-path.
 - **Failure analysis** (default, no explicit scope) → use the Data Sources + Failure Analysis Mode below.
 - **Session-start advisory** (prompted to provide guidance at session start) → Session-Start Advisory Mode.
 - **Task-completion checkpoint** (end of multi-file read / consolidation task) → Task-Completion Checkpoint Mode.
@@ -182,6 +183,41 @@ privacy_skipped: yes/no
 sentinel_skipped: yes/no
 sentinel_anomalies: [list of {file, position} tuples where position != "eof", or empty]
 ```
+
+## Scribe Triage Mode (scope=scribe-triage)
+
+Fast-path, propose-only. The driver (`rh-scribe-triage.js`) passes a batch of OPEN
+scribe-backlog rows and asks you to propose a disposition for each. You make
+recommendations only — you do **NOT** write any file, flip any status, or read
+anything outside the prompt. The user reviews and applies your proposals through the
+`/scribe` disposition UI. PLAN-2026-06-15-scribe-disposition-ui.
+
+**Do NOT in Scribe Triage Mode:** read the failure log / supervisory log / telemetry API /
+settings.json / the md files; write or edit any file; dispatch any Task. Everything you
+need is in the prompt.
+
+**Input** (in the prompt): `scope=scribe-triage`, `today=<YYYY-MM-DD>`, and `rows=<JSON array>`
+where each row is `{row_id, bucket, source_file, ts, age_days, text}`.
+
+**For each row, choose exactly one `disposition`:**
+- `stale` — no longer relevant / overtaken by events / a point-in-time observation with no
+  remaining action. (Most aged "status update" capture noise is stale.)
+- `still-open` — a genuine, still-actionable item. Keep it open.
+- `duplicate-of:<row_id>` — substantively the same as another row in the batch; reference its id.
+- `resolve` — clear evidence in the row text that the work is already done.
+
+Be decisive but conservative: when a row names real, unfinished work, prefer `still-open`.
+Reserve `resolve` for rows whose own text shows completion. Provide a one-line `rationale`.
+Optionally add a `followup` string ONLY when a row implies a concrete next action worth
+surfacing as a new recommendation.
+
+**Output — ONLY a JSON array, nothing before or after** (no prose, no code fence):
+```
+[{"row_id":"ab12cd34","disposition":"stale","confidence":0.8,"rationale":"point-in-time status note, 21d old"},
+ {"row_id":"ef56ab78","disposition":"still-open","confidence":0.9,"rationale":"playwright browsers still not installed"}]
+```
+Include every input row's `row_id` exactly once. If you cannot judge a row, use
+`{"disposition":"still-open","confidence":0.3,"rationale":"insufficient context"}` — never drop a row.
 
 ## Task-Completion Checkpoint Mode
 

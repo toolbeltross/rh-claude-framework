@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 const { config } = require('./lib/config');
 const { appendOversightEvent } = require('./lib/oversight-events');
+const scribeMd = require('./lib/scribe-md');
 
 const APPLY = process.argv.includes('--apply');
 const JSON_OUT = process.argv.includes('--json');
@@ -185,24 +186,32 @@ function pruneScribeFile(filePath) {
   const staleOpenIds = [];
   const kept = [];
 
-  // Match scribe row: | id | ts | session | text | status |
-  // ID is hex, 8-16 chars; ts is YYYY-MM-DD or ISO datetime.
-  const rowRe = /^\|\s*([a-f0-9]{8,16})\s*\|\s*(\d{4}-\d{2}-\d{2})/;
+  // Parse each line with the strict scribe-row parser so `status` is read from
+  // the actual status cell — NOT a substring match on the whole line (C6:
+  // a row whose TEXT mentions "resolved" but whose status is `open` must not
+  // archive). Terminal statuses (resolved/closed/stale prefix, in any form —
+  // bare or `resolved: <reason> (<date>)` from the /scribe disposition UI)
+  // archive after the window; only exact `open` counts toward the stale alert.
+  // Broadened 2026-06-15 (PLAN F-K): the old / \|\s*resolved\s*\|/ matched only
+  // a bare `resolved` cell, so `closed …` / `resolved: …` / `stale …` rows never
+  // archived. The disposition UI writes the prefixed forms — they must archive.
+  const archivedIds = [];
   for (const line of lines) {
-    const m = line.match(rowRe);
-    if (!m) { kept.push(line); continue; }
-    const ts = Date.parse(m[2]);
+    const row = scribeMd.parseLine(line);
+    if (!row) { kept.push(line); continue; }
+    const ts = Date.parse(row.ts);
     if (isNaN(ts)) { kept.push(line); continue; }
 
-    const isResolved = / \|\s*resolved\s*\|/.test(line);
-    const isOpen = / \|\s*open\s*\|/.test(line);
+    const isTerminal = /^(resolved|closed|stale)\b/i.test(row.status);
+    const isOpen = row.status === 'open';
 
-    if (isResolved && ts < archiveCutoff) {
+    if (isTerminal && ts < archiveCutoff) {
       archived.push(line);
+      archivedIds.push(row.id);
       continue; // omit from kept (gets archived)
     }
     if (isOpen && ts < alertCutoff) {
-      staleOpenIds.push(m[1]);
+      staleOpenIds.push(row.id);
     }
     kept.push(line);
   }
@@ -232,7 +241,7 @@ function pruneScribeFile(filePath) {
   return {
     file: path.basename(filePath),
     archived_count: archived.length,
-    archived_ids: archived.map(l => l.match(rowRe)?.[1]).filter(Boolean).slice(0, 20),
+    archived_ids: archivedIds.slice(0, 20),
     stale_open_count: staleOpenIds.length,
     stale_open_ids: staleOpenIds.slice(0, 20),
   };

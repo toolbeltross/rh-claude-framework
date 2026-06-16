@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import chokidar from 'chokidar';
 import { createServer } from 'http';
+import { spawnSync } from 'child_process';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join, basename } from 'path';
 import { existsSync } from 'fs';
@@ -112,6 +114,67 @@ app.get('/api/oversight/events', async (req, res) => {
 app.post('/api/refresh', (_req, res) => {
   const result = store.forceRefresh();
   res.json({ status: 'ok', ...result });
+});
+
+// ── Scribe backlog disposition (PLAN-2026-06-15, closes F-K) ─────────────────
+// The dashboard is otherwise read-only; these are the first UI write actions
+// (the /api/refresh precedent). md files stay canonical — both endpoints
+// delegate to the DEPLOYED CJS scripts under ~/.claude/scripts/ (location-
+// independent of this monorepo; same scripts the hooks run), which own config
+// resolution, the file-lock, the strict parser, and the DB shadow.
+const DEPLOYED_SCRIPTS = join(homedir(), '.claude', 'scripts');
+const SCRIBE_PAGE = join(__dirname, 'public', 'scribe.html');
+
+function runDeployed(scriptName, args) {
+  const r = spawnSync('node', [join(DEPLOYED_SCRIPTS, scriptName), ...args], {
+    encoding: 'utf8', windowsHide: true, timeout: 15000,
+  });
+  let json = null;
+  try { json = JSON.parse((r.stdout || '').trim().split('\n').pop()); } catch { /* leave null */ }
+  return { status: r.status, json, stderr: r.stderr || '', error: r.error };
+}
+
+// GET /api/scribe?status=open&bucket=cleanup — current backlog + proposal overlay.
+app.get('/api/scribe', (req, res) => {
+  const args = [];
+  if (req.query.status === 'all') args.push('--all');
+  else { args.push('--status', String(req.query.status || 'open')); }
+  if (req.query.bucket) args.push('--bucket', String(req.query.bucket));
+  const out = runDeployed('rh-scribe-query.js', args);
+  if (!out.json) return res.status(500).json({ error: 'scribe-query failed', stderr: out.stderr.slice(0, 300) });
+  res.json(out.json);
+});
+
+// POST /api/scribe/disposition { bucket, source_file, row_id, disposition, note?, duplicateOf? }
+// disposition ∈ {resolve, stale, duplicate-of, still-open}  (C5: validated here).
+const DISPOSITIONS = new Set(['resolve', 'stale', 'duplicate-of', 'still-open']);
+app.post('/api/scribe/disposition', (req, res) => {
+  const { source_file, row_id, disposition, note, duplicateOf } = req.body || {};
+  if (!source_file || !row_id || !DISPOSITIONS.has(disposition)) {
+    return res.status(400).json({ error: 'require source_file, row_id, and disposition ∈ {resolve, stale, duplicate-of, still-open}' });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const noteStr = note ? ` ${String(note).replace(/[|\n\r]/g, ' ').trim()}` : '';
+  let status;
+  switch (disposition) {
+    case 'resolve':      status = `resolved:${noteStr || ' (via /scribe)'} (${today})`; break;
+    case 'stale':        status = `stale:${noteStr} (${today})`; break;
+    case 'duplicate-of': status = `resolved: duplicate-of ${String(duplicateOf || '?').replace(/[|\n\r]/g, '')}${noteStr} (${today})`; break;
+    case 'still-open':   status = 'open'; break;
+  }
+  const out = runDeployed('rh-scribe-row-update.js', ['--source', String(source_file), '--id', String(row_id), '--status', status]);
+  if (out.error || !out.json) {
+    return res.status(500).json({ error: 'row-update spawn failed', stderr: out.stderr.slice(0, 300) });
+  }
+  if (!out.json.ok) return res.status(409).json({ ok: false, error: out.json.error });
+  broadcastFrame('scribeDisposition', { row_id, disposition, status });
+  res.json({ ok: true, row_id, disposition, status, oldStatus: out.json.oldStatus });
+});
+
+// GET /scribe — the disposition review page (registered before the SPA catch-all).
+app.get('/scribe', (_req, res) => {
+  if (existsSync(SCRIBE_PAGE)) return res.sendFile(SCRIBE_PAGE);
+  res.status(404).send('scribe.html not found — run the build/deploy');
 });
 
 // Test-only debug endpoint — gated behind RH_TELEMETRY_TEST_MODE=1.

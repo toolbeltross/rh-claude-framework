@@ -169,6 +169,32 @@ const STEPS = [
     cmd: "node",
     args: [path.join(SCRIPTS_DIR, "rh-auto-prune.js"), "--apply"],
   },
+  {
+    // PLAN-2026-06-15 (F-K): propose-only daily triage of the open scribe
+    // backlog. Reads OPEN rows from the canonical md files, dispatches
+    // rh-supervisor (scope=scribe-triage) for a per-row disposition proposal,
+    // writes ONLY proposed_* columns (never status). Same-day guard + batch
+    // cap + dedup; SKIPs cleanly when no untriaged rows remain. Runs LAST,
+    // after auto-prune, so it triages only surviving open rows. The user
+    // applies dispositions via the /scribe UI (propose-only invariant).
+    name: "rh-scribe-triage",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-scribe-triage.js")],
+    timeoutOverrideMs: 6 * 60_000,  // supervisor dispatch can take up to 5min
+  },
+  {
+    // PLAN-2026-06-15: automated daily guidance + health digest (fully
+    // headless, no manual paste). Pre-computes local checks in Node (no Bash
+    // for the LLM) and dispatches the rh-daily-guidance agent (WebFetch/
+    // WebSearch/Read/Write/Glob — Bash absent; writes bounded to cowork/ by the
+    // agent). Idempotent (SKIPs if today's cowork/daily-digest-<date>.md
+    // exists). Steward APPROVE-WITH-CONDITIONS C1-C4. Runs LAST — heaviest LLM
+    // step, and it references the local checks the earlier steps produced.
+    name: "rh-daily-guidance",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-daily-guidance.js")],
+    timeoutOverrideMs: 9 * 60_000,  // web acquisition + synthesis (8min dispatch + headroom)
+  },
 ];
 
 // ───────────────────────── Runner ─────────────────────────
@@ -213,6 +239,7 @@ const SKIP_REASONS = new Set([
   'same-day-guard',
   'no-threshold-crossings',
   'all-groups-already-proposed',
+  'no-untriaged-rows',
 ]);
 function wasIntentionallySkipped(stdout) {
   const trimmed = (stdout || '').trim();
