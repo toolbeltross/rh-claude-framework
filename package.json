@@ -16,7 +16,9 @@
     "test:oversight": "npm run test -w packages/oversight",
     "test:cli": "npm run test -w packages/cli",
     "test:telemetry": "npm run test -w packages/telemetry",
-    "coverage": "c8 npm test"
+    "coverage": "c8 npm test",
+    "build:dashboard": "npm run build -w packages/telemetry && npm run build:v2 -w packages/telemetry",
+    "prepare": "npm run build:dashboard"
   },
   "license": "MIT",
   "author": "Ross Beveridge",
