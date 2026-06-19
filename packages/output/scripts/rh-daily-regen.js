@@ -24,6 +24,13 @@ const { withLock } = require('./lib/file-lock');
 const SCRIPTS_DIR = path.join(config.claudeDir, "scripts");
 const LOG_PATH = path.join(SCRIPTS_DIR, "daily-regen.log");
 const LAST_RUN_MARKER = path.join(SCRIPTS_DIR, "daily-regen.last-run");
+const RUN_LOCK = path.join(SCRIPTS_DIR, "daily-regen.run.lock");
+const ATTEMPT_MARKER = path.join(SCRIPTS_DIR, "daily-regen.last-attempt");
+// A non-success run leaves LAST_RUN_MARKER unset (see markRanToday), so without
+// a second gate a persistently-failing step drives a full-pipeline rerun on
+// EVERY trigger. This cooldown rate-limits trigger-fired reruns; the daily Task
+// Scheduler run does not pass --skip-if-today-done, so it still force-runs.
+const RERUN_COOLDOWN_MS = 60 * 60 * 1000; // 60 min
 const QUIET = process.argv.includes("--quiet");
 const SKIP_IF_DONE = process.argv.includes("--skip-if-today-done");
 
@@ -43,6 +50,54 @@ function markRanToday() {
       fs.writeFileSync(LAST_RUN_MARKER, todayStamp(), "utf8");
     });
   } catch { /* ignore */ }
+}
+
+function recentlyAttempted() {
+  try {
+    const ts = Date.parse(fs.readFileSync(ATTEMPT_MARKER, "utf8").trim());
+    return Number.isFinite(ts) && (Date.now() - ts) < RERUN_COOLDOWN_MS;
+  } catch { return false; }
+}
+function markAttempt() {
+  try { fs.writeFileSync(ATTEMPT_MARKER, new Date().toISOString(), "utf8"); } catch { /* ignore */ }
+}
+
+// ───────────────────────── Single-run guard ─────────────────────────
+// Cross-process lock so concurrent SessionStart triggers don't each run the
+// full pipeline. The 2026-06-19 incident: ~20 near-simultaneous triggers each
+// ran all 15 steps, and each dispatched the rh-daily-guidance `--agent` worker
+// before the per-day digest existed → ~30 headless agents (each a dashboard
+// tab). file-lock.js withLock is deliberately NOT reused here: its 5s
+// time-based staleness would let a second trigger steal the lock mid-pipeline
+// (a run takes minutes). Staleness is instead keyed on holder-PID liveness.
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; }  // signal 0 = existence probe (sends nothing)
+  catch (e) { return e.code === "EPERM"; }      // exists but not signalable by us → alive
+}
+function readLockPid() {
+  try { return parseInt(fs.readFileSync(RUN_LOCK, "utf8").split("\n")[0], 10) || 0; }
+  catch { return 0; }
+}
+function acquireRunLock() {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fs.openSync(RUN_LOCK, "wx");    // O_CREAT | O_EXCL — atomic create-or-fail
+      fs.writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+      fs.closeSync(fd);
+      return true;
+    } catch (e) {
+      if (e.code !== "EEXIST") return false;      // unexpected FS error — do not run
+      if (pidAlive(readLockPid())) return false;  // another run is genuinely in progress
+      try { fs.unlinkSync(RUN_LOCK); } catch { /* race: another reclaimer won */ }
+      // loop once to re-create the lock we just reclaimed
+    }
+  }
+  return false;
+}
+function releaseRunLock() {
+  // Only unlink if we still own it (guards against a stale-reclaim race).
+  try { if (readLockPid() === process.pid) fs.unlinkSync(RUN_LOCK); } catch { /* already gone */ }
 }
 
 // ───────────────────────── Step definitions ─────────────────────────
@@ -272,34 +327,59 @@ function log(line) {
 // ───────────────────────── Main ─────────────────────────
 
 function main() {
-  if (SKIP_IF_DONE && alreadyRanToday()) {
-    // Called from a trigger (SessionStart hook or ONLOGON task) and already ran today — silently exit.
-    log(`\n==== daily-regen skipped ${new Date().toISOString()} — already ran for ${todayStamp()} ====`);
-    process.exit(0);
-  }
-
-  const startTs = new Date().toISOString();
-  log(`\n==== daily-regen run ${startTs} ====`);
-
-  const results = [];
-  for (const step of STEPS) {
-    const r = runStep(step);
-    results.push(r);
-    let status = r.ok ? "OK  " : "FAIL";
-    if (r.ok && wasIntentionallySkipped(r.stdout)) status = "SKIP";
-    log(`[${status}] ${r.name.padEnd(22)} ${r.ms.toString().padStart(5)} ms`);
-    if (!r.ok && r.stderr) {
-      log(`       stderr: ${r.stderr.split("\n")[0].slice(0, 200)}`);
+  // Called from a trigger (SessionStart hook or ONLOGON task): skip if today's
+  // run already succeeded, OR if a run was attempted within the rerun cooldown
+  // (so a persistently-failing step can't drive a full-pipeline rerun on every
+  // SessionStart). The daily Task Scheduler run omits --skip-if-today-done and
+  // therefore bypasses both gates.
+  if (SKIP_IF_DONE) {
+    const ranToday = alreadyRanToday();
+    if (ranToday || recentlyAttempted()) {
+      const why = ranToday
+        ? `already ran for ${todayStamp()}`
+        : `attempted within the last ${Math.round(RERUN_COOLDOWN_MS / 60000)} min`;
+      log(`\n==== daily-regen skipped ${new Date().toISOString()} — ${why} ====`);
+      process.exit(0);
     }
   }
 
-  const okCount = results.filter(r => r.ok).length;
-  const failCount = results.length - okCount;
-  const endTs = new Date().toISOString();
-  log(`==== completed ${endTs} — ${okCount}/${results.length} ok, ${failCount} failed ====`);
+  // Single-run guard: if another daily-regen is mid-pipeline, don't pile on.
+  // This is the primary fix for the concurrent-run storm.
+  if (!acquireRunLock()) {
+    log(`\n==== daily-regen skipped ${new Date().toISOString()} — another run in progress ====`);
+    process.exit(0);
+  }
 
-  // Only mark "done for today" on fully successful runs — a partial failure should be retried on the next trigger.
-  if (failCount === 0) markRanToday();
+  let failCount = 0;
+  try {
+    markAttempt();
+    const startTs = new Date().toISOString();
+    log(`\n==== daily-regen run ${startTs} ====`);
+
+    const results = [];
+    for (const step of STEPS) {
+      const r = runStep(step);
+      results.push(r);
+      let status = r.ok ? "OK  " : "FAIL";
+      if (r.ok && wasIntentionallySkipped(r.stdout)) status = "SKIP";
+      log(`[${status}] ${r.name.padEnd(22)} ${r.ms.toString().padStart(5)} ms`);
+      if (!r.ok && r.stderr) {
+        log(`       stderr: ${r.stderr.split("\n")[0].slice(0, 200)}`);
+      }
+    }
+
+    const okCount = results.filter(r => r.ok).length;
+    failCount = results.length - okCount;
+    const endTs = new Date().toISOString();
+    log(`==== completed ${endTs} — ${okCount}/${results.length} ok, ${failCount} failed ====`);
+
+    // Only mark "done for today" on fully successful runs — a partial failure
+    // should be retried, but RERUN_COOLDOWN_MS rate-limits that so a
+    // persistently-failing step can't drive a rerun storm.
+    if (failCount === 0) markRanToday();
+  } finally {
+    releaseRunLock();
+  }
 
   process.exit(failCount === 0 ? 0 : 2);
 }

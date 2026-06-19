@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 
 import { BASE_URL, HOOK_FORWARDER_TIMEOUT_MS, DEFAULT_CONTEXT_WINDOW_SIZE, IDLE_MARKER_PATH, SUPERVISORY_LOG_PATH, OVERSIGHT_LOG_PATH, apiUrl, resolveContextWindowSize } from '../server/config.js';
 import { MODEL_RATES, getTier } from '../server/cost-rates.js';
+import { shouldPiggybackStatus } from './piggyback-gate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -534,8 +535,15 @@ if (mode === 'status') {
   // _source='toolPiggyback' so server does NOT count this as a real statusLine
   // post for stall detection (otherwise Layer C would never fire because tool
   // events always carry a status post with them).
+  //
+  // GATED (2026-06-19): only for INTERACTIVE sessions. A tool event from an
+  // agent (Task subagent → agent_id; `--agent` headless run → agent_type) must
+  // NOT mint a standalone top-level session — that surfaced ~30 phantom
+  // rh-daily-guidance tabs during a concurrent daily-regen burst. The tool
+  // event itself still forwards agent_id/agent_type above, so nested subagent
+  // tracking is unaffected. See scripts/piggyback-gate.js.
   let statusPost = Promise.resolve();
-  if (transcriptPath && sessionId) {
+  if (shouldPiggybackStatus({ transcriptPath, sessionId, agentId: parsed.agent_id, agentType: parsed.agent_type })) {
     const txData = parseTranscript(transcriptPath);
     if (txData) {
       const statusPayload = {

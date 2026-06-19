@@ -204,6 +204,63 @@ const tests = [
         `runtime order must be learning-loop < supervisor-sweep < auto-prune; got ${iLearning}/${iSweep}/${iPrune}`);
     }),
   },
+
+  // ─── Single-run guard (run-lock) — concurrent-storm fix (2026-06-19) ─────────
+
+  {
+    name: 'run-lock held by a LIVE pid → skips (exit 0, "another run in progress")',
+    fn: () => withTmpEnv((env) => {
+      // Seed the lock with this test process's own pid — guaranteed alive.
+      const lockPath = path.join(env.claudeDir, 'scripts', 'daily-regen.run.lock');
+      fs.writeFileSync(lockPath, `${process.pid}\n${new Date().toISOString()}\n`, 'utf8');
+      const r = runScript(env);   // no --skip flag: would otherwise force-run all steps
+      assert.strictEqual(r.status, 0,
+        `should skip while a live run-lock is held; stderr: ${r.stderr?.slice(0, 200)}`);
+      const logText = fs.readFileSync(path.join(env.claudeDir, 'scripts', 'daily-regen.log'), 'utf8');
+      assert.ok(/another run in progress/.test(logText),
+        `log must record the concurrent-skip; log:\n${logText}`);
+      // The live holder's lock must be left intact (not stolen).
+      assert.ok(fs.existsSync(lockPath), 'live holder lock must not be removed');
+    }),
+  },
+  {
+    name: 'run-lock held by a DEAD pid → reclaims stale lock and runs (exit 2 in tmp)',
+    fn: () => withTmpEnv((env) => {
+      // spawnSync is synchronous: by the time it returns, the child has exited,
+      // so its pid is dead. If the OS recycled it (alive), this asserts loudly
+      // (would skip → exit 0) rather than passing silently.
+      const deadPid = spawnSync('node', ['-e', 'process.exit(0)']).pid;
+      const lockPath = path.join(env.claudeDir, 'scripts', 'daily-regen.run.lock');
+      fs.writeFileSync(lockPath, `${deadPid}\n${new Date(0).toISOString()}\n`, 'utf8');
+      const r = runScript(env);   // should reclaim and run; steps fail in tmp → exit 2
+      assert.strictEqual(r.status, 2,
+        `should reclaim a dead-pid lock and run; stderr: ${r.stderr?.slice(0, 200)}`);
+    }),
+  },
+
+  // ─── Rerun cooldown — bounds trigger-fired reruns after a non-success ────────
+
+  {
+    name: '--skip-if-today-done with a RECENT last-attempt → skips (exit 0, cooldown)',
+    fn: () => withTmpEnv((env) => {
+      // No last-run marker, but a fresh attempt timestamp → cooldown gate fires.
+      const attemptPath = path.join(env.claudeDir, 'scripts', 'daily-regen.last-attempt');
+      fs.writeFileSync(attemptPath, new Date().toISOString(), 'utf8');
+      const r = runScript(env, ['--skip-if-today-done']);
+      assert.strictEqual(r.status, 0,
+        `should skip within the rerun cooldown; stderr: ${r.stderr?.slice(0, 200)}`);
+    }),
+  },
+  {
+    name: '--skip-if-today-done with an OLD last-attempt → runs (exit 2 in tmp)',
+    fn: () => withTmpEnv((env) => {
+      const attemptPath = path.join(env.claudeDir, 'scripts', 'daily-regen.last-attempt');
+      fs.writeFileSync(attemptPath, new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), 'utf8');
+      const r = runScript(env, ['--skip-if-today-done']);
+      assert.strictEqual(r.status, 2,
+        `should run once the cooldown has elapsed; stderr: ${r.stderr?.slice(0, 200)}`);
+    }),
+  },
 ];
 
 module.exports = { tests };
