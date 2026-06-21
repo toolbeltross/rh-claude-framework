@@ -151,13 +151,14 @@ const STEPS = [
   {
     // Transcript FTS ingestion (flag-gated: the script itself no-ops unless
     // oversight.json scribeDb:true). Incremental — only new bytes per session.
-    // timeoutOverrideMs: the incremental pass spawns one psql.exe per transcript
-    // file (offset SELECT) even for up-to-date files, before the new-bytes check.
-    // Windows psql cold-start is ~147ms/spawn, so the read-only floor scales with
-    // file count: ~56s at 380 files (measured 2026-06-15), which exceeds the 60s
-    // default and killed the step at 60043ms (exit code null). 6min matches the
-    // learning-loop precedent and gives headroom (~2400 files) until the per-file
-    // SELECTs are batched into a single query (durable fix; tracked).
+    // timeoutOverrideMs: the per-file offset SELECT is now batched into one
+    // json_agg query in rh-transcript-ingest.js main() (with a per-file
+    // fallback), so up-to-date files cost zero psql spawns and the read-only
+    // floor is flat. The 6min override covers the remaining per-CHANGED-file
+    // write spawns (header/insert/update, ~147ms psql cold-start each on
+    // Windows) under heavy churn or DB contention — contention is what tripped
+    // the old 60s default (exit null) during the 2026-06-19 concurrent-run
+    // storm, now prevented by the daily-regen run-lock.
     name: "rh-transcript-ingest",
     cmd: "node",
     args: [path.join(SCRIPTS_DIR, "rh-transcript-ingest.js")],
