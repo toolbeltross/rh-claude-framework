@@ -11,7 +11,7 @@ Thumbs.db
 tests/visual-parity/output/
 .claude/settings.local.json
 .claude/worktrees/
-hook-debug.log
+hook-debug.log*
 
 # Repo-root PNG working artifacts from visual-verification sessions.
 # Canonical README screenshots live in docs/screenshots/ and are tracked.
