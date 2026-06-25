@@ -23,7 +23,9 @@ User-invoked scribe curation pass. The Stop hook's inline regex extraction (`rh-
 
 6. **Resolve session-authored open PRs** — a PR you opened this session must be merged (the default) or explicitly declined by the user before "safe to close." Listing it as an open item is not enough; the model may not self-default to "leave it open." Added 2026-06-15 after a session declared safe-to-close with PR #98 still open, self-labeled "awaiting merge," and the user had to step in.
 
-7. **Report what was captured** — print a summary listing files written, items appended, the loose-ends sweep results, open-PR dispositions, and confirm "safe to close session."
+7. **Config-integrity check (OneDrive / OS)** — run `rh-config-integrity.js` to confirm OneDrive or an OS-level problem hasn't silently broken the config the oversight/telemetry system depends on (cloud-only/dehydrated files, zero-byte config, broken `settings.json` hook references, sync-conflict files). Detect-only — it never repairs; a non-clean result is surfaced to the user with the script's suggested fix. This is the session-end tripwire for the "OneDrive ate a hook script" failure class that the existing self-test / health probes do not cover.
+
+8. **Report what was captured** — print a summary listing files written, items appended, the loose-ends sweep results, open-PR dispositions, the config-integrity result, and confirm "safe to close session."
 
 ## Execution steps
 
@@ -97,11 +99,20 @@ When the user invokes `/rh-quit`:
    - **Do NOT print "safe to close" while a session-authored PR is open without either a recorded merge (with commit SHA) or an explicit user decline.** "Listed as an open item" is NOT sufficient — that was the gap before 2026-06-15 (the model self-defaulted PR #98 to "awaiting merge" instead of merging or asking; the user had to intervene).
    - **Detached-HEAD / worktree-locked-`main` gotcha** (learned 2026-06-15): `gh pr merge --delete-branch` needs a real branch checked out and tries to switch to the default branch afterward. If `main` is checked out in another worktree, that post-merge switch fails. Merge from the PR branch *without* `--delete-branch`, then delete the remote branch (`git push origin --delete <branch>`) and move local off it (`git switch --detach origin/main && git branch -D <branch>`).
 
-7. **Print summary:**
+7. **Config-integrity check (REQUIRED — alert-only, OneDrive / OS tripwire).** Before printing the summary, verify OneDrive or an OS-level problem hasn't silently broken the config the oversight/telemetry system depends on. Run:
+   ```bash
+   node ~/.claude/scripts/rh-config-integrity.js
+   ```
+   It is **detect-only — it never repairs.** It checks six things across the workspace `.claude/`, the oversight-system dir, and `~/.claude/{scripts,agents,skills}`: settings-JSON validity, that every script referenced by `settings.json` hooks exists and is non-empty, OneDrive cloud-only/dehydrated files, zero-byte config files, sync-conflict files, and core-dir presence. Exit `0` = clean, `1` = degraded (warn), `2` = critical.
+   - **Exit 0:** note "config integrity: clean" in the summary and proceed.
+   - **Exit 1 or 2:** surface the failing probe lines **and the script's `SUGGESTED FIX` block verbatim** to the user as a prominent callout. Do **not** auto-repair and do **not** silently swallow it — a critical result means a hook or rule the live system depends on is missing / cloud-only / corrupt (exactly the OneDrive-compromise failure class this check exists for). The user runs the fix; you only report. This surfaces but does **not** block "safe to close" (the user chose alert-only).
+
+8. **Print summary:**
    - Items appended per scope (recommendations / cleanup / learnings)
    - Whether `SESSION_STATE.md` was refreshed (and what changed) or skipped (not present)
    - **Loose-ends sweep** results (its own section — every item above, resolved or left, with paths)
    - **Open-PR resolution** — each session-authored PR with its disposition (merged + commit SHA, or user-declined quoted verbatim)
+   - **Config integrity** — `clean`, or the failing probes + suggested fix surfaced verbatim (alert-only; never auto-repaired)
    - Files modified
    - Confirm **"Safe to close session."** — only after **(a)** the loose-ends sweep is clean or its open items are explicitly listed, AND **(b)** every session-authored PR has been merged or explicitly declined by the user per step 6. A still-open session PR with no recorded decline **BLOCKS** this line.
 
