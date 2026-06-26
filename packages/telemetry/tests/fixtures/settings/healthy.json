@@ -1,0 +1,7 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node /fake/path/hook-forwarder.js status"
+  },
+  "hooks": {}
+}

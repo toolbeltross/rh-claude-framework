@@ -1,0 +1,18 @@
+{
+  "name": "@rh/output",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rendered output for rh-claude-framework — scribe writers, HTML renderers, state/env generators, daily regen orchestrator",
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "files": [
+    "scripts/",
+    "install.json"
+  ],
+  "license": "MIT",
+  "author": "Ross Beveridge",
+  "engines": {
+    "node": ">=18"
+  }
+}

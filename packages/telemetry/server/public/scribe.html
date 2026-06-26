@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scribe Backlog — Disposition Review</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --bd:#21262d; --bd2:#30363d;
+    --tx:#c9d1d9; --tx2:#8b949e; --hi:#f0f6fc;
+    --blue:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149; --purple:#bc8cff; --cyan:#39c5cf;
+    --mono:'SF Mono','Cascadia Code',Consolas,'Fira Code',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--mono);background:var(--bg);color:var(--tx);font-size:13px;line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 80px}
+  h1{font-size:20px;color:var(--hi);font-weight:700;letter-spacing:-.3px}
+  .sub{color:var(--tx2);font-size:12px;margin-top:3px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 12px}
+  .counts{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--tx2)}
+  .counts b{color:var(--hi)}
+  .spacer{flex:1}
+  select,button,input{font-family:var(--mono);font-size:12px}
+  select,input[type=text]{background:var(--panel);color:var(--tx);border:1px solid var(--bd2);border-radius:6px;padding:5px 8px}
+  .btn{background:var(--panel);color:var(--tx);border:1px solid var(--bd2);border-radius:6px;padding:5px 10px;cursor:pointer}
+  .btn:hover{border-color:var(--blue)}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  thead th{text-align:left;padding:8px 10px;color:var(--tx2);font-size:10px;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--bd);white-space:nowrap}
+  tbody td{padding:9px 10px;border-bottom:1px solid var(--panel);vertical-align:top}
+  tbody tr:hover{background:var(--panel)}
+  .chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;border:1px solid}
+  .c-clean{background:rgba(88,166,255,.12);color:var(--blue);border-color:rgba(88,166,255,.4)}
+  .c-rec{background:rgba(188,140,255,.12);color:var(--purple);border-color:rgba(188,140,255,.4)}
+  .c-ovr{background:rgba(57,197,207,.10);color:var(--cyan);border-color:rgba(57,197,207,.35)}
+  .age{color:var(--tx2);white-space:nowrap}
+  .age.old{color:var(--amber)} .age.vold{color:var(--red)}
+  .txt{color:var(--tx);max-width:520px}
+  .prop{margin-top:6px;padding:6px 9px;background:rgba(63,185,80,.06);border-left:2px solid var(--green);border-radius:0 4px 4px 0;font-size:11px;color:var(--tx2)}
+  .prop .d{font-weight:700}
+  .prop.d-stale{border-left-color:var(--amber);background:rgba(210,153,34,.06)}
+  .prop.d-open{border-left-color:var(--blue);background:rgba(88,166,255,.06)}
+  .prop.d-dup{border-left-color:var(--purple);background:rgba(188,140,255,.06)}
+  .acts{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .acts button{padding:3px 8px;border-radius:5px;border:1px solid var(--bd2);background:transparent;color:var(--tx2);cursor:pointer;font-size:11px}
+  .acts button:hover{color:var(--hi)}
+  .a-res:hover{border-color:var(--green);color:var(--green)}
+  .a-stale:hover{border-color:var(--amber);color:var(--amber)}
+  .a-keep:hover{border-color:var(--blue);color:var(--blue)}
+  .a-dup:hover{border-color:var(--purple);color:var(--purple)}
+  .a-accept{border-color:rgba(63,185,80,.5)!important;color:var(--green)!important}
+  .note{width:120px}
+  .empty{padding:40px;text-align:center;color:var(--tx2)}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--bd2);border-radius:8px;padding:10px 16px;color:var(--hi);box-shadow:0 6px 24px rgba(0,0,0,.4);opacity:0;transition:opacity .2s;pointer-events:none}
+  #toast.show{opacity:1}
+  .err{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Scribe Backlog — Disposition Review</h1>
+  <div class="sub" id="asof">loading…</div>
+
+  <div class="bar">
+    <div class="counts" id="counts"></div>
+    <span class="spacer"></span>
+    <label>bucket
+      <select id="f-bucket"><option value="">all</option><option value="cleanup">cleanup</option><option value="recommendations">recommendations</option></select>
+    </label>
+    <label><input type="checkbox" id="f-prop"> proposed only</label>
+    <button class="btn" id="reload">↻ reload</button>
+  </div>
+
+  <table>
+    <thead><tr><th>age</th><th>bucket</th><th>item</th><th style="width:300px">disposition</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="4" class="empty">loading…</td></tr></tbody>
+  </table>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let DATA = { rows: [], counts: {} };
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(msg, isErr){ const t=$('#toast'); t.innerHTML = isErr?`<span class="err">${esc(msg)}</span>`:esc(msg); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2200); }
+
+function ageCls(d){ if(d==null) return ''; if(d>=30) return 'vold'; if(d>=14) return 'old'; return ''; }
+function bucketChip(r){ const cls = r.bucket==='recommendations'?'c-rec':'c-clean'; const scope = r.scope==='oversight-system'?' <span class="chip c-ovr" title="oversight-system copy">ovr</span>':''; return `<span class="chip ${cls}">${esc(r.bucket)}</span>${scope}`; }
+
+function propBlock(r){
+  if(!r.proposed_disposition) return '';
+  const d = r.proposed_disposition;
+  const cls = d.startsWith('stale')?'d-stale':d.startsWith('still-open')?'d-open':d.startsWith('duplicate')?'d-dup':'';
+  return `<div class="prop ${cls}">proposed: <span class="d">${esc(d)}</span>${r.proposed_rationale?' — '+esc(r.proposed_rationale):''}${r.proposed_followup?'<br>follow-up: '+esc(r.proposed_followup):''}</div>`;
+}
+
+function acceptAction(d){ // map a proposal disposition to an apply action
+  if(!d) return null;
+  if(d.startsWith('stale')) return {disposition:'stale'};
+  if(d.startsWith('still-open')) return {disposition:'still-open'};
+  if(d.startsWith('resolve')) return {disposition:'resolve'};
+  if(d.startsWith('duplicate-of:')) return {disposition:'duplicate-of', duplicateOf:d.split(':')[1]};
+  return null;
+}
+
+function render(){
+  const onlyProp = $('#f-prop').checked;
+  const rows = DATA.rows.filter(r => !onlyProp || r.proposed_disposition);
+  const c = DATA.counts || {};
+  $('#counts').innerHTML = `<span><b>${c.open_total||0}</b> open</span>` +
+    Object.entries(c.by_bucket||{}).map(([k,v])=>`<span>${esc(k)}: <b>${v}</b></span>`).join('') +
+    `<span><b>${c.proposed||0}</b> with proposal</span><span>showing <b>${rows.length}</b></span>`;
+  const tb = $('#rows');
+  if(!rows.length){ tb.innerHTML = `<tr><td colspan="4" class="empty">🎉 nothing to review</td></tr>`; return; }
+  tb.innerHTML = rows.map(r => {
+    const acc = acceptAction(r.proposed_disposition);
+    const accBtn = acc ? `<button class="a-accept" data-act="accept" title="apply the proposed disposition">✓ accept</button>` : '';
+    return `<tr data-id="${esc(r.id)}" data-src="${esc(r.source_file)}">
+      <td class="age ${ageCls(r.age_days)}">${r.age_days==null?'?':r.age_days+'d'}</td>
+      <td>${bucketChip(r)}</td>
+      <td><div class="txt" title="${esc(r.text)}">${esc(r.text.length>180?r.text.slice(0,180)+'…':r.text)}</div>${propBlock(r)}</td>
+      <td><div class="acts">
+        ${accBtn}
+        <button class="a-res" data-act="resolve">resolve</button>
+        <button class="a-stale" data-act="stale">stale</button>
+        <button class="a-keep" data-act="still-open">keep</button>
+        <button class="a-dup" data-act="duplicate-of">dup…</button>
+        <input class="note" type="text" placeholder="note">
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function load(){
+  $('#asof').textContent = 'loading…';
+  const bucket = $('#f-bucket').value;
+  const url = '/api/scribe?status=open' + (bucket?('&bucket='+encodeURIComponent(bucket)):'');
+  try{
+    const res = await fetch(url); DATA = await res.json();
+    $('#asof').textContent = 'as of ' + new Date(DATA.generatedAt).toLocaleString() + ' · md files are canonical; dispositions persist immediately';
+    render();
+  }catch(e){ $('#asof').innerHTML = '<span class="err">failed to load: '+esc(e.message)+' — is the telemetry server running?</span>'; }
+}
+
+async function applyDisposition(tr, disposition, extra){
+  const id = tr.dataset.id, source_file = tr.dataset.src;
+  const note = (tr.querySelector('.note')||{}).value || '';
+  const body = { source_file, row_id:id, disposition, note, ...(extra||{}) };
+  try{
+    const res = await fetch('/api/scribe/disposition', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const j = await res.json();
+    if(!res.ok || !j.ok){ toast(j.error||('HTTP '+res.status), true); return; }
+    // optimistic: drop the row + adjust counts
+    DATA.rows = DATA.rows.filter(r => !(r.id===id && r.source_file===source_file));
+    if(DATA.counts){ DATA.counts.open_total=Math.max(0,(DATA.counts.open_total||1)-1); }
+    render();
+    toast(`${disposition==='still-open'?'kept open':disposition} · ${id.slice(0,8)}`);
+  }catch(e){ toast(e.message, true); }
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]'); if(!b) return;
+  const tr = e.target.closest('tr'); if(!tr) return;
+  let act = b.dataset.act, extra = null;
+  if(act==='accept'){
+    const r = DATA.rows.find(x=>x.id===tr.dataset.id && x.source_file===tr.dataset.src);
+    const acc = acceptAction(r && r.proposed_disposition); if(!acc){ toast('no proposal',true); return; }
+    act = acc.disposition; extra = acc.duplicateOf?{duplicateOf:acc.duplicateOf}:null;
+  } else if(act==='duplicate-of'){
+    const t = prompt('Duplicate of which row id?'); if(!t) return; extra = {duplicateOf:t.trim()};
+  }
+  applyDisposition(tr, act, extra);
+});
+$('#reload').addEventListener('click', load);
+$('#f-bucket').addEventListener('change', load);
+$('#f-prop').addEventListener('change', render);
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "supervisory-log",
+    "path": "~/.claude/telemetry-supervisory-log.md",
+    "threshold_hours": 24,
+    "alert_event_type": "journal_staleness_alert",
+    "alert_on_missing": false,
+    "note": "Supervisory log unwritten for >24h. Stop-hook progress logging may be broken — verify hook-forwarder.js stop is in the Stop hook chain."
+  },
+  {
+    "name": "daily-regen-marker",
+    "path": "~/.claude/scripts/daily-regen.last-run",
+    "threshold_hours": 48,
+    "alert_event_type": "daily_regen_stale_alert",
+    "alert_on_missing": false,
+    "note": "daily-regen marker unwritten for >48h. SessionStart-trigger pathway may not be reliably producing successful runs on Windows; check Windows Task Scheduler 'Claude Code Daily Regen' task as the documented primary trigger."
+  },
+  {
+    "name": "hook-debug",
+    "path": "~/.claude/hook-debug.log",
+    "threshold_hours": 24,
+    "alert_event_type": "telemetry_debug_stale_alert",
+    "alert_on_missing": false,
+    "note": "Telemetry hook-forwarder debug log unwritten for >24h. Live debug log path may have moved; check rh-claude-framework/packages/telemetry/hook-debug.log."
+  }
+]

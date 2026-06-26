@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+*.lock
+
+# Session-local scribe artifacts (the prefilter writes here when this repo
+# happens to be the active workspace). Never belongs in the framework repo.
+/cleanup.md
+/recommendations.md
+/.claude/
+
+# Playwright MCP outputs (verification screenshots + ARIA snapshots) — written
+# by the --isolated browser profile during visual-verification sessions.
+.playwright-mcp/
+/v2-*.png
+/verify-*.png
+
+# c8 coverage output
+coverage/
+.nyc_output/
