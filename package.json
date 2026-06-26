@@ -1,0 +1,28 @@
+{
+  "name": "rh-claude-framework",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo for Claude Code oversight framework and telemetry dashboard",
+  "workspaces": [
+    "packages/shared",
+    "packages/oversight",
+    "packages/output",
+    "packages/skills",
+    "packages/cli",
+    "packages/telemetry"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces",
+    "test:oversight": "npm run test -w packages/oversight",
+    "test:cli": "npm run test -w packages/cli",
+    "test:telemetry": "npm run test -w packages/telemetry",
+    "coverage": "c8 npm test",
+    "build:dashboard": "npm run build -w packages/telemetry && npm run build:v2 -w packages/telemetry",
+    "prepare": "npm run build:dashboard"
+  },
+  "license": "MIT",
+  "author": "Ross Beveridge",
+  "devDependencies": {
+    "c8": "^11.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+# Line-ending policy — committed so behavior does NOT depend on each machine's
+# core.autocrlf (the Git-for-Windows default, =true, produced phantom "modified"
+# churn on this Windows/OneDrive checkout: checkout wrote CRLF, but tools/OneDrive
+# rewrote LF, so files showed as modified with an empty content diff).
+#
+# The repo is already LF-in-blob; this keeps working trees LF too. LF is required
+# for the bash hooks/scripts and is conventional for Node. Git auto-detects text
+# vs binary; eol=lf applies to detected text files only.
+* text=auto eol=lf
+
+# Explicit binaries — never normalize EOL, never text-diff.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.tgz  binary
