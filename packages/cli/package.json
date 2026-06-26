@@ -1,0 +1,22 @@
+{
+  "name": "@rh/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Meta-installer + settings CLI for rh-claude-framework. Reads from sibling packages (oversight, output, shared, skills) and writes to ~/.claude/.",
+  "bin": {
+    "rh-oversight": "bin/rh-oversight.js"
+  },
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/"
+  ],
+  "license": "MIT",
+  "author": "Ross Beveridge",
+  "engines": {
+    "node": ">=18"
+  }
+}

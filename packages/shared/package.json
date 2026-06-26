@@ -1,0 +1,22 @@
+{
+  "name": "@rh/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared infrastructure for rh-claude-framework — config resolution, file locking, env helpers",
+  "main": "index.js",
+  "files": [
+    "config.js",
+    "file-lock.js",
+    "env.js",
+    "index.js",
+    "install.json"
+  ],
+  "license": "MIT",
+  "author": "Ross Beveridge",
+  "scripts": {
+    "test": "echo 'No tests for this package' && exit 0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

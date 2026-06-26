@@ -1,0 +1,12 @@
+{
+  "package": "@rh/skills",
+  "operations": [
+    {
+      "kind": "copySubdirs",
+      "from": ".",
+      "to": "skillsDir",
+      "label": "skill files",
+      "_note": "Only subdirectories (each skill is a dir like rh-quit/, rh-session/). Top-level package.json and install.json belong to the npm workspace, not the install set."
+    }
+  ]
+}

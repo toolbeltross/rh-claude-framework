@@ -1,0 +1,42 @@
+# Workspace Configuration
+
+## Session Start
+At the start of every new conversation, run `/session` to display the active environment inventory before doing anything else.
+
+## Navigation
+This workspace contains multiple project domains. When opening at the root level,
+read the relevant domain CLAUDE.md before doing any work.
+
+| Domain | Path | Access | Description |
+|--------|------|--------|-------------|
+{{DOMAIN_TABLE}}
+
+## Security Rules
+{{#PRIVATE_DIRS}}
+- `{{DIR}}/` is PRIVATE. Contents must never appear in any agent output, summary, or artifact.
+{{/PRIVATE_DIRS}}
+- NEVER include financial account numbers, SSNs, or EINs in any output.
+- NEVER commit `.env`, credentials, or API keys to any repository.
+
+## Global Conventions
+- Every project folder gets a CLAUDE.md
+- xlwings for ALL xlsx writes (openpyxl destroys charts/comments)
+- Session state files: current facts only, archive history when > 100 lines
+- All plans follow checkbox tracking for session recovery
+- ALWAYS provide the full absolute path when referencing any file in output
+
+## MCP Servers
+- desktop-commander: filesystem + process management
+- memory: persistent knowledge graph
+- pdf-reader: parallel PDF extraction
+- context7: version-specific library docs
+
+## Plan Standards
+All plans must include: checkbox tracking for session recovery, per-step verification,
+prerequisite checks, idempotent steps, failure handling with fallbacks, phase grouping,
+recovery notes section, and time estimates.
+
+## Agent Architecture
+- Universal agents at `~/.claude/agents/`
+- Project-specific agents at `<project>/.claude/agents/` where needed
+- CLAUDE.md hierarchy is the shared-conventions backbone (walks up from CWD)

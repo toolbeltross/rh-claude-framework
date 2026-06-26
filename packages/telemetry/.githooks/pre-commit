@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# rh-telemetry pre-commit hook — runs the unit tier.
+#
+# Skipping: git commit --no-verify
+# Reinstall: rh-telemetry repair-statusline (no — wrong cmd) → run
+#            'rh-telemetry install-git-hooks' or 'node scripts/install-git-hooks.js'
+set -e
+
+# Move to repo root
+cd "$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+
+# If node isn't on PATH, don't block the commit — just warn
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-commit] node not on PATH — skipping unit tests"
+  exit 0
+fi
+
+echo "[pre-commit] running unit tests..."
+if npm run --silent test:unit; then
+  echo "[pre-commit] unit tests passed"
+  exit 0
+else
+  echo ""
+  echo "[pre-commit] unit tests FAILED. Commit aborted."
+  echo "[pre-commit] Fix the failing tests, or use 'git commit --no-verify' to bypass."
+  exit 1
+fi

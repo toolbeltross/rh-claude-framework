@@ -1,0 +1,19 @@
+{
+  "name": "@rh/skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "User-invocable skills for rh-claude-framework (rh-quit, rh-session, etc.)",
+  "files": [
+    "rh-quit/",
+    "rh-session/",
+    "install.json"
+  ],
+  "license": "MIT",
+  "author": "Ross Beveridge",
+  "scripts": {
+    "test": "echo 'No tests for this package' && exit 0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

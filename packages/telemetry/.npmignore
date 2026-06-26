@@ -1,0 +1,19 @@
+# Internal dev docs
+docs/
+
+# Source code (dist/ has the built frontend)
+src/
+
+# Gist publishing artifacts
+scripts/gist/
+
+# Dev/test files
+tests/
+CLAUDE.md
+.claude/
+.vite/
+
+# Build/publish artifacts
+PLAN-*.md
+*.tgz
+hook-debug.log

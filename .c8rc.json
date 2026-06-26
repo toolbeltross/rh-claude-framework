@@ -1,0 +1,26 @@
+{
+  "all": true,
+  "include": [
+    "packages/shared/*.js",
+    "packages/oversight/scripts/**/*.js",
+    "packages/output/scripts/**/*.js",
+    "packages/cli/lib/**/*.js",
+    "packages/cli/bin/**/*.js",
+    "packages/telemetry/server/**/*.js",
+    "packages/telemetry/scripts/**/*.js",
+    "packages/telemetry/bin/**/*.js"
+  ],
+  "exclude": [
+    "**/tests/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/dist-v2/**",
+    "**/src/**",
+    "**/src-v2/**",
+    "**/*.config.js",
+    "**/*.config.v2.js",
+    "**/coverage/**"
+  ],
+  "reporter": ["text-summary", "text"],
+  "report-dir": "./coverage"
+}
