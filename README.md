@@ -1,16 +1,18 @@
 # rh-claude-framework
 
-A production Claude Code oversight framework: 10 reusable enforcement patterns, 25 hook scripts, 19 specialist agents, and a real-time monitoring dashboard — packaged as an installable monorepo.
+A real-time telemetry dashboard for Claude Code — live monitoring of context, cost, tool activity, subagents, and failures across sessions — with an optional oversight layer (enforcement hooks, specialist agents, and workspace rules) on top. Packaged as an installable monorepo.
 
 ## Why this exists
 
-Claude Code is powerful but opaque at scale. A session that "worked" may have:
+Claude Code is powerful but opaque at scale — sessions run up cost, burn context, spawn subagents, and hit failures with little real-time visibility. The **telemetry dashboard** makes all of it observable live: context-window fill, per-turn cost and tool activity, active subagents, and a cross-session failure feed.
+
+That visibility also surfaces the *silent* failures — the ones a session that "worked" still hides:
 - Read only the first 400 lines of an 800-line source file and called it "incorporated"
 - Dispatched a subagent with no completeness requirements — and silently passed through its unverifiable output
 - Written a "comprehensive synthesis" document with no way to audit which sources were actually read
 - Captured no learnings, recommendations, or cleanup items when the session closed
 
-This framework closes those gaps with hooks, rules, agents, and a dashboard — all portable and installable in under a minute.
+When you want to *enforce* against those, the **optional oversight layer** adds hooks, rules, and agents that catch them in the act. Both halves are portable and installable in under a minute.
 
 ![RH-Telemetry dashboard — live session view](docs/screenshots/dashboard-live.png)
 
