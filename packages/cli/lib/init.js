@@ -29,8 +29,32 @@ function parseArgs() {
     else if (args[i] === '--private-dirs' && args[i + 1]) opts.privateDirs = args[++i].split(',').map(s => s.trim());
     else if (args[i] === '--dry-run') opts.dryRun = true;
     else if (args[i] === '--skip-hooks') opts.skipHooks = true;
+    else if (args[i] === '--yes' || args[i] === '-y' || args[i] === '--no-prompt') opts.noPrompt = true;
   }
   return opts;
+}
+
+// Minimal dependency-free synchronous line prompt. Only invoked when stdin is a
+// TTY (guarded at the call site), so a blocking read is appropriate and there is
+// no headless/CI hang risk. Returns the trimmed first line, or '' on EOF/error so
+// the caller falls back to the default.
+function promptLineSync(question) {
+  process.stdout.write(question);
+  const buf = Buffer.alloc(1024);
+  let input = '';
+  for (;;) {
+    let bytes;
+    try {
+      bytes = fs.readSync(0, buf, 0, buf.length, null);
+    } catch (e) {
+      if (e.code === 'EAGAIN') continue; // stdin not ready yet — retry
+      break;                             // EOF or other — give up, use default
+    }
+    if (bytes === 0) break;
+    input += buf.toString('utf8', 0, bytes);
+    if (input.includes('\n')) break;
+  }
+  return input.split('\n')[0].replace(/\r$/, '').trim();
 }
 
 function copyDir(src, dest, opts) {
@@ -258,10 +282,29 @@ function run(extraOpts = {}) {
   // fresh `rh-oversight init` (no flags) finds the same oversight-system/
   // directory the deployed scripts would resolve to. Falls back to
   // ~/.claude/oversight only when no oversight-system/ marker is found on disk.
-  const oversightDir =
-    opts.oversightDir ||
+  const oversightDirDefault =
     configModule.autoDetectOversightDir() ||
     path.join(CLAUDE_DIR, 'oversight');
+  // The oversight content/docs dir is where the locally-specific oversight files
+  // live and are read/written — the design doc (OVERSIGHT_SYSTEM.md), generated
+  // OVERSIGHT_STATE.md, and the supervisory log. A user who keeps these in an
+  // external content repo can point init at it interactively, and the value is
+  // merge-preserved in oversight.json so it survives no-flag re-runs.
+  // Resolution priority: explicit --oversight-dir flag > interactive prompt >
+  // autodetected default. Prompting is suppressed by --oversight-dir, --yes/
+  // --no-prompt, --dry-run, reset, and any non-TTY stdin (CI / piped / headless),
+  // so non-interactive installs behave exactly as before.
+  let oversightDir = opts.oversightDir || oversightDirDefault;
+  // Track whether the value was actively chosen (via flag OR prompt) vs. merely
+  // defaulted. Only an actively-chosen value is passed to mergeConfigData's
+  // "explicit" bucket below, so a prompted path wins over a stale oversightDir in
+  // an existing oversight.json on re-runs — while a defaulted value must NOT
+  // clobber a user's hand-tuned config.
+  let oversightDirChosen = !!opts.oversightDir;
+  if (!opts.oversightDir && !opts.dryRun && !opts.reset && !opts.noPrompt && process.stdin.isTTY) {
+    const answer = promptLineSync(`  Oversight content/docs directory [${oversightDirDefault}]: `);
+    if (answer) { oversightDir = answer; oversightDirChosen = true; }
+  }
   const scriptsDir = path.join(CLAUDE_DIR, 'scripts');
   const agentsDir = path.join(CLAUDE_DIR, 'agents');
   const skillsDir = path.join(CLAUDE_DIR, 'skills');
@@ -293,7 +336,7 @@ function run(extraOpts = {}) {
     try { existingConfig = JSON.parse(fs.readFileSync(configPath, 'utf8')) || {}; } catch { /* absent or invalid - treat as none */ }
     const mergedConfig = mergeConfigData(configData, existingConfig, {
       workspace: opts.workspace ? workspace : undefined,
-      oversightDir: opts.oversightDir ? oversightDir : undefined,
+      oversightDir: oversightDirChosen ? oversightDir : undefined,
       privateDirs: opts.privateDirs,
     });
     if (opts.dryRun) console.log(`  [dry-run] would write ${configPath}`);
@@ -366,4 +409,4 @@ function run(extraOpts = {}) {
   console.log('\n  Done. Run `rh-oversight self-test` to verify.\n');
 }
 
-module.exports = { run, mergeHooksData, buildConfigData, mergeConfigData };
+module.exports = { run, parseArgs, mergeHooksData, buildConfigData, mergeConfigData };

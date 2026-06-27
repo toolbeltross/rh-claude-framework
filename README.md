@@ -48,7 +48,9 @@ node packages/cli/bin/rh-oversight.js init --workspace /path/to/your/workspace
 6. Merges hooks into `~/.claude/settings.json` (additive — preserves your existing entries by matcher)
 7. Writes a starter `<workspace>/CLAUDE.md` if one doesn't exist
 
-Flags: `--dry-run`, `--skip-hooks`.
+Flags: `--dry-run`, `--skip-hooks`, `--oversight-dir <path>`, `--yes`/`--no-prompt`.
+
+`--oversight-dir <path>` sets where the locally-specific oversight files are read/written — the design doc (`OVERSIGHT_SYSTEM.md`), the generated `OVERSIGHT_STATE.md`, and the supervisory log. If you omit it on an interactive (TTY) run, `init` **prompts** for it, suggesting the autodetected default (`~/.claude/oversight`); on non-interactive runs (CI, piped, headless) it uses that default silently. Pass `--yes` (alias `--no-prompt`) to accept defaults without prompting. The chosen value is written to `oversight.json` and merge-preserved across re-runs.
 
 > `npm install` also builds the telemetry dashboard bundles via the root `prepare` script (requires devDependencies — don't use `--omit=dev` if you want the dashboard). See **Telemetry dashboard** below.
 

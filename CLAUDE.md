@@ -44,7 +44,7 @@ rh-claude-framework/
     │
     ├── cli/                        # @rh/cli — meta-installer + settings CLI
     │   ├── bin/rh-oversight.js     # CLI entry (init / reset / self-test / settings / supervisor-sweep / health)
-    │   ├── lib/init.js             # install logic + mergeHooksData (F-10 fix) + pre-write validator gate (P2-4)
+    │   ├── lib/init.js             # install logic + mergeHooksData (F-10 fix) + pre-write validator gate (P2-4) + interactive oversight-dir prompt (TTY-only; --yes/--no-prompt skips)
     │   ├── lib/settings-cli.js     # `rh-oversight settings <sub>` (validate/show/diff/merge/backup/restore)
     │   ├── templates/              # settings.json + CLAUDE.md templates
     │   └── tests/                  # init-merge + cross-package-contract + settings-cli (62 tests)
@@ -94,7 +94,7 @@ The "tmp HOME" pattern is the outer-seam verification per `rh-work-verification.
 - **5-package reorg (2026-05-11, PRs #21–23)** — shared / oversight / output / skills / cli / telemetry. Separates infrastructure (shared) from enforcement (oversight) from rendered output (output) from user surfaces (skills) from install logic (cli). Telemetry already standalone.
 - **Telemetry migration via subtree** — preserves history at the new path (`packages/telemetry/`).
 - **`rh-security.md` split** — base file ships with the framework; `rh-security-local.md.template` is the user-private dirs list, gitignored at install time.
-- **Generators use configurable `oversightDir`** — defaults to `~/.claude/oversight/`. A user's local config may point it at an external oversight-system directory.
+- **Generators use configurable `oversightDir`** — defaults to `~/.claude/oversight/`. A user's local config may point it at an external oversight-system directory. `init` resolves it as: explicit `--oversight-dir` flag > interactive prompt (TTY runs only; suggests the autodetected default) > autodetected `oversight-system/` marker > `~/.claude/oversight`. The value is merge-preserved in `oversight.json`; only a flag- or prompt-chosen value enters `mergeConfigData`'s explicit bucket, so a prompted path overrides a stale config on re-runs while a defaulted value never clobbers it.
 - **Settings.json pre-write validator (P2-4)** — `cli/lib/init.js` runs `validateSettings()` on the fully-merged object before any write. Errors abort without modifying the live file; warnings surface but allow.
 - **Per-turn scribe staging (P1-3)** — on by default. Disable via `RH_SCRIBE_STAGING=0` or `oversight.json:scribeStaging:false`.
 - **Cross-package trends (P3-2)** — telemetry server bridges to the CJS sweep module via `createRequire`. Single canonical aggregation; both `rh-oversight supervisor-sweep` and `GET /api/trends` produce the same data.
