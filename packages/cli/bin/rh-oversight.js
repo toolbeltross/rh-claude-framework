@@ -58,10 +58,14 @@ Commands:
 
 Options for init/reset:
   --workspace <path>      Workspace root directory (auto-detected if omitted)
-  --oversight-dir <path>  Where to write generated oversight docs (default: ~/.claude/oversight)
+  --oversight-dir <path>  Dir where the locally-specific oversight files are read/written
+                          (design doc OVERSIGHT_SYSTEM.md, generated OVERSIGHT_STATE.md,
+                          supervisory log). If omitted on an interactive (TTY) run, init
+                          prompts for it; otherwise autodetected, default ~/.claude/oversight.
   --private-dirs <dirs>   Comma-separated private directory names (e.g., "Personal,Financial")
   --dry-run               Show what would be done without writing files
   --skip-hooks            Don't merge hooks into settings.json
+  --yes, -y               Accept defaults; never prompt (alias: --no-prompt)
 `);
   process.exit(0);
 }
