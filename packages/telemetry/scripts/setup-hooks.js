@@ -2,7 +2,7 @@ import { readFile, writeFile, copyFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { homedir, platform } from 'os';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 import { repairStatusLine } from './repair-statusline.js';
 
@@ -289,11 +289,10 @@ async function main() {
 
 // Guard: only run main() when invoked as a CLI, not on import (tests import
 // buildHookConfig directly and must not trigger settings.json writes).
+// pathToFileURL matches import.meta.url's percent-encoding (e.g. spaces → %20);
+// a hand-built `file://` string breaks on paths like C:\Users\First Last.
 const argv1 = process.argv[1] || '';
-const isCliEntry = argv1.length > 0 && (
-  import.meta.url === `file://${argv1}`
-  || import.meta.url === `file:///${argv1.replace(/\\/g, '/')}`
-);
+const isCliEntry = argv1.length > 0 && import.meta.url === pathToFileURL(argv1).href;
 if (isCliEntry) {
   main().catch(console.error);
 }
