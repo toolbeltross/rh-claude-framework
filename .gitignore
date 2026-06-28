@@ -2,7 +2,15 @@ node_modules/
 dist/
 *.log
 .DS_Store
+Thumbs.db
 *.lock
+
+# Secrets / env files — never commit credentials or local environment config
+.env
+.env.*
+
+# Local scratch / throwaway artifacts (screenshots, API dumps, one-off outputs)
+tmp/
 
 # Session-local scribe artifacts (the prefilter writes here when this repo
 # happens to be the active workspace). Never belongs in the framework repo.
