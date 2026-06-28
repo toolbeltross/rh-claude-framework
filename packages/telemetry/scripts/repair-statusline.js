@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { createInterface } from 'readline/promises';
 import { stdin, stdout } from 'process';
 import { dirname, join, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { homedir } from 'os';
 
 import { classifyStatusLineFromFile } from './statusline-classifier.js';
@@ -297,11 +297,12 @@ export async function repairStatusLine({ force = false, quiet = false } = {}) {
 }
 
 // --- CLI entry point ---
-// Run when invoked directly (not when imported as a module)
+// Run when invoked directly (not when imported as a module).
+// Use pathToFileURL so the comparison matches import.meta.url's percent-encoding
+// (e.g. spaces → %20). A hand-built `file://` string breaks on home paths that
+// contain spaces or other URL-special characters (e.g. C:\Users\First Last).
 const argv1 = process.argv[1] || '';
-const isDirectInvocation =
-  import.meta.url === `file://${argv1}` ||
-  import.meta.url === `file:///${argv1.replace(/\\/g, '/')}`;
+const isDirectInvocation = argv1 !== '' && import.meta.url === pathToFileURL(argv1).href;
 
 if (isDirectInvocation) {
   const args = process.argv.slice(2);
