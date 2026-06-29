@@ -65,18 +65,50 @@ function criticalDirs() {
 }
 
 // Pull every script path a hook command references out of a settings object.
+//
+// Parses the JSON and walks command strings so QUOTED paths that contain a
+// space are captured intact — e.g. `node "C:/Users/First Last/.claude/scripts/
+// rh-x.js"`. The previous raw-text regex had no space in its character class,
+// so a home path with a space (very common: `C:\Users\First Last`, OneDrive)
+// made every hook look "missing" — a false CRITICAL at every session close.
+// Falls back to the legacy raw scan only if the settings JSON won't parse.
 function collectScriptRefs(settingsRaw) {
   const refs = new Set();
-  const re = /[A-Za-z0-9_.~$:\\/\-]+\.(?:js|cjs|mjs)\b/g;
-  let m;
-  while ((m = re.exec(settingsRaw)) !== null) refs.add(m[0]);
-  return [...refs].map(r => {
-    let p = r
+  const addPath = (p) => {
+    if (!p) return;
+    p = p
       .replace(/^~/, config.home)
       .replace(/\$HOME|\$\{HOME\}/g, config.home)
       .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g, config.claudeDir);
-    return path.normalize(p);
-  });
+    refs.add(path.normalize(p));
+  };
+  const fromCommand = (cmd) => {
+    if (typeof cmd !== 'string') return;
+    let m;
+    // Quoted paths first (may contain spaces): node "…/x.js" arg
+    const quoted = /"([^"]*\.(?:js|cjs|mjs))"/g;
+    while ((m = quoted.exec(cmd)) !== null) addPath(m[1]);
+    // Then unquoted tokens (no spaces) on the de-quoted remainder.
+    const stripped = cmd.replace(/"[^"]*"/g, ' ');
+    const unquoted = /(?:^|\s)([^\s"]+\.(?:js|cjs|mjs))(?=\s|$)/g;
+    while ((m = unquoted.exec(stripped)) !== null) addPath(m[1]);
+  };
+
+  let parsed = null;
+  try { parsed = JSON.parse(settingsRaw); } catch { /* fall through to legacy scan */ }
+  if (parsed && parsed.hooks && typeof parsed.hooks === 'object') {
+    for (const phase of Object.values(parsed.hooks)) {
+      if (!Array.isArray(phase)) continue;
+      for (const entry of phase) for (const h of (entry && entry.hooks) || []) fromCommand(h && h.command);
+    }
+    if (parsed.statusLine && parsed.statusLine.command) fromCommand(parsed.statusLine.command);
+    return [...refs];
+  }
+  // Fallback: settings.json unparseable — best-effort legacy scan (no spaces).
+  const re = /[A-Za-z0-9_.~$:\\/\-]+\.(?:js|cjs|mjs)\b/g;
+  let m;
+  while ((m = re.exec(settingsRaw)) !== null) addPath(m[0]);
+  return [...refs];
 }
 
 // Recursive node walk (metadata only — statSync does NOT hydrate cloud files).

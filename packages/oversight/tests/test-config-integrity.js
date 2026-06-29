@@ -176,6 +176,39 @@ const tests = [
       assert.match(r.stdout, /\[(OK|WARN|CRIT|--)\]/, 'should include status glyphs');
     }),
   },
+  {
+    // Regression: a home path containing a space + quoted hook commands (the
+    // form `rh-oversight init` / `rh-telemetry setup` now emit) must NOT be
+    // reported as missing. Pre-fix, collectScriptRefs' character-class regex
+    // captured only the fragment after the space → false hook-references CRIT
+    // at every session close for any user under C:\Users\First Last (etc.).
+    name: 'spaced home path + quoted command → hook-references ok (spaced-path regression)',
+    fn: () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-cfgint-sp-'));
+      const home = path.join(base, 'First Last'); // deliberate space in the path
+      const claudeDir = path.join(home, '.claude');
+      const scriptsDir = path.join(claudeDir, 'scripts');
+      const rulesDir = path.join(home, 'ws', '.claude', 'rules');
+      const oversightDir = path.join(home, 'oversight');
+      for (const d of [scriptsDir, rulesDir, oversightDir]) fs.mkdirSync(d, { recursive: true });
+      try {
+        assert.ok(home.includes(' '), 'precondition: home path must contain a space');
+        const ref = path.join(scriptsDir, 'rh-some-guard.js').replace(/\\/g, '/');
+        fs.writeFileSync(ref, '// guard\n');
+        const settings = { hooks: { Stop: [{ hooks: [{ type: 'command', command: `node "${ref}"` }] }] } };
+        fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify(settings, null, 2));
+        fs.writeFileSync(path.join(rulesDir, 'rh-example.md'), '# rule\n');
+        const r = spawnSync('node', [SCRIPT, '--json'], {
+          encoding: 'utf8', timeout: 40000, windowsHide: true,
+          env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_DIR: claudeDir, CLAUDE_WORKSPACE: path.join(home, 'ws'), OVERSIGHT_DIR: oversightDir },
+        });
+        const probe = JSON.parse(r.stdout).probes.find(p => p.name === 'hook-references');
+        assert.strictEqual(probe.level, 'ok', `spaced-path quoted command should resolve; got ${probe.level} — ${probe.detail}`);
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    },
+  },
 ];
 
 module.exports = { tests };
