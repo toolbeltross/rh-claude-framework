@@ -4,6 +4,27 @@ const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { spawnSync } = require('child_process');
+
+// Resolve config.contextDb in a CHILD process with an isolated empty HOME, so
+// the developer's real ~/.claude/oversight.json (which legitimately has
+// contextDb:true once `rh-oversight db-init` enables the Postgres shadow) can't
+// skew the "off by default" check. config.js fixes CONFIG_PATH from HOME at
+// module load, so a fresh child with HOME=<empty> is the reliable isolation.
+function contextDbInIsolatedHome(rhContextDb) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-cfg-iso-'));
+  try {
+    const cfg = path.resolve(__dirname, '..', '..', 'shared', 'config.js');
+    const env = { ...process.env, HOME: dir, USERPROFILE: dir };
+    delete env.CLAUDE_DIR; delete env.OVERSIGHT_DIR;
+    if (rhContextDb === undefined) delete env.RH_CONTEXT_DB; else env.RH_CONTEXT_DB = rhContextDb;
+    const r = spawnSync(process.execPath, ['-e',
+      `const{resolveConfig}=require(${JSON.stringify(cfg)});process.stdout.write(String(resolveConfig().contextDb))`],
+      { encoding: 'utf8', env });
+    if (r.status !== 0) throw new Error('isolated config probe failed: ' + (r.stderr || ''));
+    return r.stdout.trim() === 'true';
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
 
 function withTmpDir(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-oversight-test-'));
@@ -66,7 +87,7 @@ const tests = [
       try {
         delete process.env.RH_CONTEXT_DB;
         resetCache();
-        assert.strictEqual(resolveConfig().contextDb, false, 'off by default');
+        assert.strictEqual(contextDbInIsolatedHome(undefined), false, 'off by default (isolated empty HOME)');
         process.env.RH_CONTEXT_DB = '1';
         resetCache();
         assert.strictEqual(resolveConfig().contextDb, true, 'RH_CONTEXT_DB=1 enables');

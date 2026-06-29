@@ -42,6 +42,16 @@ const commands = {
     const code = require(path.join(OVERSIGHT_SCRIPTS, 'rh-supervisor-sweep')).run(args);
     process.exit(code);
   },
+  status:         () => require('../lib/status').run().then((code) => process.exit(code)),
+  'db-init':      () => process.exit(require('../lib/db-init').run()),
+  'ingest-logs':  () => {
+    const r = require('child_process').spawnSync('node', [path.join(OUTPUT_SCRIPTS, 'rh-ingest-logs.js'), ...process.argv.slice(3)], { stdio: 'inherit' });
+    process.exit(r.status ?? 0);
+  },
+  'ingest-transcripts': () => {
+    const r = require('child_process').spawnSync('node', [path.join(OUTPUT_SCRIPTS, 'rh-transcript-ingest.js'), ...process.argv.slice(3)], { stdio: 'inherit' });
+    process.exit(r.status ?? 0);
+  },
 };
 
 if (!command || command === '--help' || command === '-h') {
@@ -65,6 +75,15 @@ Commands:
                     Reads oversight-events.jsonl + supervisory-log.md;
                     writes ~/.claude/memory-shared/supervisor-trends.md.
                     Flags: --days N --out <path> --json --dry-run.
+  status [--json]   One-screen "is the full system on?" readout: oversight hooks,
+                    telemetry hooks + server reachability, Postgres shadow state.
+  db-init           Bootstrap the local Postgres FTS shadow (role/db + schema +
+                    pgpass + flags + verify). Needs superuser once via PGPASSWORD
+                    or --superuser-password. Flags: --dry-run --db-name --db-user
+                    --host --port --psql --superuser.
+  ingest-logs       Backfill supervisory-log + oversight-events + telemetry-
+                    failures into the FTS DB. Flags: --full --dry-run --stats.
+  ingest-transcripts  Backfill session transcripts into the FTS DB.
 
 Options for init/reset:
   --workspace <path>      Workspace root directory (auto-detected if omitted)
