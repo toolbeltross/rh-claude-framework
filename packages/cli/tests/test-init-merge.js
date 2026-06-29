@@ -315,6 +315,54 @@ const tests = [
       assert.deepStrictEqual(merged, detected, 'no existing keys -> detected written as-is');
     },
   },
+
+  // ─── Upgrade-safe merge: stale UNQUOTED command → QUOTED, no duplicate ──
+  // Origin: 2026-06-29. The path-quoting fix changed template commands from
+  // `node X.js` to `node "X.js"`. Re-running init on an older install must
+  // UPGRADE the stale command in place, not append the quoted one alongside
+  // the broken unquoted one.
+  {
+    name: 'upgrade — stale unquoted command is replaced by the quoted template command (no duplicate)',
+    fn: () => {
+      const existing = { PreToolUse: [entry('Agent', ['node /home/u/.claude/scripts/rh-agent-oversight-guard.js'])] };
+      const template = { PreToolUse: [entry('Agent', ['node "/home/u/.claude/scripts/rh-agent-oversight-guard.js"'])] };
+      const merged = mergeHooksData(existing, template);
+      const cmds = commandsIn(merged, 'PreToolUse');
+      assert.strictEqual(cmds.length, 1, `expected exactly one command; got ${JSON.stringify(cmds)}`);
+      assert.strictEqual(
+        cmds[0], 'node "/home/u/.claude/scripts/rh-agent-oversight-guard.js"',
+        `expected the quoted form to win; got ${cmds[0]}`
+      );
+    },
+  },
+  {
+    name: 'upgrade — re-running with identical quoted commands is idempotent (no duplicate)',
+    fn: () => {
+      const quoted = { Stop: [entry(null, [
+        'node "/home/u/.claude/scripts/rh-scribe-prefilter.js"',
+        'node "/home/u/.claude/scripts/rh-layer3a-capture.js"',
+      ])] };
+      const once = mergeHooksData({}, quoted);
+      const twice = mergeHooksData(once, quoted);
+      assert.deepStrictEqual(commandsIn(twice, 'Stop'), commandsIn(once, 'Stop'), 'second merge must not change the chain');
+      assert.strictEqual(commandsIn(twice, 'Stop').length, 2, 'no duplicates introduced');
+    },
+  },
+  {
+    name: 'upgrade — a foreign (non-template) hook is preserved across the upgrade',
+    fn: () => {
+      const existing = { PostToolUse: [entry('Agent', [
+        'node "/p/telemetry/scripts/hook-forwarder.js" tool "$X"',          // foreign — keep
+        'node /home/u/.claude/scripts/rh-agent-result-guard.js',            // stale unquoted — upgrade
+      ])] };
+      const template = { PostToolUse: [entry('Agent', ['node "/home/u/.claude/scripts/rh-agent-result-guard.js"'])] };
+      const cmds = commandsIn(mergeHooksData(existing, template), 'PostToolUse');
+      assert.ok(cmds.includes('node "/p/telemetry/scripts/hook-forwarder.js" tool "$X"'), `foreign hook must survive; got ${JSON.stringify(cmds)}`);
+      assert.ok(cmds.includes('node "/home/u/.claude/scripts/rh-agent-result-guard.js"'), 'oversight hook upgraded to quoted');
+      assert.strictEqual(cmds.filter(c => c.includes('rh-agent-result-guard')).length, 1, 'no duplicate of the upgraded hook');
+      assert.strictEqual(cmds.length, 2, `expected exactly two commands; got ${JSON.stringify(cmds)}`);
+    },
+  },
 ];
 
 module.exports = { tests };
