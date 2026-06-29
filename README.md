@@ -32,6 +32,8 @@ When you want to *enforce* against those, the **optional oversight layer** adds 
 
 ## Install
 
+**Prerequisites:** [git](https://git-scm.com/), **Node.js ≥ 18**, and [Claude Code](https://claude.com/claude-code) installed (the framework installs into its `~/.claude/`). On Windows, if your clone path is deep or contains spaces, enable long-path support once: `git config --global core.longpaths true`.
+
 ```bash
 git clone https://github.com/toolbeltross/rh-claude-framework
 cd rh-claude-framework
@@ -52,7 +54,7 @@ Flags: `--dry-run`, `--skip-hooks`, `--oversight-dir <path>`, `--yes`/`--no-prom
 
 `--oversight-dir <path>` sets where the locally-specific oversight files are read/written — the design doc (`OVERSIGHT_SYSTEM.md`), the generated `OVERSIGHT_STATE.md`, and the supervisory log. If you omit it on an interactive (TTY) run, `init` **prompts** for it, suggesting the autodetected default (`~/.claude/oversight`); on non-interactive runs (CI, piped, headless) it uses that default silently. Pass `--yes` (alias `--no-prompt`) to accept defaults without prompting. The chosen value is written to `oversight.json` and merge-preserved across re-runs.
 
-> `npm install` also builds the telemetry dashboard bundles via the root `prepare` script (requires devDependencies — don't use `--omit=dev` if you want the dashboard). See **Telemetry dashboard** below.
+> `npm install` also builds the telemetry dashboard bundles via the root `prepare` script. This needs devDependencies (Vite), so **do not run `npm install --omit=dev` / `npm ci --omit=dev`** — the `prepare` build will fail with `'vite' is not recognized`. Use a plain `npm install`. See **Telemetry dashboard** below.
 
 ## Telemetry dashboard
 
