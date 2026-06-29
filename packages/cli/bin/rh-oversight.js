@@ -7,6 +7,16 @@
 const path = require('path');
 const command = process.argv[2];
 
+// Preflight: this framework (and the bundled telemetry dashboard) requires
+// Node >= 18. Fail fast with a clear message rather than a cryptic error deep
+// in an install on an old runtime.
+const MAJOR = parseInt(process.versions.node.split('.')[0], 10);
+if (Number.isFinite(MAJOR) && MAJOR < 18) {
+  console.error(`rh-oversight requires Node.js >= 18 (you have ${process.versions.node}).`);
+  console.error('Upgrade Node, then re-run. See https://nodejs.org/.');
+  process.exit(1);
+}
+
 const PACKAGES_ROOT = path.join(__dirname, '..', '..');
 const OVERSIGHT_SCRIPTS = path.join(PACKAGES_ROOT, 'oversight', 'scripts');
 const OUTPUT_SCRIPTS = path.join(PACKAGES_ROOT, 'output', 'scripts');
@@ -75,4 +85,14 @@ if (!commands[command]) {
   process.exit(1);
 }
 
-commands[command]();
+// Run the command, catching both synchronous throws and async rejections so a
+// mid-install failure surfaces a clear recovery path instead of a raw stack.
+Promise.resolve()
+  .then(() => commands[command]())
+  .catch((err) => {
+    console.error(`\nrh-oversight ${command} failed: ${err && err.message ? err.message : err}`);
+    if (command === 'init' || command === 'reset') {
+      console.error('If the install left partial state, recover with:  rh-oversight reset && rh-oversight init');
+    }
+    process.exit(1);
+  });
