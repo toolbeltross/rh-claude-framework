@@ -128,13 +128,23 @@ function mergeHooksData(existingHooks, templateHooks) {
   // Detect Layer 3a prompts by signature ("ADDITIVE ONLY" + "Layer 3a") and
   // collapse them to a single synthetic key. Other prompt-type hooks still
   // dedupe by body, preserving the existing per-turn-prompt behavior.
+  // Canonicalize a command so quoted and unquoted variants of the same
+  // invocation collapse to one identity. Without this, the 2026-06-29 path-
+  // quoting fix (`node X.js` → `node "X.js"`) would cause a re-run of init on
+  // an older install to APPEND the quoted command alongside the stale unquoted
+  // one (different raw strings) instead of upgrading it — leaving a broken
+  // duplicate. Stripping double quotes makes `node "X.js" a` === `node X.js a`.
+  function canonicalCommand(cmd) {
+    return typeof cmd === 'string' ? cmd.replace(/"/g, '') : cmd;
+  }
   function hookKey(h) {
     if (!h) return '';
     if (h.type === 'prompt' && typeof h.prompt === 'string' &&
         h.prompt.includes('ADDITIVE ONLY') && h.prompt.includes('Layer 3a')) {
       return '__layer3a_supervisory_prompt__';
     }
-    return h.command || h.prompt || JSON.stringify(h);
+    if (h.command) return 'cmd:' + canonicalCommand(h.command);
+    return h.prompt || JSON.stringify(h);
   }
   // Identity for an entry — the matcher (or '*' for matcherless entries).
   // We merge per-hook within entries that share a matcher.
@@ -158,19 +168,48 @@ function mergeHooksData(existingHooks, templateHooks) {
     }
     for (const newEntry of templateEntries) {
       const newMatcher = entryMatcher(newEntry);
-      const existingEntryIdx = result[phase].findIndex(e => entryMatcher(e) === newMatcher);
 
-      if (existingEntryIdx === -1) {
-        // No existing entry with this matcher — add as a new entry
+      // Reconcile against ALL existing entries that share this matcher — not
+      // just the first. Matcherless phases (e.g. SessionStart) legitimately
+      // have multiple entries, and a given template hook may already live in
+      // any of them; matching only the first would append a duplicate into
+      // the first entry while leaving the stale copy in another.
+      const candidates = result[phase].filter(e => entryMatcher(e) === newMatcher);
+
+      if (candidates.length === 0) {
+        // No existing entry with this matcher — add as a new entry.
         result[phase].push({ ...newEntry, hooks: [...(newEntry.hooks || [])] });
         continue;
       }
 
-      // Same matcher — merge hooks per-hook. Foreign hooks are preserved.
-      const existingEntry = result[phase][existingEntryIdx];
-      const existingHookKeys = new Set((existingEntry.hooks || []).map(hookKey));
-      const newHooksToAdd = (newEntry.hooks || []).filter(h => !existingHookKeys.has(hookKey(h)));
-      existingEntry.hooks = [...(existingEntry.hooks || []), ...newHooksToAdd];
+      // For each template hook: if an existing hook anywhere in this matcher's
+      // chain has the same canonical identity, UPGRADE it in place (e.g.
+      // unquoted → quoted) rather than appending a duplicate; otherwise queue
+      // it to be added. Foreign hooks (no template match) are left untouched.
+      const toAdd = [];
+      for (const newHook of newEntry.hooks || []) {
+        const key = hookKey(newHook);
+        let handled = false;
+        for (const cand of candidates) {
+          const idx = (cand.hooks || []).findIndex(h => hookKey(h) === key);
+          if (idx === -1) continue;
+          if (newHook.command) {
+            // Replace stale command, preserving other fields (timeout, etc.).
+            cand.hooks[idx] = {
+              ...cand.hooks[idx],
+              type: newHook.type || cand.hooks[idx].type,
+              command: newHook.command,
+            };
+          }
+          handled = true;
+          break;
+        }
+        if (!handled) toAdd.push(newHook);
+      }
+      if (toAdd.length) {
+        const first = candidates[0];
+        first.hooks = [...(first.hooks || []), ...toAdd];
+      }
     }
   }
 
