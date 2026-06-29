@@ -136,6 +136,10 @@ Target wall-clock: < 90s for a typical session.
 | `rh-oversight generate-state` | Regenerate `OVERSIGHT_STATE.md` |
 | `rh-oversight settings <sub>` | Merge-aware CLI for `settings.json`: `validate / show / diff / merge / backup / restore` |
 | `rh-oversight supervisor-sweep [--days N]` | Cross-session trend doc — reads 7-day event window, writes `supervisor-trends.md` |
+| `rh-oversight status [--json]` | One-screen "is the full system on?" readout: oversight hooks, telemetry hooks + server reachability, Postgres shadow state |
+| `rh-oversight db-init` | Bootstrap the optional local Postgres FTS shadow (role/db + schema + pgpass + flags + verify). Needs a superuser once via `PGPASSWORD`/`--superuser-password` |
+| `rh-oversight ingest-logs [--full]` | Backfill supervisory-log + oversight-events + telemetry-failures into the FTS DB |
+| `rh-oversight ingest-transcripts` | Backfill session transcripts into the FTS DB |
 
 ## Architecture
 

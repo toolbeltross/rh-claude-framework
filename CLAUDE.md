@@ -43,8 +43,10 @@ rh-claude-framework/
     │   └── rh-session/             # /session — current-session inventory
     │
     ├── cli/                        # @rh/cli — meta-installer + settings CLI
-    │   ├── bin/rh-oversight.js     # CLI entry (init / reset / self-test / settings / supervisor-sweep / health)
+    │   ├── bin/rh-oversight.js     # CLI entry (init / reset / self-test / settings / supervisor-sweep / health / status / db-init / ingest-logs / ingest-transcripts)
     │   ├── lib/init.js             # install logic + mergeHooksData (F-10 fix) + pre-write validator gate (P2-4) + interactive oversight-dir prompt (TTY-only; --yes/--no-prompt skips)
+    │   ├── lib/db-init.js          # `db-init` — bootstrap local Postgres FTS shadow (role/db + pgpass + sql/ schema + flags + verify)
+    │   ├── lib/status.js           # `status` — unified "full system on?" readout (oversight + telemetry + DB)
     │   ├── lib/settings-cli.js     # `rh-oversight settings <sub>` (validate/show/diff/merge/backup/restore)
     │   ├── templates/              # settings.json + CLAUDE.md templates
     │   └── tests/                  # init-merge + cross-package-contract + settings-cli (62 tests)
