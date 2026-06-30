@@ -36,7 +36,7 @@ const { config } = require('./lib/config');
 const EVENTS_PATH = process.env.OVERSIGHT_EVENTS_PATH ||
   path.join(config.claudeDir, 'oversight-events.jsonl');
 const RECS_PATH = process.env.RECOMMENDATIONS_PATH ||
-  path.join(config.home, 'OneDrive', 'Workspace', 'recommendations.md');
+  path.join(config.workspace, 'recommendations.md');
 const LOOKBACK_DAYS = parseInt(process.env.LOOKBACK_DAYS, 10) || 7;
 const LAST_RUN_FILE = path.join(config.claudeDir, 'learning-loop-last-run.txt');
 // 20h same-day guard (was 6 days when cadence was weekly). At daily cadence,
