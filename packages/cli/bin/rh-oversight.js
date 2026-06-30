@@ -78,8 +78,8 @@ Commands:
   status [--json]   One-screen "is the full system on?" readout: oversight hooks,
                     telemetry hooks + server reachability, Postgres shadow state.
   db-init           Bootstrap the local Postgres FTS shadow (role/db + schema +
-                    pgpass + flags + verify). Needs superuser once via PGPASSWORD
-                    or --superuser-password. Flags: --dry-run --db-name --db-user
+                    pgpass + flags + verify). Needs superuser once via PGPASSWORD.
+                    Flags: --dry-run --db-name --db-user
                     --host --port --psql --superuser.
   ingest-logs       Backfill supervisory-log + oversight-events + telemetry-
                     failures into the FTS DB. Flags: --full --dry-run --stats.

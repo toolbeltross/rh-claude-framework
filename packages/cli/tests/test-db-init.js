@@ -59,7 +59,9 @@ const tests = [
       const o = parseArgs(['--dry-run', '--superuser', 'pg', '--superuser-password', 's3', '--db-name', 'd', '--db-user', 'u', '--host', 'h', '--port', '6000', '--psql', '/x/psql']);
       assert.strictEqual(o.dryRun, true);
       assert.strictEqual(o.superuser, 'pg');
-      assert.strictEqual(o.superuserPassword, 's3');
+      // --superuser-password is intentionally NOT a flag (argv is world-visible);
+      // the superuser password comes only from PGPASSWORD. The token is ignored.
+      assert.strictEqual(o.superuserPassword, undefined);
       assert.strictEqual(o.dbName, 'd');
       assert.strictEqual(o.dbUser, 'u');
       assert.strictEqual(o.host, 'h');
