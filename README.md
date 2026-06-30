@@ -56,6 +56,8 @@ Flags: `--dry-run`, `--skip-hooks`, `--oversight-dir <path>`, `--yes`/`--no-prom
 
 > `npm install` also builds the telemetry dashboard bundles via the root `prepare` script. This needs devDependencies (Vite), so **do not run `npm install --omit=dev` / `npm ci --omit=dev`** — the `prepare` build will fail with `'vite' is not recognized`. Use a plain `npm install`. See **Telemetry dashboard** below.
 
+> **Hitting setup snags** (npm skipping postinstall scripts, or keeping oversight content in an external repo)? See [`docs/INSTALL-NOTES.md`](docs/INSTALL-NOTES.md).
+
 ## Telemetry dashboard
 
 The dashboard is built automatically on `npm install` (root `prepare` → `build:dashboard`, which builds both the v1 and v2 bundles). Start the server:
