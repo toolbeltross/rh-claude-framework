@@ -20,6 +20,7 @@ import { getCcdSessionTitles } from './ccd-sessions.js';
 
 import {
   PORT,
+  HOST,
   VITE_DEV_PORT,
   CLAUDE_PROJECTS_DIR,
   JSONL_POLL_INTERVAL_MS,
@@ -291,8 +292,9 @@ startOversightWatcher((events) => {
 // Prune stale live sessions every 5 minutes (manual refresh button handles immediate cleanup)
 setInterval(() => store.pruneStale(), 5 * 60_000);
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`\n  Claude Code Telemetry Server`);
+  console.log(`  Bind:      ${HOST}:${PORT}${HOST === '127.0.0.1' ? ' (loopback — set RH_TELEMETRY_HOST=0.0.0.0 to expose on the LAN)' : ' (exposed beyond loopback)'}`);
   console.log(`  API:       http://localhost:${PORT}/api/snapshot`);
   console.log(`  WebSocket: ws://localhost:${PORT}/ws`);
   console.log(`  Dashboard: http://localhost:${VITE_DEV_PORT} (dev) or http://localhost:${PORT} (prod)\n`);
