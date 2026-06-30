@@ -2,9 +2,11 @@
 // PostToolUse:read_pdf logger + F-06 truncation warning.
 //
 // Spawn-based (the script runs its effect on load via wrapHook and has no
-// exports), so we feed crafted hook payloads on stdin with USERPROFILE pointed
-// at a tmp home and assert on the session-reads.log + warn-markers it writes.
-// OVERSIGHT_SELF_TEST=1 suppresses the timing-telemetry side channel.
+// exports), so we feed crafted hook payloads on stdin with HOME / CLAUDE_DIR
+// pointed at a tmp home and assert on the session-reads.log + warn-markers it
+// writes. (The script resolves these paths through @rh/shared/config, which is
+// HOME-first; setting only USERPROFILE under-isolates because Git Bash also
+// exports the real HOME.) OVERSIGHT_SELF_TEST=1 suppresses the timing side channel.
 
 const assert = require('assert');
 const fs = require('fs');
@@ -25,7 +27,7 @@ function runHook(home, stdinObj) {
   const input = typeof stdinObj === 'string' ? stdinObj : JSON.stringify(stdinObj);
   const r = spawnSync('node', [SCRIPT], {
     input, encoding: 'utf8', timeout: 5000, windowsHide: true,
-    env: { ...process.env, USERPROFILE: home, OVERSIGHT_SELF_TEST: '1' },
+    env: { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_DIR: path.join(home, '.claude'), OVERSIGHT_SELF_TEST: '1' },
   });
   assert.strictEqual(r.status, 0, `hook exited ${r.status}: ${(r.stderr || '').slice(0, 200)}`);
   return { stdout: r.stdout || '', stderr: r.stderr || '', out: JSON.parse(r.stdout || '{}') };
