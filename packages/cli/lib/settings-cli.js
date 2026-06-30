@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS = path.join(HOME, '.claude', 'settings.json');
 // settings-validator lives in the oversight package; cli is a sibling.
 const { validateFile, validateSettings, formatIssues } = require('../../oversight/scripts/lib/settings-validator');
 const { mergeHooksData } = require('./init');
+const { writeFileAtomic } = require('../../shared/fs-atomic');
 
 function parseArgs(argv) {
   const args = argv.slice(0);
@@ -189,7 +190,7 @@ function cmdMerge(positional, opts) {
   // Backup before writing
   const backupPath = `${target}.bak.${timestamp()}`;
   fs.copyFileSync(target, backupPath);
-  fs.writeFileSync(target, JSON.stringify(result, null, 2) + '\n', 'utf8');
+  writeFileAtomic(target, JSON.stringify(result, null, 2) + '\n');
   console.log(`Wrote merged settings to ${target}`);
   console.log(`Backup at ${backupPath}`);
   return 0;

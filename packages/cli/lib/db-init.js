@@ -20,6 +20,7 @@ const PACKAGES_ROOT = path.join(PKG_ROOT, '..');
 const REPO_ROOT = path.join(PACKAGES_ROOT, '..');
 const SHARED_PKG = path.join(PACKAGES_ROOT, 'shared');
 const SQL_DIR = path.join(REPO_ROOT, 'sql');
+const { writeFileAtomic } = require(path.join(SHARED_PKG, 'fs-atomic'));
 
 const PSQL_PROBES = [
   'C:/Program Files/PostgreSQL/18/bin/psql.exe',
@@ -188,7 +189,7 @@ function run(argv = process.argv.slice(3)) {
     let lines = [];
     if (fs.existsSync(ppath)) lines = fs.readFileSync(ppath, 'utf8').split(/\r?\n/).filter(Boolean).filter(l => !l.startsWith(prefix));
     lines.push(pline);
-    fs.writeFileSync(ppath, lines.join('\n') + '\n', 'utf8');
+    writeFileAtomic(ppath, lines.join('\n') + '\n', process.platform !== 'win32' ? { mode: 0o600 } : {});
     if (process.platform !== 'win32') { try { fs.chmodSync(ppath, 0o600); } catch {} }
   } catch (e) { console.error(`  ✗ pgpass write failed: ${e.message}`); return 1; }
 

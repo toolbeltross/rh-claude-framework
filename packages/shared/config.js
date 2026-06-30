@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { writeFileAtomic } = require('./fs-atomic');
 
 const HOME = process.env.HOME || process.env.USERPROFILE || os.homedir();
 const CLAUDE_DIR = path.join(HOME, '.claude');
@@ -143,7 +144,7 @@ function writeConfig(overrides) {
   const merged = { ...existing, ...overrides };
   const dir = path.dirname(CONFIG_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+  writeFileAtomic(CONFIG_PATH, JSON.stringify(merged, null, 2) + '\n');
   resetCache();
   return merged;
 }
