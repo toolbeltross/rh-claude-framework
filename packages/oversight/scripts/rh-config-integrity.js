@@ -114,16 +114,24 @@ function collectScriptRefs(settingsRaw) {
 // Recursive node walk (metadata only — statSync does NOT hydrate cloud files).
 function walkCritical(dirs) {
   const all = [];
-  const stack = [...dirs];
-  while (stack.length) {
-    const dir = stack.pop();
-    let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      const full = path.join(dir, e.name);
-      if (EXCLUDE_RE.test(full + path.sep)) continue;
-      if (e.isDirectory()) stack.push(full);
-      else if (e.isFile()) all.push(full);
+  for (const root of dirs) {
+    const stack = [root];
+    while (stack.length) {
+      const dir = stack.pop();
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        // Match the exclusion against the path RELATIVE to the critical root, so
+        // a throwaway subdir (tmp/, backups/, projects/, …) INSIDE the tree is
+        // skipped WITHOUT an incidental segment in the absolute prefix knocking
+        // out the whole scan — e.g. a workspace under ~/projects/… or the OS
+        // temp dir (/tmp/… on Linux, where the tests stage their fixtures).
+        const rel = path.sep + path.relative(root, full) + path.sep;
+        if (EXCLUDE_RE.test(rel)) continue;
+        if (e.isDirectory()) stack.push(full);
+        else if (e.isFile()) all.push(full);
+      }
     }
   }
   return all;
