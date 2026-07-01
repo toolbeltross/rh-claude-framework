@@ -9,9 +9,14 @@
 const fs = require('fs');
 const path = require('path');
 const { wrapHook } = require('./lib/hook-timing');
+const { config } = require('./lib/config');
 
-const LOG_PATH = process.env.USERPROFILE + '/.claude/session-reads.log';
-const WARN_MARKER_DIR = process.env.USERPROFILE + '/.claude/read-warn-markers';
+// Resolve under ~/.claude via config (HOME || USERPROFILE || os.homedir()). The
+// previous `process.env.USERPROFILE + '/.claude/...'` was undefined on macOS/
+// Linux — it wrote to a literal "undefined/.claude/..." dir, silently disabling
+// the F-06 truncation audit off-Windows.
+const LOG_PATH = path.join(config.claudeDir, 'session-reads.log');
+const WARN_MARKER_DIR = path.join(config.claudeDir, 'read-warn-markers');
 const TRUNCATION_THRESHOLD_LINES = 800;
 
 function todayStamp() {

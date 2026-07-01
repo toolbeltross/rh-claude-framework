@@ -127,18 +127,27 @@ function isRmTargetRootOrHome(token) {
 export const DANGEROUS_PATTERNS = [
   {
     test: (cmd) => {
-      const m = /(?:^|[;&|]\s*)rm\s+(.+)$/i.exec(cmd);
-      if (!m) return false;
-      return m[1]
-        .split(/\s+/)
-        .filter((tok) => tok && !tok.startsWith('-'))
-        .some(isRmTargetRootOrHome);
+      // Match rm at the start of the command, after a shell separator
+      // (; & |), after a NEWLINE (multiline flag — a multi-line bash block put
+      // `rm -rf /` on its own line and evaded the old single-line ^ anchor), or
+      // after `find … -exec`. Scan every line for an rm target.
+      for (const m of cmd.matchAll(/(?:^|[;&|\n]\s*|-exec\s+)rm\s+(.+)$/gim)) {
+        const hit = m[1]
+          .split(/\s+/)
+          .filter((tok) => tok && !tok.startsWith('-'))
+          .some(isRmTargetRootOrHome);
+        if (hit) return true;
+      }
+      return false;
     },
     message: 'BLOCKED: rm targeting the filesystem root, a drive root, or a home directory is extremely dangerous.',
   },
   {
-    test: (cmd) => />\s*~\/\.claude\/settings\.json/.test(cmd),
-    message: 'BLOCKED: Direct write to ~/.claude/settings.json — use setup-hooks.js instead.',
+    // Block redirecting (> or >>) into .claude/settings.json under ANY path
+    // form — ~, $HOME, %USERPROFILE%, an absolute path, or relative — and either
+    // path separator. The old regex only caught the literal `> ~/.claude/...`.
+    test: (cmd) => />>?\s*[^\s>|&;]*\.claude[\\/]settings\.json\b/i.test(cmd),
+    message: 'BLOCKED: Direct write to .claude/settings.json — use setup-hooks.js instead.',
   },
   {
     test: (cmd) => /chmod\s+777\s+\//.test(cmd),

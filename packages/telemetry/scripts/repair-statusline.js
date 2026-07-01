@@ -27,6 +27,7 @@ import { classifyStatusLineFromFile } from './statusline-classifier.js';
 import { appendHistoryEntry } from './statusline-history.js';
 import { generateWrapper } from './generate-statusline-wrapper.js';
 import { CLAUDE_SETTINGS_PATH } from '../server/config.js';
+import { writeFileAtomic } from './fs-atomic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -53,13 +54,11 @@ function readSettings(settingsPath = CLAUDE_SETTINGS_PATH) {
 }
 
 /**
- * Write settings.json atomically-ish (write then rename would be better but
- * cross-platform rename is flaky — direct write is acceptable here since the
- * file is small and we're the only writer during repair).
+ * Write settings.json atomically (temp file + rename). Protects the user's
+ * shared settings.json from truncation if the write is interrupted.
  */
 function writeSettings(settings, settingsPath = CLAUDE_SETTINGS_PATH) {
-  mkdirSync(dirname(settingsPath), { recursive: true });
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+  writeFileAtomic(settingsPath, JSON.stringify(settings, null, 2), { encoding: 'utf-8' });
 }
 
 /** Rewrite settings.statusLine.command to the telemetry forwarder, preserving other keys. */

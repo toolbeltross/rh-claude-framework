@@ -52,4 +52,26 @@ test('non-rm commands never match this rule', () => {
   assert.ok(!blocked('npm run format'), 'unrelated');
 });
 
+test('blocks rm -rf / hidden by a newline or find -exec (evasion regressions)', () => {
+  // A multi-line bash block put `rm -rf /` on its own line; the old single-line
+  // ^ anchor missed it.
+  assert.ok(blocked('echo hi\nrm -rf /'), 'newline-separated rm -rf /');
+  assert.ok(blocked('cd /tmp\n  rm -rf ~'), 'newline + indent then rm ~');
+  assert.ok(blocked('find . -exec rm -rf / \\;'), 'find -exec rm -rf /');
+  // find -exec rm of the FOUND files (the {} placeholder) is legitimate.
+  assert.ok(!blocked('find . -name "*.tmp" -exec rm -rf {} \\;'), 'find -exec rm of {} is allowed');
+});
+
+// ── settings.json clobber guard (DANGEROUS_PATTERNS[1]) ──────────────────────
+const settingsGuard = DANGEROUS_PATTERNS[1];
+const blockedSettings = (cmd) => settingsGuard.test(cmd);
+
+test('blocks redirecting into settings.json under any path form (evasion regressions)', () => {
+  assert.ok(blockedSettings('echo {} > ~/.claude/settings.json'), 'tilde redirect');
+  assert.ok(blockedSettings('echo {} > $HOME/.claude/settings.json'), '$HOME redirect (was a bypass)');
+  assert.ok(blockedSettings('echo {} >> /c/Users/x/.claude/settings.json'), 'absolute append (was a bypass)');
+  assert.ok(blockedSettings('cat x > .claude\\settings.json'), 'relative + windows separator');
+  assert.ok(!blockedSettings('cat ~/.claude/settings.json'), 'reading settings.json is fine (no redirect)');
+});
+
 summary();

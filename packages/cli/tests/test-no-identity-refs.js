@@ -22,6 +22,15 @@ const IDENTITY = new RegExp(
   ['ross' + 'b', 'OneDrive\\/Work' + 'space', 'claude-setup-' + 'ross'].join('|')
 );
 
+// Split-literal form: the same personal paths assembled from separate path.join
+// string args, e.g. path.join(config.home, 'OneDrive', 'Workspace', ...) or the
+// maintainer's repo nesting. The single-line IDENTITY regex above misses these
+// because the segments are joined by ", " rather than "/".
+const SPLIT_IDENTITY = new RegExp(
+  ["'One" + "Drive'\\s*,\\s*'Work" + "space'",
+   "'toolbeltross-pub" + "lic'\\s*,\\s*'rh-claude-frame" + "work'"].join('|')
+);
+
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-v2', '.git', 'coverage']);
 const EXTS = new Set(['.js', '.mjs', '.cjs', '.md', '.json']);
 
@@ -33,7 +42,7 @@ function walk(dir, hits) {
     } else if (EXTS.has(path.extname(ent.name)) && ent.name !== SELF) {
       const lines = fs.readFileSync(full, 'utf8').split('\n');
       lines.forEach((line, i) => {
-        if (IDENTITY.test(line)) {
+        if (IDENTITY.test(line) || SPLIT_IDENTITY.test(line)) {
           hits.push(`${path.relative(PACKAGES_DIR, full).replace(/\\/g, '/')}:${i + 1}: ${line.trim().slice(0, 100)}`);
         }
       });

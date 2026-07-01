@@ -20,6 +20,7 @@ const PACKAGES_ROOT = path.join(PKG_ROOT, '..');
 const REPO_ROOT = path.join(PACKAGES_ROOT, '..');
 const SHARED_PKG = path.join(PACKAGES_ROOT, 'shared');
 const SQL_DIR = path.join(REPO_ROOT, 'sql');
+const { writeFileAtomic } = require(path.join(SHARED_PKG, 'fs-atomic'));
 
 const PSQL_PROBES = [
   'C:/Program Files/PostgreSQL/18/bin/psql.exe',
@@ -84,7 +85,6 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--dry-run') o.dryRun = true;
     else if (a === '--superuser') o.superuser = argv[++i];
-    else if (a === '--superuser-password') o.superuserPassword = argv[++i];
     else if (a === '--db-name') o.dbName = argv[++i];
     else if (a === '--db-user') o.dbUser = argv[++i];
     else if (a === '--host') o.host = argv[++i];
@@ -142,7 +142,9 @@ function run(argv = process.argv.slice(3)) {
   log(`  psql:     ${psql}`);
   log(`  pgpass:   ${ppath}`);
 
-  const superPw = o.superuserPassword || process.env.PGPASSWORD || null;
+  // Superuser password comes ONLY from PGPASSWORD — never a CLI flag, since
+  // process arguments are world-visible (ps, /proc/<pid>/cmdline, Task Manager).
+  const superPw = process.env.PGPASSWORD || null;
 
   if (o.dryRun) {
     log(`\n  [dry-run] would:`);
@@ -156,7 +158,7 @@ function run(argv = process.argv.slice(3)) {
 
   if (!superPw) {
     log(`\n  Superuser credentials required to create the role/database (one time).`);
-    log(`  Re-run with PGPASSWORD set (or --superuser-password <pw>), e.g.:`);
+    log(`  Re-run with PGPASSWORD set, e.g.:`);
     log(`     PGPASSWORD=<postgres-pw> rh-oversight db-init`);
     log(`\n  …or run these once as a superuser yourself, then re-run db-init:`);
     log(`     ${buildRoleSql(role, '<choose-a-password>').replace(/\n/g, '\n     ')}`);
@@ -188,7 +190,7 @@ function run(argv = process.argv.slice(3)) {
     let lines = [];
     if (fs.existsSync(ppath)) lines = fs.readFileSync(ppath, 'utf8').split(/\r?\n/).filter(Boolean).filter(l => !l.startsWith(prefix));
     lines.push(pline);
-    fs.writeFileSync(ppath, lines.join('\n') + '\n', 'utf8');
+    writeFileAtomic(ppath, lines.join('\n') + '\n', process.platform !== 'win32' ? { mode: 0o600 } : {});
     if (process.platform !== 'win32') { try { fs.chmodSync(ppath, 0o600); } catch {} }
   } catch (e) { console.error(`  ✗ pgpass write failed: ${e.message}`); return 1; }
 

@@ -1,0 +1,66 @@
+name: CI
+
+# Runs the full monorepo test suite + an outer-seam install/self-test on every
+# push and PR. This is the "CI regression test" the README refers to — it fails
+# the build if any hardcoded user path leaks into packages/ (via the cli suite's
+# test-no-identity-refs.js) or if any package's tests regress.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 20/22 across both OSes. The dashboard build (Vite 6 + Tailwind v4)
+        # is validated on 20+; engines declares >=18 but the build toolchain wants 20+.
+        os: [ubuntu-latest, windows-latest]
+        node: ['20.x', '22.x']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # `npm ci` runs the root `prepare` script, which builds both dashboard
+      # bundles (v1 + v2) — so this also validates the Vite build.
+      - name: Install (also builds dashboard via prepare)
+        run: npm ci
+      # Runs every workspace's tests: oversight + cli + output + telemetry
+      # (unit + integration). The telemetry browser tier is intentionally skipped
+      # (it needs a built dashboard + Playwright browsers).
+      - name: Test (all workspaces)
+        run: npm test
+
+  verify-install:
+    name: verify install + self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+      - name: Install (also builds dashboard via prepare)
+        run: npm ci
+      # Outer-seam check (the canonical verification per CLAUDE.md): install the
+      # framework into a throwaway HOME, then run the deployed self-test from it.
+      - name: Install to isolated HOME + self-test
+        shell: bash
+        run: |
+          export HOME="$RUNNER_TEMP/fakehome"
+          export USERPROFILE="$HOME"
+          mkdir -p "$HOME"
+          node packages/cli/bin/rh-oversight.js init --workspace "$RUNNER_TEMP/ws" --yes
+          node "$HOME/.claude/scripts/rh-oversight-self-test.js"

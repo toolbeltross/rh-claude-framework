@@ -19,6 +19,7 @@ const OVERSIGHT_PKG = path.join(PACKAGES_ROOT, 'oversight');
 const OUTPUT_PKG = path.join(PACKAGES_ROOT, 'output');
 const SHARED_PKG = path.join(PACKAGES_ROOT, 'shared');
 const SKILLS_PKG = path.join(PACKAGES_ROOT, 'skills');
+const { writeFileAtomic } = require(path.join(SHARED_PKG, 'fs-atomic'));
 
 function parseArgs() {
   const args = process.argv.slice(3);
@@ -227,9 +228,24 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
 
   let existing = {};
   if (fs.existsSync(settingsPath)) {
-    try { existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {
-      console.error(`  WARNING: existing settings.json is malformed; backing up and overwriting.`);
-      if (!opts.dryRun) fs.copyFileSync(settingsPath, settingsPath + '.backup');
+    try {
+      existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    } catch {
+      // ABORT — do NOT overwrite. An unparseable settings.json cannot be
+      // merge-preserved, so overwriting it would silently discard the user's
+      // model, permissions, env, etc. Back it up (timestamped) and stop; the
+      // user fixes or removes the file and re-runs.
+      if (opts.dryRun) {
+        console.error(`  [dry-run] existing settings.json is malformed — init would abort without writing.`);
+      } else {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
+        const backup = `${settingsPath}.bak.${ts}`;
+        try { fs.copyFileSync(settingsPath, backup); } catch {}
+        console.error(`  ERROR: existing settings.json is not valid JSON — refusing to overwrite (would discard your config).`);
+        console.error(`         Backup written to ${backup}.`);
+        console.error(`         Fix or remove ${settingsPath}, then re-run \`rh-oversight init\`.`);
+      }
+      return;
     }
   }
 
@@ -267,7 +283,7 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
       for (const w of validation.warnings) console.log(`    ⚠ [${w.code}] ${w.path}: ${w.message}`);
     }
   } else {
-    fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + '\n', 'utf8');
+    writeFileAtomic(settingsPath, JSON.stringify(existing, null, 2) + '\n');
     console.log(`  Merged hooks into ${settingsPath}`);
   }
 }
@@ -381,7 +397,7 @@ function run(extraOpts = {}) {
     if (opts.dryRun) console.log(`  [dry-run] would write ${configPath}`);
     else {
       if (!fs.existsSync(CLAUDE_DIR)) fs.mkdirSync(CLAUDE_DIR, { recursive: true });
-      fs.writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2) + '\n', 'utf8');
+      writeFileAtomic(configPath, JSON.stringify(mergedConfig, null, 2) + '\n');
       console.log(`  Wrote ${configPath}${Object.keys(existingConfig).length ? ' (merge-preserved existing keys)' : ''}`);
     }
   }

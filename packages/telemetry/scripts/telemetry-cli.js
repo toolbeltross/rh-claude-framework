@@ -3,7 +3,7 @@
 // Reuses parsing logic from server/parser.js using only Node.js built-ins.
 
 import { readFile } from 'fs/promises';
-import { basename, dirname, join } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { CLAUDE_JSON_PATH, STATS_CACHE_PATH, PORT, DEFAULT_CONTEXT_WINDOW_SIZE, resolveContextWindowSize } from '../server/config.js';
@@ -85,7 +85,7 @@ function parseSession(path, proj) {
   return {
     sessionId: proj.lastSessionId || 'unknown',
     projectPath: path,
-    projectName: basename(path),
+    projectName: projectNameOf(path),
     cost: proj.lastCost || 0,
     duration: formatDuration(proj.lastDuration),
     durationMs: proj.lastDuration || 0,
@@ -104,6 +104,13 @@ function parseSession(path, proj) {
 function normalizeDir(p) {
   if (!p) return '';
   return String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+// Last path segment, separator-agnostic. Native basename() only splits on the
+// host OS separator, so a Windows path (C:\…\proj) processed on a Linux server
+// would return the whole string. Split on BOTH \ and / regardless of platform.
+function projectNameOf(p) {
+  return String(p || '').split(/[\\/]/).filter(Boolean).pop() || 'unknown';
 }
 
 // Pick the live session that belongs to the *caller*, not merely whichever
@@ -166,7 +173,7 @@ function normalizeLiveSession(raw, id) {
   }
   return {
     sessionId: raw.session_id || id,
-    projectName: cwd ? basename(cwd) : 'unknown',
+    projectName: projectNameOf(cwd),
     cwd,
     model: raw.model?.display_name || 'Active',
     cost: raw.cost?.total_cost_usd ?? 0,

@@ -12,6 +12,10 @@ import { homedir } from 'os';
 // ── Server ───────────────────────────────────────────────────────────────────
 
 export const PORT = parseInt(process.env.RH_TELEMETRY_PORT || process.env.PORT, 10) || 7890;
+// Bind to loopback by default — the dashboard exposes session prompts/costs/
+// transcripts and unauthenticated write endpoints, so it must not be reachable
+// from the LAN unless the user explicitly opts in (RH_TELEMETRY_HOST=0.0.0.0).
+export const HOST = process.env.RH_TELEMETRY_HOST || '127.0.0.1';
 export const BASE_URL = `http://localhost:${PORT}`;
 export const WS_URL = `ws://localhost:${PORT}/ws`;
 export const VITE_DEV_PORT = 5173;

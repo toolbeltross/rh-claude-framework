@@ -7,12 +7,11 @@ Internal reference for Claude Code sessions working on this repo. User-facing do
 ```
 rh-claude-framework/
 ├── package.json                    # npm workspaces root
-├── SESSION_STATE.md                # current state (lean, current-facts-only; history → archive/)
-├── PLAN-*.md                       # in-flight plan files (per-session)
 └── packages/
     ├── shared/                     # @rh/shared — canonical infra
     │   ├── config.js               # path/env resolution (was lib/config.js); `scribeStaging` flag
     │   ├── file-lock.js            # cross-process atomic lockfile (O_EXCL + PID + 5s stale recovery)
+    │   ├── fs-atomic.js            # writeFileAtomic — temp+rename; used by all config writers
     │   └── env.js                  # homeDir/claudeDir/parseEnvVar helpers
     │
     ├── oversight/                  # rh-claude-oversight — enforcement only
@@ -25,7 +24,7 @@ rh-claude-framework/
     │   ├── agents/                 # rh-*.md agent definitions (copied to ~/.claude/agents/)
     │   ├── rules/                  # workspace rule files (copied to <workspace>/.claude/rules/)
     │   ├── templates/journals.json # runtime journal config (NOT an install template)
-    │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (197 tests)
+    │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (207 tests)
     │
     ├── output/                     # @rh/output — rendered artifacts + scribe writers
     │   ├── scripts/rh-render-md-html.js        # md → styled HTML, withLock-wrapped writes
@@ -49,7 +48,7 @@ rh-claude-framework/
     │   ├── lib/status.js           # `status` — unified "full system on?" readout (oversight + telemetry + DB)
     │   ├── lib/settings-cli.js     # `rh-oversight settings <sub>` (validate/show/diff/merge/backup/restore)
     │   ├── templates/              # settings.json + CLAUDE.md templates
-    │   └── tests/                  # init-merge + cross-package-contract + settings-cli (62 tests)
+    │   └── tests/                  # init-merge + cross-package-contract + settings-cli (83 tests)
     │
     └── telemetry/                  # rh-telemetry (migrated 2026-05-04; canonical home — standalone repo archived)
         ├── server/trends-router.js          # GET /api/trends — cross-package wrap of supervisor-sweep (P3-2)
@@ -71,7 +70,7 @@ rh-claude-framework/
   grep -rE "/(Users|home)/[^/]+|[A-Za-z]:[\\/]Users[\\/]" \
     --include="*.js" --include="*.md" --include="*.json" packages/
   ```
-  Result must be CLEAN.
+  The `test-no-identity-refs.js` regression test is authoritative; this raw grep is a looser spot-check that may surface benign test fixtures and placeholder strings (reconcile hits against the test, not every match). The test also catches split-arg leaks like `path.join(..., 'OneDrive', 'Workspace', ...)` that this single-line grep misses.
 - **CJS only** — `require()` / `module.exports`. Matches the installed scripts target environment. Telemetry is the single ESM exception (uses dynamic import / subprocess to bridge).
 - **`rh-` prefix** on every framework artifact — distinguishes framework-installed files from user's local edits.
 - **Config priority** — env var > `~/.claude/oversight.json` > auto-detect from CWD.
@@ -81,9 +80,9 @@ rh-claude-framework/
 
 | Surface | Command |
 |---|---|
-| Oversight tests | `node packages/oversight/tests/run.js` (197 tests) |
-| CLI tests | `node packages/cli/tests/run.js` (62 tests) |
-| Output tests | `node packages/output/tests/run.js` (201 tests) |
+| Oversight tests | `node packages/oversight/tests/run.js` (207 tests) |
+| CLI tests | `node packages/cli/tests/run.js` (83 tests) |
+| Output tests | `node packages/output/tests/run.js` (205 tests) |
 | All workspace tests | `npm test` |
 | Dry-run install | `node packages/cli/bin/rh-oversight.js init --dry-run` |
 | Real install against tmp HOME | `HOME=/tmp/test USERPROFILE=/tmp/test node packages/cli/bin/rh-oversight.js init --workspace /tmp/test-ws` |
@@ -106,11 +105,11 @@ The "tmp HOME" pattern is the outer-seam verification per `rh-work-verification.
 
 ```bash
 cd /path/to/rh-claude-framework
-node packages/oversight/tests/run.js   # 197 expected
-node packages/cli/tests/run.js         # 62 expected
-node packages/output/tests/run.js      # 201 expected
+node packages/oversight/tests/run.js   # 207 expected
+node packages/cli/tests/run.js         # 83 expected
+node packages/output/tests/run.js      # 205 expected
 node packages/cli/bin/rh-oversight.js init --dry-run
-grep -rE "/(Users|home)/[^/]+|[A-Za-z]:[\\/]Users[\\/]" --include="*.js" --include="*.md" packages/   # must be empty
+grep -rE "/(Users|home)/[^/]+|[A-Za-z]:[\\/]Users[\\/]" --include="*.js" --include="*.md" packages/   # spot-check; test-no-identity-refs.js is authoritative
 ```
 
 ## Out of scope for this repo

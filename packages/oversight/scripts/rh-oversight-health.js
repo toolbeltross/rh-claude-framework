@@ -112,18 +112,25 @@ function probeSupervisoryLog() {
   return { name: 'supervisory-log', level, detail: `last write ${fmtAge(ageH)} ago` };
 }
 
-function probeHookDebugLog() {
-  // Live debug log lives in the framework, not in ~/.claude/.
-  const candidates = [
-    path.join(config.workspace, 'toolbeltross', 'toolbeltross-public', 'rh-claude-framework', 'packages', 'telemetry', 'hook-debug.log'),
+// Telemetry's hook-debug.log location. No hardcoded repo nesting (that was a
+// maintainer-specific personal path). Honor an explicit override, else look in
+// ~/.claude/ and the workspace root.
+function resolveHookDebugLog() {
+  return [
+    process.env.HOOK_DEBUG_LOG,
     path.join(config.claudeDir, 'hook-debug.log'),
-  ].filter(p => fileExists(p));
-  if (candidates.length === 0) return { name: 'hook-debug', level: 'warn', detail: 'no debug log found' };
-  const ageH = ageHours(candidates[0]);
+    path.join(config.workspace, 'hook-debug.log'),
+  ].filter(Boolean).find(p => fileExists(p)) || null;
+}
+
+function probeHookDebugLog() {
+  const found = resolveHookDebugLog();
+  if (!found) return { name: 'hook-debug', level: 'warn', detail: 'no debug log found' };
+  const ageH = ageHours(found);
   let level = 'ok';
   if (ageH === null) level = 'warn';
   else if (ageH > 24) level = 'warn';
-  return { name: 'hook-debug', level, detail: `${path.basename(path.dirname(candidates[0]))}/${path.basename(candidates[0])} · last write ${fmtAge(ageH)} ago` };
+  return { name: 'hook-debug', level, detail: `${path.basename(path.dirname(found))}/${path.basename(found)} · last write ${fmtAge(ageH)} ago` };
 }
 
 function probeTelemetryServer() {
@@ -188,8 +195,8 @@ function probeScribeBacklog() {
 }
 
 function probeSubagentOrphans() {
-  const debugLog = path.join(config.workspace, 'toolbeltross', 'toolbeltross-public', 'rh-claude-framework', 'packages', 'telemetry', 'hook-debug.log');
-  if (!fileExists(debugLog)) return { name: 'subagent-orphans', level: 'info', detail: 'no debug log' };
+  const debugLog = resolveHookDebugLog();
+  if (!debugLog || !fileExists(debugLog)) return { name: 'subagent-orphans', level: 'info', detail: 'no debug log' };
   const lines = tailLinesFromLargeFile(debugLog, 1024 * 1024);
   const cutoff = Date.now() - 7 * 24 * 3_600_000;
   const starts = new Set();

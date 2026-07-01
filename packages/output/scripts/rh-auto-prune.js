@@ -39,6 +39,7 @@ const path = require('path');
 const { config } = require('./lib/config');
 const { appendOversightEvent } = require('./lib/oversight-events');
 const scribeMd = require('./lib/scribe-md');
+const { withLock } = require('./lib/file-lock');
 
 const APPLY = process.argv.includes('--apply');
 const JSON_OUT = process.argv.includes('--json');
@@ -176,57 +177,69 @@ function pruneScribeFile(filePath) {
       stale_open_ids: [],
     };
   }
-  const content = fs.readFileSync(filePath, 'utf8');
-  const lines = content.split(/\r?\n/);
-  const now = Date.now();
-  const archiveCutoff = now - ARCHIVE_RESOLVED_DAYS * DAY_MS;
-  const alertCutoff = now - ALERT_OPEN_DAYS * DAY_MS;
+  // Read-modify-write under a lock so a concurrent scribe append (table-write)
+  // or /scribe disposition isn't lost when we rewrite the kept rows. withLock's
+  // callback MUST do its own read + write inside — reading outside reopens the
+  // TOCTOU this file previously had (matches rh-scribe-table-write.js). On
+  // lock-acquisition failure withLock returns undefined → treat as a no-op prune.
+  const locked = withLock(filePath, () => {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split(/\r?\n/);
+    const now = Date.now();
+    const archiveCutoff = now - ARCHIVE_RESOLVED_DAYS * DAY_MS;
+    const alertCutoff = now - ALERT_OPEN_DAYS * DAY_MS;
 
-  const archived = [];
-  const staleOpenIds = [];
-  const kept = [];
+    const archived = [];
+    const staleOpenIds = [];
+    const kept = [];
 
-  // Parse each line with the strict scribe-row parser so `status` is read from
-  // the actual status cell — NOT a substring match on the whole line (C6:
-  // a row whose TEXT mentions "resolved" but whose status is `open` must not
-  // archive). Terminal statuses (resolved/closed/stale prefix, in any form —
-  // bare or `resolved: <reason> (<date>)` from the /scribe disposition UI)
-  // archive after the window; only exact `open` counts toward the stale alert.
-  // Broadened 2026-06-15 (PLAN F-K): the old / \|\s*resolved\s*\|/ matched only
-  // a bare `resolved` cell, so `closed …` / `resolved: …` / `stale …` rows never
-  // archived. The disposition UI writes the prefixed forms — they must archive.
-  const archivedIds = [];
-  for (const line of lines) {
-    const row = scribeMd.parseLine(line);
-    if (!row) { kept.push(line); continue; }
-    const ts = Date.parse(row.ts);
-    if (isNaN(ts)) { kept.push(line); continue; }
+    // Parse each line with the strict scribe-row parser so `status` is read from
+    // the actual status cell — NOT a substring match on the whole line (C6:
+    // a row whose TEXT mentions "resolved" but whose status is `open` must not
+    // archive). Terminal statuses (resolved/closed/stale prefix, in any form —
+    // bare or `resolved: <reason> (<date>)` from the /scribe disposition UI)
+    // archive after the window; only exact `open` counts toward the stale alert.
+    // Broadened 2026-06-15 (PLAN F-K): the old / \|\s*resolved\s*\|/ matched only
+    // a bare `resolved` cell, so `closed …` / `resolved: …` / `stale …` rows never
+    // archived. The disposition UI writes the prefixed forms — they must archive.
+    const archivedIds = [];
+    for (const line of lines) {
+      const row = scribeMd.parseLine(line);
+      if (!row) { kept.push(line); continue; }
+      const ts = Date.parse(row.ts);
+      if (isNaN(ts)) { kept.push(line); continue; }
 
-    const isTerminal = /^(resolved|closed|stale)\b/i.test(row.status);
-    const isOpen = row.status === 'open';
+      const isTerminal = /^(resolved|closed|stale)\b/i.test(row.status);
+      const isOpen = row.status === 'open';
 
-    if (isTerminal && ts < archiveCutoff) {
-      archived.push(line);
-      archivedIds.push(row.id);
-      continue; // omit from kept (gets archived)
+      if (isTerminal && ts < archiveCutoff) {
+        archived.push(line);
+        archivedIds.push(row.id);
+        continue; // omit from kept (gets archived)
+      }
+      if (isOpen && ts < alertCutoff) {
+        staleOpenIds.push(row.id);
+      }
+      kept.push(line);
     }
-    if (isOpen && ts < alertCutoff) {
-      staleOpenIds.push(row.id);
-    }
-    kept.push(line);
-  }
 
-  if (APPLY && archived.length > 0) {
-    fs.writeFileSync(filePath, kept.join('\n'), 'utf8');
-    const archiveDir = path.join(path.dirname(filePath), 'Archive');
-    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
-    const stamp = new Date().toISOString().slice(0, 7);
-    const archiveFile = path.join(archiveDir, `scribe-archive-${stamp}.md`);
-    const block =
-      `\n## Archived from ${path.basename(filePath)} on ${new Date().toISOString().slice(0, 10)}\n\n` +
-      `| id | ts | session | text | status |\n|---|---|---|---|---|\n${archived.join('\n')}\n`;
-    fs.appendFileSync(archiveFile, block, 'utf8');
-  }
+    if (APPLY && archived.length > 0) {
+      fs.writeFileSync(filePath, kept.join('\n'), 'utf8');
+      const archiveDir = path.join(path.dirname(filePath), 'Archive');
+      if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+      const stamp = new Date().toISOString().slice(0, 7);
+      const archiveFile = path.join(archiveDir, `scribe-archive-${stamp}.md`);
+      const block =
+        `\n## Archived from ${path.basename(filePath)} on ${new Date().toISOString().slice(0, 10)}\n\n` +
+        `| id | ts | session | text | status |\n|---|---|---|---|---|\n${archived.join('\n')}\n`;
+      // Archive file is a different lock target — nesting withLock on a distinct
+      // file is safe (no self-deadlock on the same lock).
+      withLock(archiveFile, () => fs.appendFileSync(archiveFile, block, 'utf8'));
+    }
+    return { archived, archivedIds, staleOpenIds };
+  }) || { archived: [], archivedIds: [], staleOpenIds: [] };
+
+  const { archived, archivedIds, staleOpenIds } = locked;
 
   if (APPLY && staleOpenIds.length > 0) {
     appendOversightEvent('scribe_row_review_needed', {

@@ -5,6 +5,7 @@ import { homedir, platform } from 'os';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { repairStatusLine } from './repair-statusline.js';
+import { writeFileAtomic } from './fs-atomic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -231,7 +232,7 @@ async function deployToPath(settingsPath) {
     console.log(`  Backup: ${backupPath}`);
   }
 
-  await writeFile(settingsPath, JSON.stringify(updated, null, 2));
+  writeFileAtomic(settingsPath, JSON.stringify(updated, null, 2));
   console.log(`  Hooks written: ${settingsPath}`);
 
   // Now run the classifier-driven statusLine repair. This is a separate step

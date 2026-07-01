@@ -23,12 +23,12 @@ When you want to *enforce* against those, the **optional oversight layer** adds 
 | Component | What it does |
 |---|---|
 | **10 enforcement patterns** | Guard, Auto-Inject, Audit, Stop Pipeline, Verification Token, Scribe, Atomic Writer, Supervisor Preload, Self-Test, Zero-Path. See [`docs/PATTERNS.md`](docs/PATTERNS.md). |
-| **25 hook scripts** | PreToolUse guards, PostToolUse auditors, multi-stage Stop pipeline, SessionStart preloaders. Wired into `~/.claude/settings.json`. |
-| **19 specialist agents** | Facilitator, supervisor, source verifier, scribe (multiscope), pdf-extractor, security specialist, and more. |
-| **12 workspace rules** | Completion standards, context discipline, read integrity, subagent oversight, work verification, and others — loaded via `CLAUDE.md` hierarchy. |
+| **18 oversight scripts** | PreToolUse guards, PostToolUse auditors, a multi-stage Stop pipeline, SessionStart preloaders — 9 wired as hooks in `~/.claude/settings.json`, the rest CLI/utility scripts. |
+| **20 specialist agents** | Facilitator, supervisor, source verifier, scribe (multiscope), pdf-extractor, security specialist, and more. |
+| **18 workspace rules** | Completion standards, context discipline, read integrity, subagent oversight, work verification, and others — loaded via `CLAUDE.md` hierarchy. |
 | **`rh-oversight` CLI** | Install, self-test, health check, settings merge/validate/backup, cross-session supervisor sweep. |
 | **Telemetry dashboard** | Real-time monitoring of hook events, enforcement blocks, subagent patterns, and session trends. React + Recharts. |
-| **460 tests** | Oversight (197), CLI (62), output (201). Self-test: 37/37 hard pass on every install. |
+| **495 tests** | Oversight (207), CLI (83), output (205). Self-test: 37/37 hard pass on every install. |
 
 ## Install
 
@@ -139,7 +139,7 @@ Target wall-clock: < 90s for a typical session.
 | `rh-oversight settings <sub>` | Merge-aware CLI for `settings.json`: `validate / show / diff / merge / backup / restore` |
 | `rh-oversight supervisor-sweep [--days N]` | Cross-session trend doc — reads 7-day event window, writes `supervisor-trends.md` |
 | `rh-oversight status [--json]` | One-screen "is the full system on?" readout: oversight hooks, telemetry hooks + server reachability, Postgres shadow state |
-| `rh-oversight db-init` | Bootstrap the optional local Postgres FTS shadow (role/db + schema + pgpass + flags + verify). Needs a superuser once via `PGPASSWORD`/`--superuser-password` |
+| `rh-oversight db-init` | Bootstrap the optional local Postgres FTS shadow (role/db + schema + pgpass + flags + verify). Needs a superuser once via `PGPASSWORD` |
 | `rh-oversight ingest-logs [--full]` | Backfill supervisory-log + oversight-events + telemetry-failures into the FTS DB |
 | `rh-oversight ingest-transcripts` | Backfill session transcripts into the FTS DB |
 
@@ -157,9 +157,9 @@ Target wall-clock: < 90s for a typical session.
 
 ```bash
 # Tests by package
-node packages/oversight/tests/run.js   # 197 tests
-node packages/cli/tests/run.js         # 62 tests
-node packages/output/tests/run.js      # 201 tests (incl. 16-way concurrent stress)
+node packages/oversight/tests/run.js   # 207 tests
+node packages/cli/tests/run.js         # 83 tests
+node packages/output/tests/run.js      # 205 tests (incl. 16-way concurrent stress)
 
 # All workspaces
 npm test
