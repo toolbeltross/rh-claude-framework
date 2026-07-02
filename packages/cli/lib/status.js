@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawnSync } = require('child_process');
+const { findPsql } = require('./db-init');
 
 const PACKAGES_ROOT = path.join(__dirname, '..', '..');
 const SHARED_PKG = path.join(PACKAGES_ROOT, 'shared');
@@ -63,10 +64,8 @@ function probeServer(port, timeoutMs = 2500) {
 
 function probeDb(config) {
   // Reachable iff a no-prompt connect as the scribe role succeeds (pgpass).
-  const psqlProbes = ['C:/Program Files/PostgreSQL/18/bin/psql.exe', 'C:/Program Files/PostgreSQL/17/bin/psql.exe', 'C:/Program Files/PostgreSQL/16/bin/psql.exe', '/usr/bin/psql', '/usr/local/bin/psql'];
-  let psql = config.scribeDbPsql;
-  if (!psql) { for (const p of psqlProbes) { try { fs.accessSync(p); psql = p; break; } catch {} } }
-  if (!psql) psql = 'psql';
+  // Shared probe list with db-init (findPsql) so the two never drift.
+  const psql = findPsql(config.scribeDbPsql);
   const env = { ...process.env, PGCONNECT_TIMEOUT: '5' };
   delete env.PGPASSWORD; // force pgpass path (the deployed lib's exact mode)
   const r = spawnSync(psql, ['-U', config.scribeDbUser, '-h', config.scribeDbHost, '-p', String(config.scribeDbPort), '-d', config.scribeDbName, '-w', '-tAc', 'SELECT 1'], { timeout: 8000, encoding: 'utf8', windowsHide: true, env });
