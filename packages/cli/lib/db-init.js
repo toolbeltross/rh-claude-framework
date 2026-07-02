@@ -22,11 +22,16 @@ const SHARED_PKG = path.join(PACKAGES_ROOT, 'shared');
 const SQL_DIR = path.join(REPO_ROOT, 'sql');
 const { writeFileAtomic } = require(path.join(SHARED_PKG, 'fs-atomic'));
 
+// Static probe list: Windows installer dirs + common POSIX locations. findPsql()
+// additionally globs versioned install dirs (Postgres.app, /usr/lib/postgresql).
 const PSQL_PROBES = [
   'C:/Program Files/PostgreSQL/18/bin/psql.exe',
   'C:/Program Files/PostgreSQL/17/bin/psql.exe',
   'C:/Program Files/PostgreSQL/16/bin/psql.exe',
-  '/usr/bin/psql', '/usr/local/bin/psql',
+  '/opt/homebrew/bin/psql',   // macOS Homebrew (Apple Silicon)
+  '/usr/local/bin/psql',      // macOS Homebrew (Intel) / common
+  '/opt/local/bin/psql',      // MacPorts
+  '/usr/bin/psql',            // Linux distro default
 ];
 
 // ---- pure helpers (unit-tested) -------------------------------------------
@@ -70,6 +75,18 @@ function pgpassPath() {
   return path.join(process.env.HOME || '', '.pgpass');
 }
 
+/** Password from an existing pgpass line matching `prefix` (host:port:db:user:),
+ * or null. Lets a re-run REUSE the role's current password instead of rotating
+ * it — a rotation would invalidate any OTHER pgpass line for the same role. */
+function readPgpassPassword(ppath, prefix) {
+  try {
+    for (const l of fs.readFileSync(ppath, 'utf8').split(/\r?\n/)) {
+      if (l.startsWith(prefix)) return l.slice(prefix.length);
+    }
+  } catch {}
+  return null;
+}
+
 /** Schema files to apply, in order: base schemas then migrations (sorted). */
 function schemaFiles(sqlDir = SQL_DIR) {
   const base = ['rh_scribe_schema.sql', 'rh_context_schema.sql'].map(f => path.join(sqlDir, f));
@@ -100,6 +117,15 @@ function parseArgs(argv) {
 function findPsql(explicit) {
   if (explicit) return explicit;
   for (const p of PSQL_PROBES) { try { fs.accessSync(p); return p; } catch {} }
+  // Glob versioned install dirs: Postgres.app (macOS) + Linux packages, newest first.
+  for (const base of ['/Applications/Postgres.app/Contents/Versions', '/usr/lib/postgresql']) {
+    let vers = [];
+    try { vers = fs.readdirSync(base).sort().reverse(); } catch {}
+    for (const v of vers) {
+      const p = `${base}/${v}/bin/psql`;
+      try { fs.accessSync(p); return p; } catch {}
+    }
+  }
   return 'psql'; // rely on PATH
 }
 
@@ -131,8 +157,12 @@ function run(argv = process.argv.slice(3)) {
   const port = o.port || c.scribeDbPort;
   const psql = findPsql(o.psql || c.scribeDbPsql);
   const superuser = o.superuser || 'postgres';
-  const password = o.password || genPassword();
   const ppath = pgpassPath();
+  const pgpassPrefix = `${host}:${port}:${db}:${role}:`;
+  // Password priority: explicit --password > the one already in pgpass for this
+  // exact target (reuse → the ALTER ROLE is a no-op → OTHER pgpass lines for this
+  // role stay valid) > a freshly generated one (first-time setup).
+  const password = o.password || readPgpassPassword(ppath, pgpassPrefix) || genPassword();
   const pline = pgpassLine(host, port, db, role, password);
 
   const log = (m) => console.log(m);
@@ -151,8 +181,8 @@ function run(argv = process.argv.slice(3)) {
     log(`   1. ensure role ${role} + database ${db} (as ${superuser})`);
     log(`   2. write pgpass line: ${host}:${port}:${db}:${role}:********`);
     log(`   3. load: ${schemaFiles().map(f => path.basename(f)).join(', ')}`);
-    log(`   4. set scribeDb:true + contextDb:true in oversight.json`);
-    log(`   5. verify a probe row round-trips`);
+    log(`   4. verify a scribe probe round-trips + the context schema is present`);
+    log(`   5. set scribeDb/contextDb in oversight.json (only what verified)`);
     return 0;
   }
 
@@ -176,8 +206,17 @@ function run(argv = process.argv.slice(3)) {
   if (!existsRes.ok) { console.error(`  ✗ db existence check failed: ${existsRes.error}`); return 1; }
   if (existsRes.stdout !== '1') {
     r = psqlExec({ psql, user: superuser, host, port, db: 'postgres', password: superPw, sql: `CREATE DATABASE ${db} OWNER ${role};` });
-    if (!r.ok) { console.error(`  ✗ CREATE DATABASE failed: ${r.error}`); return 1; }
-    log(`        created database ${db}`);
+    if (!r.ok) {
+      // Tolerate a concurrent / pre-existing create — the check-then-create above
+      // has a TOCTOU window, and CREATE DATABASE cannot run in a txn to close it.
+      if (/already exists|duplicate_database|42P04/i.test(r.error || '')) {
+        log(`        database ${db} already exists`);
+      } else {
+        console.error(`  ✗ CREATE DATABASE failed: ${r.error}`); return 1;
+      }
+    } else {
+      log(`        created database ${db}`);
+    }
   } else {
     log(`        database ${db} already exists`);
   }
@@ -186,9 +225,8 @@ function run(argv = process.argv.slice(3)) {
   log(`  [2/5] writing pgpass…`);
   try {
     fs.mkdirSync(path.dirname(ppath), { recursive: true });
-    const prefix = `${host}:${port}:${db}:${role}:`;
     let lines = [];
-    if (fs.existsSync(ppath)) lines = fs.readFileSync(ppath, 'utf8').split(/\r?\n/).filter(Boolean).filter(l => !l.startsWith(prefix));
+    if (fs.existsSync(ppath)) lines = fs.readFileSync(ppath, 'utf8').split(/\r?\n/).filter(Boolean).filter(l => !l.startsWith(pgpassPrefix));
     lines.push(pline);
     writeFileAtomic(ppath, lines.join('\n') + '\n', process.platform !== 'win32' ? { mode: 0o600 } : {});
     if (process.platform !== 'win32') { try { fs.chmodSync(ppath, 0o600); } catch {} }
@@ -203,24 +241,35 @@ function run(argv = process.argv.slice(3)) {
     log(`        applied ${path.basename(f)}`);
   }
 
-  // 4) flip the flags in oversight.json
-  log(`  [4/5] enabling scribeDb + contextDb in oversight.json…`);
-  writeConfig({ scribeDb: true, contextDb: true, scribeDbName: db, scribeDbUser: role, scribeDbHost: host, scribeDbPort: port });
-
-  // 5) verify a probe row round-trips through scribe_rows
-  log(`  [5/5] verifying a probe row round-trips…`);
+  // 4) verify BEFORE advertising: a scribe row must round-trip, and the context
+  //    schema's core table must exist. Flags are flipped only AFTER this passes,
+  //    so a failed shadow never leaves oversight.json claiming a working one.
+  log(`  [4/5] verifying the shadow…`);
   const marker = 'db-init-probe-' + crypto.randomBytes(4).toString('hex');
   const ins = psqlExec({ psql, user: role, host, port, db, password,
     sql: `INSERT INTO scribe_rows (bucket,row_id,content,source_file) VALUES ('learnings','${marker}','db-init probe (auto-deleted)','db-init-verification');` });
   if (!ins.ok) { console.error(`  ✗ probe insert failed: ${ins.error}`); return 1; }
   const sel = psqlExec({ psql, user: role, host, port, db, password,
     sql: `SELECT count(*) FROM scribe_rows WHERE row_id='${marker}';` });
-  psqlExec({ psql, user: role, host, port, db, password, sql: `DELETE FROM scribe_rows WHERE source_file='db-init-verification';` });
-  if (!sel.ok || sel.stdout !== '1') { console.error(`  ✗ probe row did not round-trip (got ${JSON.stringify(sel.stdout)})`); return 1; }
+  // Scope cleanup to THIS marker (not a blanket source_file delete) and check it.
+  const del = psqlExec({ psql, user: role, host, port, db, password,
+    sql: `DELETE FROM scribe_rows WHERE row_id='${marker}';` });
+  if (!del.ok) console.error(`  ! probe-row cleanup failed — leftover row_id=${marker}: ${del.error}`);
+  if (!sel.ok || sel.stdout !== '1') { console.error(`  ✗ scribe probe did not round-trip (got ${JSON.stringify(sel.stdout)})`); return 1; }
+  // Context schema: confirm a core table actually exists (step 3 checked the file
+  // applied; this confirms the table before we advertise contextDb).
+  const ctx = psqlExec({ psql, user: role, host, port, db, password,
+    sql: `SELECT to_regclass('public.ctx_session') IS NOT NULL;` });
+  const contextOk = ctx.ok && ctx.stdout === 't';
+  if (!contextOk) console.error(`  ! context schema check failed (ctx_session missing) — leaving contextDb OFF`);
 
-  log(`\n  ✓ Postgres FTS shadow is ready. scribeDb + contextDb are ON.`);
+  // 5) flip only the flags that actually verified.
+  log(`  [5/5] enabling verified flags in oversight.json…`);
+  writeConfig({ scribeDb: true, contextDb: contextOk, scribeDbName: db, scribeDbUser: role, scribeDbHost: host, scribeDbPort: port });
+
+  log(`\n  ✓ Postgres FTS shadow is ready. scribeDb=ON, contextDb=${contextOk ? 'ON' : 'OFF'}.`);
   log(`    Next: 'rh-oversight ingest-logs --full' to backfill log history into FTS.`);
   return 0;
 }
 
-module.exports = { run, buildRoleSql, pgpassLine, pgpassPath, schemaFiles, parseArgs, validateIdent, genPassword };
+module.exports = { run, buildRoleSql, pgpassLine, pgpassPath, readPgpassPassword, schemaFiles, findPsql, parseArgs, validateIdent, genPassword };
