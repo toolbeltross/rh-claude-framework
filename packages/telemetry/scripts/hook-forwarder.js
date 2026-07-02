@@ -49,7 +49,10 @@ function debugLog(msg) {
 // ─── Oversight event helpers (added 2026-05-08, P2-1) ────────────────────
 // Inline schema matches packages/oversight/scripts/lib/oversight-events.js
 // (cross-package require is fragile in ESM; small enough to duplicate).
-const HOME_DIR = process.env.USERPROFILE || process.env.HOME || '';
+// HOME-first, to match @rh/shared/config (which the oversight scripts that READ
+// this events file use). USERPROFILE-first here could write to a different
+// .claude than they read on Git-Bash, where HOME and USERPROFILE both exist but differ.
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '';
 const EVENTS_LOG_PATH = join(HOME_DIR, '.claude', 'oversight-events.jsonl');
 const SUBAGENT_FLAG_DIR = join(HOME_DIR, '.claude');
 

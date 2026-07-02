@@ -23,6 +23,7 @@ const SKIP_REASONS = new Set([
   'same-day-guard',
   'no-threshold-crossings',
   'all-groups-already-proposed',
+  'no-untriaged-rows',
 ]);
 
 function wasIntentionallySkipped(stdout) {
@@ -70,6 +71,20 @@ function runScript({ home, claudeDir }, args = []) {
 // ─── wasIntentionallySkipped unit tests ──────────────────────────────────────
 
 const tests = [
+  {
+    // Guards the "keep in sync with the source" contract above: parse the real
+    // SKIP_REASONS out of rh-daily-regen.js and fail if this copy drifts (which
+    // it had — 'no-untriaged-rows' was missing, so that skip-reason went untested).
+    name: 'SKIP_REASONS copy is in sync with rh-daily-regen.js source (drift guard)',
+    fn: () => {
+      const src = fs.readFileSync(SCRIPT, 'utf8');
+      const m = src.match(/const SKIP_REASONS = new Set\(\[([\s\S]*?)\]\)/);
+      assert.ok(m, 'could not locate SKIP_REASONS in rh-daily-regen.js source');
+      const sourceReasons = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+      assert.deepStrictEqual([...SKIP_REASONS].sort(), sourceReasons,
+        `test copy of SKIP_REASONS drifted from source — sync it. source=${JSON.stringify(sourceReasons)}`);
+    },
+  },
   {
     name: 'wasIntentionallySkipped: empty string → false',
     fn: () => assert.strictEqual(wasIntentionallySkipped(''), false),

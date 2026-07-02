@@ -40,10 +40,11 @@ function correctPath(p) {
   let out = p;
   let changed = false;
   for (const re of TYPO_PATTERNS) {
-    if (re.test(out)) {
-      out = out.replace(re, '$1.claude$2');
-      changed = true;
-    }
+    // Replace-and-compare rather than .test()+.replace(): .test() on a /g regex
+    // advances lastIndex, a footgun if this loop is ever restructured. (replace
+    // resets lastIndex itself, so the old form wasn't broken — this removes the hazard.)
+    const next = out.replace(re, '$1.claude$2');
+    if (next !== out) { out = next; changed = true; }
   }
   return changed ? out : null;
 }
