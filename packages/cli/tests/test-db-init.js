@@ -3,7 +3,9 @@
 
 const assert = require('assert');
 const path = require('path');
-const { buildRoleSql, pgpassLine, pgpassPath, schemaFiles, parseArgs, validateIdent, genPassword } = require('../lib/db-init');
+const fs = require('fs');
+const os = require('os');
+const { buildRoleSql, pgpassLine, pgpassPath, readPgpassPassword, schemaFiles, findPsql, parseArgs, validateIdent, genPassword } = require('../lib/db-init');
 
 const tests = [
   {
@@ -76,6 +78,35 @@ const tests = [
       assert.ok(a.length >= 20, 'long enough');
       assert.ok(/^[A-Za-z0-9_-]+$/.test(a), `url-safe; got ${a}`);
       assert.notStrictEqual(a, b, 'random per call');
+    },
+  },
+  {
+    name: 'readPgpassPassword reuses the target line password (no rotation) and returns null otherwise',
+    fn: () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-pgpass-'));
+      const pp = path.join(dir, '.pgpass');
+      try {
+        fs.writeFileSync(pp, [
+          'other-host:5432:otherdb:rh_scribe:OLDPW',        // same role, different db — rotation would break this
+          'localhost:5432:rh_scribe:rh_scribe:REUSED_PW',   // the target line
+          '',
+        ].join('\n'));
+        assert.strictEqual(readPgpassPassword(pp, 'localhost:5432:rh_scribe:rh_scribe:'), 'REUSED_PW', 'reuse the exact-target password');
+        assert.strictEqual(readPgpassPassword(pp, 'nope:1:x:y:'), null, 'no matching line → null (fresh password will be generated)');
+        assert.strictEqual(readPgpassPassword(path.join(dir, 'absent'), 'a:b:c:d:'), null, 'missing file → null');
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    name: 'findPsql honors an explicit path and otherwise resolves to a psql binary',
+    fn: () => {
+      assert.strictEqual(findPsql('/custom/psql'), '/custom/psql', 'explicit path wins');
+      // No explicit path: returns a probed install path if one exists on this
+      // machine, else the bare `psql` (PATH). Both are valid; assert the shape.
+      const found = findPsql(undefined);
+      assert.ok(found === 'psql' || /psql(\.exe)?$/.test(found), `resolved to a psql path; got ${found}`);
     },
   },
 ];
