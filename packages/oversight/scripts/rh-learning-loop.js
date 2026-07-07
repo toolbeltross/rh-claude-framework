@@ -173,10 +173,16 @@ function dispatchSupervisor(groups) {
   // Spawn cwd: config.home, NOT OneDrive workspace path. OneDrive cwd produces ENOENT
   // pointing at the executable when OneDrive sync is off (documented in
   // ~/.claude/memory-shared/learnings/windows-spawn-enoent-cwd.md).
+  // CLAUDE_SCRIBE_SUPPRESS=1 (2026-07-06): the headless child runs the user's
+  // Stop hooks, including rh-scribe-prefilter.js — without suppression the
+  // prefilter re-captures this run's own analysis output from the child
+  // transcript as new scribe rows (self-contamination). Prefilter early-exits
+  // when this env var is set.
   const r = spawnSync('claude', ['-p', '--agent', 'rh-supervisor', prompt], {
     encoding: 'utf8',
     timeout: 5 * 60 * 1000,
     cwd: config.home,
+    env: { ...process.env, CLAUDE_SCRIBE_SUPPRESS: '1' },
   });
   return { stdout: r.stdout || '', stderr: r.stderr || '', status: r.status };
 }
