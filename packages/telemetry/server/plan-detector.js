@@ -257,6 +257,14 @@ export function startPlanDetector(store) {
     if (displayMode === 'tokens' && currentToken && !usageInterval) {
       await pollUsage(); // Immediate first poll
       adjustPollInterval();
+    } else if (displayMode === 'tokens' && !currentToken) {
+      // Plan metadata present but no OAuth token in the credentials file —
+      // newer Claude Code builds store tokens outside .credentials.json, so
+      // usage polling can't run. Surface it instead of leaving the UI on
+      // "fetching usage…" forever. statusLine rate_limits overlay (store.js)
+      // still populates the gauges if/when Claude Code sends the field.
+      console.log('[plan] Max plan detected but credentials file has no accessToken — usage polling unavailable');
+      store.updatePlanInfo({ usageSource: 'no_token' });
     } else if (displayMode !== 'tokens' && usageInterval) {
       clearInterval(usageInterval);
       usageInterval = null;
