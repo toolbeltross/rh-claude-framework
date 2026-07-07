@@ -124,10 +124,7 @@ const PRIVACY_PATTERNS = [
   } catch {}
 })();
 
-// Tightened 2026-07-06: the bare `should`, `consider`, and `improve`
-// alternatives matched nearly any sentence of ordinary prose, so most captured
-// rows were narrative noise. Keep only explicit recommendation language.
-const REC_MARKERS = /\b(recommend(?:ation|s|ed)?|would be better|suggest(?:ion)?)\b/i;
+const REC_MARKERS = /\b(recommend(?:ation|s|ed)?|should|consider|would be better|improve|suggest(?:ion)?)\b/i;
 const CLEANUP_MARKERS = /\b(TODO|FIXME|leftover|stale|cleanup|temporary|orphan|dead code|remove later)\b/i;
 // Learnings markers (added 2026-04-29). Conceptual deltas: vocabulary established, patterns
 // validated, decision rules formed, capabilities newly understood. Distinct from
@@ -208,36 +205,6 @@ function splitSentences(text) {
   return out;
 }
 
-// JSON-shaped sentence unit? (2026-07-06) Structured tool/agent output — e.g.
-// the triage pipeline's [{"row_id":...,"disposition":...}] proposal arrays —
-// must never be captured as scribe rows. A unit is JSON-shaped when it starts
-// with { or [ AND (it parses as JSON OR it looks like the start of an object
-// array). Sentence-splitting can fragment a long JSON blob so JSON.parse alone
-// is not enough — the /^\[?\s*\{\s*"/ prefix test catches the fragments.
-function isJsonShaped(unit) {
-  const t = unit.trim();
-  if (t[0] !== '{' && t[0] !== '[') return false;
-  if (/^\[?\s*\{\s*"/.test(t)) return true;
-  try { JSON.parse(t); return true; } catch { return false; }
-}
-
-// Belt-and-braces for the triage-proposal shape specifically: any fragment
-// carrying a {"row_id": ...} key is pipeline output, wherever it appears in
-// the unit (mid-fragment after sentence splitting included).
-const ROW_ID_JSON = /\{"row_id"\s*:/;
-
-// Self-referential scribe bookkeeping (2026-07-06): sentences that DESCRIBE
-// appending/summarizing to the scribe files ("3 new rows appended to
-// cleanup.md", "scribe wrote items to recommendations.md → done") are the
-// pipeline narrating itself, not follow-up work. Conservative on purpose:
-// requires BOTH a scribe-file mention AND append/summary context, so a genuine
-// action item like "delete the stale cleanup.md in project X" is still captured.
-const SCRIBE_FILE_RE = /(cleanup|recommendations|learnings)\.md/;
-const SCRIBE_BOOKKEEPING_RE = /(→|appended|scribe|item[s]? (written|captured)|\d+ (new|item))/i;
-function isScribeSelfReference(unit) {
-  return SCRIBE_FILE_RE.test(unit) && SCRIBE_BOOKKEEPING_RE.test(unit);
-}
-
 // Extract de-duplicated snippets containing a marker. Returns [{hash, text}, ...].
 function extractSnippets(text, markerRegex) {
   const sentences = splitSentences(text);
@@ -246,8 +213,6 @@ function extractSnippets(text, markerRegex) {
   for (const s of sentences) {
     if (snippets.length >= MAX_SNIPPETS_PER_SCOPE) break;
     if (!markerRegex.test(s)) continue;
-    if (isJsonShaped(s) || ROW_ID_JSON.test(s)) continue;
-    if (isScribeSelfReference(s)) continue;
     let trimmed = s.replace(/\s+/g, ' ').trim();
     if (trimmed.length < SNIPPET_MIN_CHARS) continue;
     if (trimmed.length > SNIPPET_MAX_CHARS) trimmed = trimmed.slice(0, SNIPPET_MAX_CHARS - 1) + '…';
@@ -266,31 +231,6 @@ function buildRow(id, sessionId, snippet) {
   const ts = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   const sid = (sessionId || 'unknown').slice(0, 8);
   return `| ${id} | ${ts} | ${sid} | ${snippet} | open |\n`;
-}
-
-// Header self-heal (2026-07-06). Bare-append historically produced headerless
-// files (rows with no title/schema/table-header). When the target is missing
-// or lacks the table-header line, prepend the canonical header block for the
-// bucket before appending rows. Keep in sync with rh-scribe-table-write.js —
-// both writers must produce the same on-disk shape.
-const TABLE_HEADER_PREFIX = '| id | ts | session |';
-const BUCKET_TITLES = {
-  'cleanup.md': 'Cleanup items',
-  'recommendations.md': 'Recommendations',
-  'learnings.md': 'Learnings',
-};
-function canonicalHeaderBlock(filePath) {
-  const title = BUCKET_TITLES[path.basename(filePath)];
-  if (!title) return null;
-  return [
-    `# ${title} (cross-session scribe log)`,
-    '',
-    'Schema: `id | ts | session | text | status`. Status is `open` by default; flips via triage dispositions or /rh-quit curation. Forward-looking — capture what needs follow-up.',
-    '',
-    '| id | ts | session | text | status |',
-    '|---|---|---|---|---|',
-    '',
-  ].join('\n');
 }
 
 // Insert rows into a target file with sentinel-correct positioning.
@@ -326,16 +266,6 @@ function appendRowsToFile(filePath, rows) {
         .join('\n');
 
       let body = stripped;
-
-      // Header self-heal: missing file or content without the table-header
-      // line gains the canonical header block (prepended, existing content
-      // preserved) before the new rows are appended.
-      const hasHeader = body.split('\n').some(l => l.trim().startsWith(TABLE_HEADER_PREFIX));
-      if (!hasHeader) {
-        const header = canonicalHeaderBlock(filePath);
-        if (header) body = header + (body.trim().length > 0 ? body : '');
-      }
-
       if (body.length > 0 && !body.endsWith('\n')) body += '\n';
 
       const newContent = body + rows.join('') + SENTINEL + '\n';
@@ -470,15 +400,6 @@ function backoffCheck(sessionId) {
 }
 
 wrapHook('scribe-prefilter', (input) => {
-  // Headless-scribe suppression (2026-07-06). Scripts that spawn headless
-  // `claude -p` (rh-scribe-triage.js, rh-learning-loop.js, rh-daily-guidance.js)
-  // set CLAUDE_SCRIBE_SUPPRESS=1 in the child env. Without this gate, the
-  // child session's own Stop hook runs this prefilter over the CHILD transcript
-  // and re-captures the pipeline's own output (e.g. triage-JSON proposals) as
-  // new open rows — self-contamination, 31 rows confirmed. Must run before ANY
-  // file write, including the staging block below.
-  if (process.env.CLAUDE_SCRIBE_SUPPRESS === '1') return {};
-
   const transcriptPath = input?.transcript_path;
   const sessionId = input?.session_id || '';
 

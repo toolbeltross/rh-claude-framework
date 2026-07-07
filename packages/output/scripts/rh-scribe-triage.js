@@ -35,16 +35,17 @@ const DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 function norm(p) { return String(p).replace(/\\/g, '/'); }
 
 // Canonical scribe files to triage: cleanup + recommendations at the workspace
-// root ONLY. (Learnings are low-fidelity per-turn snippets, not closeable
-// backlog — excluded.) Matches the rh-scribe-row-update.js allowlist domain.
-// 2026-07-06: the oversightDir copies were retired — the workspace-root files
-// are the single canonical location; oversight-dir copies were stale
-// cwd-walkup leftovers (see rh-doc-placement.md, workspace-vs-project trap).
+// root and the oversight-system project copy. (Learnings are low-fidelity
+// per-turn snippets, not closeable backlog — excluded.) Matches the
+// rh-scribe-row-update.js allowlist domain.
 function scribeFiles() {
   const ws = norm(config.workspace);
+  const ovr = norm(config.oversightDir);
   return [
     { file: ws + '/cleanup.md', bucket: 'cleanup' },
     { file: ws + '/recommendations.md', bucket: 'recommendations' },
+    { file: ovr + '/cleanup.md', bucket: 'cleanup' },
+    { file: ovr + '/recommendations.md', bucket: 'recommendations' },
   ];
 }
 
@@ -120,15 +121,8 @@ const VALID = /^(stale|still-open|resolve|duplicate-of:.+)$/;
 
 function dispatch(prompt) {
   // cwd: config.home (NOT an OneDrive path) — see windows-spawn-enoent-cwd.md.
-  // CLAUDE_SCRIBE_SUPPRESS=1 (2026-07-06): the headless child session runs the
-  // user's own Stop hooks, including rh-scribe-prefilter.js — which would
-  // regex-extract this triage run's OWN JSON output (row_id/disposition
-  // proposals) from the child transcript and append it to cleanup.md /
-  // recommendations.md as new open rows (self-contamination, 31 rows
-  // confirmed). The prefilter early-exits when this env var is set.
   const r = spawnSync('claude', ['-p', '--agent', 'rh-supervisor', prompt], {
     encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, cwd: config.home,
-    env: { ...process.env, CLAUDE_SCRIBE_SUPPRESS: '1' },
   });
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error };
 }

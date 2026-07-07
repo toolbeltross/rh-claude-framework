@@ -8,7 +8,6 @@
  */
 import { join } from 'path';
 import { homedir } from 'os';
-import { readFileSync } from 'fs';
 
 // ── Server ───────────────────────────────────────────────────────────────────
 
@@ -26,21 +25,6 @@ export const VITE_DEV_PORT = 5173;
 const HOME = process.env.HOME || process.env.USERPROFILE || homedir();
 
 export const CLAUDE_JSON_PATH = join(HOME, '.claude.json');
-
-/**
- * Optional user-level config file for persisted preferences (e.g. default UI).
- * Env vars always override values from this file. Missing/unparseable file
- * is treated as empty — never fatal.
- */
-export const TELEMETRY_CONFIG_PATH = join(HOME, '.claude', 'rh-telemetry-config.json');
-
-export function readUserConfig() {
-  try {
-    return JSON.parse(readFileSync(TELEMETRY_CONFIG_PATH, 'utf-8')) || {};
-  } catch {
-    return {};
-  }
-}
 export const STATS_CACHE_PATH = join(HOME, '.claude', 'stats-cache.json');
 export const CREDENTIALS_PATH = join(HOME, '.claude', '.credentials.json');
 export const CLAUDE_PROJECTS_DIR = join(HOME, '.claude', 'projects');

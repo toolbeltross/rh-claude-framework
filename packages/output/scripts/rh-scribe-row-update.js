@@ -44,14 +44,13 @@ function parseArgs(argv) {
 
 function norm(p) { return String(p || '').replace(/\\/g, '/'); }
 
-/** C4: config-driven allowlist of canonical scribe files.
- * 2026-07-06: oversightDir-derived entries retired — the workspace-root files
- * are the single canonical location; oversight-dir copies were stale
- * cwd-walkup leftovers (see rh-doc-placement.md, workspace-vs-project trap). */
+/** C4: config-driven allowlist of canonical scribe files. */
 function allowedSources() {
   const ws = norm(config.workspace);
+  const ovr = norm(config.oversightDir);
   const set = new Set();
   for (const b of ['cleanup.md', 'recommendations.md', 'learnings.md']) set.add(ws + '/' + b);
+  for (const b of ['cleanup.md', 'recommendations.md']) set.add(ovr + '/' + b);
   return set;
 }
 
