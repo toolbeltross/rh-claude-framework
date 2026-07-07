@@ -93,6 +93,10 @@ export default function PlanUsage({ planInfo, inline }) {
             </span>
           )}
         </>
+      ) : usageSource === 'no_token' ? (
+        <span className="text-[10px] text-amber/70 font-mono" title="Credentials file has no OAuth token (newer Claude Code builds store tokens elsewhere) — usage polling unavailable. Gauges populate from statusLine rate_limits when Claude Code sends them.">
+          usage unavailable — no OAuth token
+        </span>
       ) : (
         <span className="text-[10px] text-gray-500 font-mono" title="Waiting for usage data from Anthropic API — may take a moment after server start">
           fetching usage…
