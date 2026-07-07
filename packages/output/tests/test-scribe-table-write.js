@@ -23,15 +23,13 @@ const SENTINEL = '<!-- scribe-done -->';
 const NO_DB_ENV = { ...process.env, RH_SCRIBE_DB: '0', RH_CONTEXT_DB: '0' };
 const PG = process.env.RH_TEST_PG === '1';
 
-function withTmpFile(seed, fn, name = 'recs.md') {
+function withTmpFile(seed, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-stw-test-'));
-  const target = path.join(dir, name);
+  const target = path.join(dir, 'recs.md');
   if (seed !== undefined) fs.writeFileSync(target, seed, 'utf-8');
   try { return fn({ dir, target }); }
   finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
-
-const TABLE_HEADER = '| id | ts | session | text | status |';
 
 function runCli(args, stdinJson) {
   const r = spawnSync('node', [SCRIPT, ...args], {
@@ -247,85 +245,6 @@ const tests = [
       const r = runCli(['--target', target], { not: 'an array' });
       assert.strictEqual(r.exitCode, 1);
       assert.match(r.stderr, /must be an array/);
-    }),
-  },
-  {
-    name: 'header self-heal: headerless cleanup.md gains the canonical header block, rows preserved',
-    fn: () => withTmpFile(
-      '| oldrow01 | 2026-06-01 | sess | pre-existing headerless row | open |\n<!-- scribe-done -->\n',
-      ({ target }) => {
-        const r = runCli([
-          '--target', target,
-          '--id', 'healed01', '--session', 'sess1234', '--text', 'row after heal',
-        ]);
-        assert.strictEqual(r.exitCode, 0, `stderr: ${r.stderr}`);
-        const content = fs.readFileSync(target, 'utf-8');
-        assert.ok(content.startsWith('# Cleanup items (cross-session scribe log)'),
-          `canonical title must be prepended; got start: ${content.slice(0, 80)}`);
-        assert.ok(content.includes(TABLE_HEADER), 'table-header line must be present');
-        assert.ok(content.includes('|---|---|---|---|---|'), 'separator row must be present');
-        assert.ok(content.includes('| oldrow01 |'), 'pre-existing row must survive');
-        assert.ok(content.includes('| healed01 |'), 'new row must be appended');
-        const headerIdx = content.indexOf(TABLE_HEADER);
-        const oldRowIdx = content.indexOf('| oldrow01 |');
-        assert.ok(headerIdx < oldRowIdx, 'header block must precede existing rows');
-        const lines = content.split('\n').filter(Boolean);
-        assert.strictEqual(lines[lines.length - 1], SENTINEL, 'single sentinel still at EOF');
-      },
-      'cleanup.md'
-    ),
-  },
-  {
-    name: 'header self-heal: missing recommendations.md is created WITH the canonical header',
-    fn: () => withTmpFile(undefined, ({ target }) => {
-      const r = runCli([
-        '--target', target,
-        '--id', 'fresh001', '--session', 'sess1234', '--text', 'first row in fresh file',
-      ]);
-      assert.strictEqual(r.exitCode, 0, `stderr: ${r.stderr}`);
-      const content = fs.readFileSync(target, 'utf-8');
-      assert.ok(content.startsWith('# Recommendations (cross-session scribe log)'),
-        `canonical title expected; got start: ${content.slice(0, 80)}`);
-      assert.ok(content.includes(TABLE_HEADER), 'table-header line must be present');
-      assert.ok(content.includes('| fresh001 |'), 'row must be written');
-    }, 'recommendations.md'),
-  },
-  {
-    name: 'header self-heal: file that already has a header is untouched (no duplicate header block)',
-    fn: () => withTmpFile(
-      '# Cleanup items (cross-session scribe log)\n\n' +
-      'Schema: `id | ts | session | text | status`. Status is `open` by default; flips via triage dispositions or /rh-quit curation. Forward-looking — capture what needs follow-up.\n\n' +
-      TABLE_HEADER + '\n|---|---|---|---|---|\n' +
-      '| existing1 | 2026-06-01 | sess | already-headed row | open |\n<!-- scribe-done -->\n',
-      ({ target }) => {
-        const r = runCli([
-          '--target', target,
-          '--id', 'nodupe01', '--session', 'sess1234', '--text', 'appended row',
-        ]);
-        assert.strictEqual(r.exitCode, 0, `stderr: ${r.stderr}`);
-        const content = fs.readFileSync(target, 'utf-8');
-        const titleCount = (content.match(/# Cleanup items \(cross-session scribe log\)/g) || []).length;
-        assert.strictEqual(titleCount, 1, `header must not be duplicated; got ${titleCount}`);
-        const headerLineCount = content.split('\n').filter(l => l.trim().startsWith('| id | ts | session |')).length;
-        assert.strictEqual(headerLineCount, 1, 'exactly one table-header line');
-        assert.ok(content.includes('| existing1 |'), 'existing row preserved');
-        assert.ok(content.includes('| nodupe01 |'), 'new row appended');
-      },
-      'cleanup.md'
-    ),
-  },
-  {
-    name: 'header self-heal does NOT apply to non-bucket targets (recs.md keeps bare-append shape)',
-    fn: () => withTmpFile('# header\n', ({ target }) => {
-      const r = runCli([
-        '--target', target,
-        '--id', 'nonbuck1', '--session', 'sess1234', '--text', 'non-bucket target row',
-      ]);
-      assert.strictEqual(r.exitCode, 0, `stderr: ${r.stderr}`);
-      const content = fs.readFileSync(target, 'utf-8');
-      assert.ok(!content.includes(TABLE_HEADER), 'no canonical header for unknown bucket');
-      assert.ok(content.startsWith('# header\n'), 'original content untouched at top');
-      assert.ok(content.includes('| nonbuck1 |'), 'row still appended');
     }),
   },
   {

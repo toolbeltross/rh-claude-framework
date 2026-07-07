@@ -26,13 +26,15 @@ function parseArgs(argv) {
 function norm(p) { return String(p).replace(/\\/g, '/'); }
 
 // Same canonical set as rh-scribe-triage.js (cleanup + recommendations at the
-// workspace root; the oversight-system copy was retired 2026-07-06 alongside
-// the triage/row-update allowlists — see PLAN-2026-07-06-scribe-repair).
+// workspace root + the oversight-system copy).
 function scribeFiles() {
   const ws = norm(config.workspace);
+  const ovr = norm(config.oversightDir);
   return [
     { file: ws + '/cleanup.md', bucket: 'cleanup', scope: 'workspace' },
     { file: ws + '/recommendations.md', bucket: 'recommendations', scope: 'workspace' },
+    { file: ovr + '/cleanup.md', bucket: 'cleanup', scope: 'oversight-system' },
+    { file: ovr + '/recommendations.md', bucket: 'recommendations', scope: 'oversight-system' },
   ];
 }
 

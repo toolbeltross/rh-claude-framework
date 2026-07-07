@@ -60,33 +60,6 @@ const SENTINEL = '<!-- scribe-done -->';
 const LOCK_RETRIES = 30;
 const LOCK_BASE_WAIT_MS = 50;
 
-// Header self-heal (2026-07-06). Bare-append historically produced headerless
-// files (rows with no title/schema/table-header). When the target is missing
-// or lacks the table-header line, prepend the canonical header block for the
-// bucket before appending rows. Only applies to targets whose basename maps
-// to a known bucket — arbitrary targets keep the old bare-append behavior.
-// Keep in sync with rh-scribe-prefilter.js — both writers must produce the
-// same on-disk shape.
-const TABLE_HEADER_PREFIX = '| id | ts | session |';
-const BUCKET_TITLES = {
-  'cleanup.md': 'Cleanup items',
-  'recommendations.md': 'Recommendations',
-  'learnings.md': 'Learnings',
-};
-function canonicalHeaderBlock(filePath) {
-  const title = BUCKET_TITLES[path.basename(filePath)];
-  if (!title) return null;
-  return [
-    `# ${title} (cross-session scribe log)`,
-    '',
-    'Schema: `id | ts | session | text | status`. Status is `open` by default; flips via triage dispositions or /rh-quit curation. Forward-looking — capture what needs follow-up.',
-    '',
-    '| id | ts | session | text | status |',
-    '|---|---|---|---|---|',
-    '',
-  ].join('\n');
-}
-
 function parseArgs(argv) {
   const out = { target: null, rows: [], dryRun: false };
   for (let i = 0; i < argv.length; i++) {
@@ -145,18 +118,8 @@ function appendAtomic(target, rowLines) {
       .filter(l => l.trim() !== SENTINEL)
       .join('\n');
 
-    let body = stripped;
-
-    // Header self-heal: missing file or content without the table-header
-    // line gains the canonical header block (prepended, existing content
-    // preserved) before the new rows are appended.
-    const hasHeader = body.split('\n').some(l => l.trim().startsWith(TABLE_HEADER_PREFIX));
-    if (!hasHeader) {
-      const header = canonicalHeaderBlock(target);
-      if (header) body = header + (body.trim().length > 0 ? body : '');
-    }
-
     // Ensure trailing newline before appending rows.
+    let body = stripped;
     if (body.length > 0 && !body.endsWith('\n')) body += '\n';
 
     // Append new rows + single sentinel at EOF.

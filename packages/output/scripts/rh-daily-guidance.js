@@ -121,15 +121,9 @@ function main() {
     return;
   }
 
-  // CLAUDE_SCRIBE_SUPPRESS=1 (2026-07-06): the headless child runs the user's
-  // Stop hooks, including rh-scribe-prefilter.js — without suppression the
-  // prefilter re-captures this run's own digest/proposal output from the child
-  // transcript as new scribe rows (self-contamination). Prefilter early-exits
-  // when this env var is set.
   const r = spawnSync('claude', ['-p', '--agent', 'rh-daily-guidance', '--allowedTools', ...ALLOWED_TOOLS], {
     encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, cwd: config.workspace,
     input: kickoff, windowsHide: true,
-    env: { ...process.env, CLAUDE_SCRIBE_SUPPRESS: '1' },
   });
 
   const wrote = fs.existsSync(digestPath(day));

@@ -26,7 +26,6 @@ npm run setup-hooks  # Required: enables live tool feed, validation, prompt capt
 ### v2 frontend (opt-in; all 7 surfaces built, Phase 4 cutover pending)
 v2 ships in the same tarball as v1, gated by an env flag. v1 is untouched and remains the default. All 7 surfaces (Live, Sessions, Subagents, Oversight, Failures, Trends, History) are implemented as of 2026-06-12; the Oversight surface gets real-time WS push (`oversightEvent` frame) with the 30s poll kept as fallback.
 - `RH_TELEMETRY_UI=v2 npm start` (or `rh-telemetry start --ui v2`) → serves `dist-v2/`
-- **Persistent default:** `~/.claude/rh-telemetry-config.json` with `{"ui":"v2"}` — read by `server/config.js:readUserConfig()` and consulted after `RH_TELEMETRY_UI` in `server/index.js`. Env var still wins if set; missing / unparseable file is treated as empty (never fatal). Survives SessionStart-hook auto-restart which does not pass the env var.
 - `npm run build:v2` → build the v2 bundle
 - `npm run client:v2` → Vite dev server for v2 source on `:5174` (proxies API to `:7890`)
 - v2 source lives at `src-v2/`, separate Vite config at `vite.config.v2.js`, separate entry `index.v2.html`. v1 paths unchanged.

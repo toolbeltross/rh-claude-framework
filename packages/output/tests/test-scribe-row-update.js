@@ -20,10 +20,10 @@ function mkWorkspace() {
   return { dir, cleanup };
 }
 
-function run(args, ws, extraEnv = {}) {
+function run(args, ws) {
   const res = spawnSync(process.execPath, [SCRIPT, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_WORKSPACE: ws, RH_SCRIBE_DB: '0', ...extraEnv },
+    env: { ...process.env, CLAUDE_WORKSPACE: ws, RH_SCRIBE_DB: '0' },
   });
   let json = null;
   try { json = JSON.parse((res.stdout || '').trim().split('\n').pop()); } catch {}
@@ -65,23 +65,6 @@ const tests = [
       assert.strictEqual(r.json.ok, false);
       assert.strictEqual(r.json.error, 'row not found');
       assert.strictEqual(fs.readFileSync(cleanup, 'utf8'), before);
-    },
-  },
-  {
-    name: 'C4: an oversightDir-relative source is rejected (allowlist retired 2026-07-06), file untouched',
-    fn: () => {
-      const { dir } = mkWorkspace();
-      const ovr = path.join(dir, 'oversight-system');
-      const bad = path.join(ovr, 'cleanup.md');
-      fs.mkdirSync(ovr, { recursive: true });
-      fs.writeFileSync(bad, '| aaaaaaaa | 2026-06-01 | s | t | open |\n<!-- scribe-done -->\n', 'utf8');
-      const before = fs.readFileSync(bad, 'utf8');
-      const r = run(['--source', bad, '--id', 'aaaaaaaa', '--status', 'resolved'], dir,
-        { OVERSIGHT_DIR: ovr });
-      assert.strictEqual(r.json.ok, false);
-      assert.ok(/not in allowlist/.test(r.json.error),
-        `expected allowlist rejection for oversightDir path; got ${r.json.error}`);
-      assert.strictEqual(fs.readFileSync(bad, 'utf8'), before, 'rejected file untouched');
     },
   },
   {

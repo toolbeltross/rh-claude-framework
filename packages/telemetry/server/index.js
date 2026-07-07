@@ -26,7 +26,6 @@ import {
   JSONL_POLL_INTERVAL_MS,
   JSONL_STABILITY_MS,
   JSONL_WRITE_POLL_MS,
-  readUserConfig,
 } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -203,12 +202,10 @@ if (process.env.RH_TELEMETRY_TEST_MODE === '1') {
 }
 
 // Serve built frontend in production
-// UI resolution: RH_TELEMETRY_UI env var > ~/.claude/rh-telemetry-config.json "ui" field > v1.
-// v1 → serve dist/   ;  v2 → serve dist-v2/
+// RH_TELEMETRY_UI=v1 (default) → serve dist/   ;  RH_TELEMETRY_UI=v2 → serve dist-v2/
 // If the chosen build is missing, log a warning and skip the static mount
 // (do NOT silently fall back — would mask "did my build run?").
-const uiPref = process.env.RH_TELEMETRY_UI || readUserConfig().ui;
-const RH_TELEMETRY_UI = uiPref === 'v2' ? 'v2' : 'v1';
+const RH_TELEMETRY_UI = process.env.RH_TELEMETRY_UI === 'v2' ? 'v2' : 'v1';
 const distDirName = RH_TELEMETRY_UI === 'v2' ? 'dist-v2' : 'dist';
 const distPath = join(__dirname, '..', distDirName);
 const distEntryHtml = RH_TELEMETRY_UI === 'v2' ? 'index.v2.html' : 'index.html';

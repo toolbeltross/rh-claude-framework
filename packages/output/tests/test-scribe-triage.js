@@ -46,19 +46,12 @@ const tests = [
     },
   },
   {
-    name: 'scribeFiles lists cleanup + recommendations under the workspace root ONLY (oversightDir retired 2026-07-06)',
+    name: 'scribeFiles lists cleanup + recommendations under workspace + oversightDir',
     fn: () => {
-      const { config } = require(path.join(__dirname, '..', 'scripts', 'lib', 'config.js'));
       const files = triage.scribeFiles();
-      assert.strictEqual(files.length, 2, 'exactly 2 canonical files (workspace cleanup + recommendations)');
+      assert.ok(files.length >= 4, 'at least 4 canonical files');
       assert.ok(files.every(f => /\/(cleanup|recommendations)\.md$/.test(f.file)), 'only cleanup/recommendations');
       assert.ok(files.some(f => f.bucket === 'cleanup') && files.some(f => f.bucket === 'recommendations'));
-      const ws = String(config.workspace).replace(/\\/g, '/');
-      const ovr = String(config.oversightDir).replace(/\\/g, '/');
-      assert.ok(files.every(f => f.file.startsWith(ws + '/')), 'all entries under the workspace root');
-      if (ovr !== ws) {
-        assert.ok(files.every(f => !f.file.startsWith(ovr + '/')), 'no oversightDir entries remain');
-      }
     },
   },
 ];
