@@ -84,10 +84,16 @@ function runSql(sql, timeoutMs = 15000) {
     env: { ...process.env, PGCLIENTENCODING: 'UTF8' },
   });
   if (res.error) return { ok: false, error: String(res.error.message || res.error) };
-  // A spawnSync timeout-kill lands HERE with res.error unset and stderr empty,
-  // so the bare `(res.stderr || '')` reported an empty string and made the
-  // failure undiagnosable by construction — 272 of 734 write failures (37%)
-  // and 35 of 107 read failures carried error:"". Fall back to signal/status.
+  // Defensive: a non-zero exit with EMPTY stderr previously returned error:"",
+  // which is undiagnosable by construction — 272 of 734 write failures (37%)
+  // and 35 of 107 read failures in oversight-events.jsonl carry error:"".
+  // Fall back to status/signal so such a failure always says something.
+  //
+  // HONEST SCOPE NOTE (live-tested 2026-07-25): this is NOT proven to be the
+  // source of those 272. A forced timeout is caught by the res.error branch
+  // ABOVE (spawnSync does set res.error on ETIMEDOUT), so timeout-kills were
+  // always diagnosable. The real cause of the empty-error events is still
+  // UNIDENTIFIED. Verified this branch does not clobber genuine stderr.
   if (res.status !== 0 || res.signal) {
     const stderr = (res.stderr || '').trim();
     return { ok: false, error: stderr ? stderr.slice(0, 300) : `psql failed: status=${res.status} signal=${res.signal || 'none'}` };
