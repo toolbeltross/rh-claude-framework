@@ -61,7 +61,14 @@ function dollarQuote(s) {
   return '$' + tag + '$' + String(s) + '$' + tag + '$';
 }
 
-function runSql(sql, timeoutMs = 3000) {
+// Default raised 3000 -> 15000 (2026-07-25). The 3000 ms default produced 346
+// spawnSync ETIMEDOUT failures in a 2026-06-17..06-20 burst, ALL from the two
+// call sites that relied on the default (writeRow + setProposal via
+// rh-scribe-triage.js). Call sites that pass explicit timeouts
+// (rh-transcript-ingest.js: 10000/30000/60000) have never failed. 3000 ms is
+// below Windows psql cold-start + query under load. Explicit args are
+// unaffected by this change.
+function runSql(sql, timeoutMs = 15000) {
   const psql = findPsql();
   if (!psql) return { ok: false, error: 'psql not found (set oversight.json scribeDbPsql)' };
   // SQL goes via stdin, NOT -c: on Windows, command-line args are encoded
@@ -77,7 +84,14 @@ function runSql(sql, timeoutMs = 3000) {
     env: { ...process.env, PGCLIENTENCODING: 'UTF8' },
   });
   if (res.error) return { ok: false, error: String(res.error.message || res.error) };
-  if (res.status !== 0) return { ok: false, error: (res.stderr || '').slice(0, 300) };
+  // A spawnSync timeout-kill lands HERE with res.error unset and stderr empty,
+  // so the bare `(res.stderr || '')` reported an empty string and made the
+  // failure undiagnosable by construction — 272 of 734 write failures (37%)
+  // and 35 of 107 read failures carried error:"". Fall back to signal/status.
+  if (res.status !== 0 || res.signal) {
+    const stderr = (res.stderr || '').trim();
+    return { ok: false, error: stderr ? stderr.slice(0, 300) : `psql failed: status=${res.status} signal=${res.signal || 'none'}` };
+  }
   return { ok: true, stdout: (res.stdout || '').trim() };
 }
 

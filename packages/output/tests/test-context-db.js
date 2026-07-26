@@ -11,9 +11,20 @@ const path = require('path');
 const SHARED = path.join(__dirname, '..', '..', 'shared');
 const LIB = path.join(__dirname, '..', 'scripts', 'lib');
 
-function freshContextDb(env) {
+function freshContextDb(envIn) {
   // context-db captures resolved config at require time (and pulls runSql from
   // scribe-db, which does the same), so clear both libs + both config layers.
+  //
+  // OVERSIGHT_EVENTS_PATH is injected here (2026-07-25) so failure-path tests
+  // cannot append to the USER'S live ~/.claude/oversight-events.jsonl. The two
+  // 'Z:/nope/psql.exe' cases below wrote all 82 context_db_write_failed events
+  // ever recorded in that log — every one of them test residue, indistinguishable
+  // at a glance from real failures. Injected in the helper, not per-call-site,
+  // so future tests inherit it. Callers may still override explicitly.
+  const env = {
+    OVERSIGHT_EVENTS_PATH: path.join(require('os').tmpdir(), `rh-test-oversight-events-${process.pid}.jsonl`),
+    ...envIn,
+  };
   const prev = {};
   for (const [k, v] of Object.entries(env)) { prev[k] = process.env[k]; process.env[k] = v; }
   for (const m of [

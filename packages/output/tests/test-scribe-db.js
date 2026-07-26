@@ -11,9 +11,21 @@ const path = require('path');
 const SHARED = path.join(__dirname, '..', '..', 'shared');
 const LIB = path.join(__dirname, '..', 'scripts', 'lib');
 
-function freshScribeDb(env) {
+function freshScribeDb(envIn) {
   // scribe-db captures the resolved config at require time, so a fresh
   // require (with cleared caches) is needed per env scenario.
+  //
+  // OVERSIGHT_EVENTS_PATH is injected here (2026-07-25) so failure-path tests
+  // cannot append to the USER'S live ~/.claude/oversight-events.jsonl. Before
+  // this, the deliberately-broken-psql cases wrote 212 junk events into the
+  // real log (130 from this file's 'Z:/does/not/exist/psql.exe' case, 82 from
+  // test-context-db.js) — polluting the very dataset oversight audits read.
+  // Injected in the helper, not per-call-site, so future tests inherit it.
+  // Callers may still override explicitly.
+  const env = {
+    OVERSIGHT_EVENTS_PATH: path.join(require('os').tmpdir(), `rh-test-oversight-events-${process.pid}.jsonl`),
+    ...envIn,
+  };
   const prev = {};
   for (const [k, v] of Object.entries(env)) { prev[k] = process.env[k]; process.env[k] = v; }
   for (const m of [path.join(LIB, 'scribe-db.js'), path.join(LIB, 'config.js'), path.join(SHARED, 'config.js')]) {
