@@ -61,23 +61,57 @@ function dollarQuote(s) {
   return '$' + tag + '$' + String(s) + '$' + tag + '$';
 }
 
-function runSql(sql, timeoutMs = 3000) {
+// Default raised 3000 -> 15000 (2026-07-25). The 3000 ms default produced 346
+// spawnSync ETIMEDOUT failures in a 2026-06-17..06-20 burst, ALL from the two
+// call sites that relied on the default (writeRow + setProposal via
+// rh-scribe-triage.js). Call sites that pass explicit timeouts
+// (rh-transcript-ingest.js: 10000/30000/60000) have never failed. 3000 ms is
+// below Windows psql cold-start + query under load. Explicit args are
+// unaffected by this change.
+function runSql(sql, timeoutMs = 15000) {
   const psql = findPsql();
   if (!psql) return { ok: false, error: 'psql not found (set oversight.json scribeDbPsql)' };
   // SQL goes via stdin, NOT -c: on Windows, command-line args are encoded
   // with the system codepage (cp1252), silently mangling non-ASCII content
   // (verified 2026-06-11: a U+2192 arrow stored as '?'). stdin bytes are
   // ours; PGCLIENTENCODING=UTF8 stops psql from locale-guessing them.
+  // maxBuffer: Node's spawnSync default is 1 MiB. Full-table json_agg reads
+  // (readRows({})) exceeded it → ENOBUFS → ok:false, which silently emptied the
+  // /scribe proposal overlay AND the triage dedup set (backlog appeared
+  // undrained). 64 MiB floor so no runSql caller can silently overflow again.
+  // See claude-setup-ross/oversight-system/INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md
+  const MAX_BUFFER = 64 * 1024 * 1024;
   const res = spawnSync(psql, [
     '-U', config.scribeDbUser, '-h', config.scribeDbHost, '-p', String(config.scribeDbPort),
     '-d', config.scribeDbName, '-w', '-q', '-v', 'ON_ERROR_STOP=1', '-t', '-A', '-f', '-',
   ], {
-    timeout: timeoutMs, encoding: 'utf8', windowsHide: true,
+    timeout: timeoutMs, encoding: 'utf8', windowsHide: true, maxBuffer: MAX_BUFFER,
     input: Buffer.from(sql, 'utf8'),
     env: { ...process.env, PGCLIENTENCODING: 'UTF8' },
   });
-  if (res.error) return { ok: false, error: String(res.error.message || res.error) };
-  if (res.status !== 0) return { ok: false, error: (res.stderr || '').slice(0, 300) };
+  if (res.error) {
+    const msg = String(res.error.message || res.error);
+    // Buffer overflow must stay diagnosable in one query, not require a full
+    // investigation again: record how many bytes the read actually produced.
+    if (/ENOBUFS|maxBuffer/i.test(msg)) {
+      try { appendOversightEvent('scribe_db_buffer_exceeded', { stdoutBytes: (res.stdout || '').length, maxBuffer: MAX_BUFFER, error: msg.slice(0, 200) }); } catch {}
+    }
+    return { ok: false, error: msg };
+  }
+  // Defensive: a non-zero exit with EMPTY stderr previously returned error:"",
+  // which is undiagnosable by construction — 272 of 734 write failures (37%)
+  // and 35 of 107 read failures in oversight-events.jsonl carry error:"".
+  // Fall back to status/signal so such a failure always says something.
+  //
+  // HONEST SCOPE NOTE (live-tested 2026-07-25): this is NOT proven to be the
+  // source of those 272. A forced timeout is caught by the res.error branch
+  // ABOVE (spawnSync does set res.error on ETIMEDOUT), so timeout-kills were
+  // always diagnosable. The real cause of the empty-error events is still
+  // UNIDENTIFIED. Verified this branch does not clobber genuine stderr.
+  if (res.status !== 0 || res.signal) {
+    const stderr = (res.stderr || '').trim();
+    return { ok: false, error: stderr ? stderr.slice(0, 300) : `psql failed: status=${res.status} signal=${res.signal || 'none'}` };
+  }
   return { ok: true, stdout: (res.stdout || '').trim() };
 }
 
@@ -159,6 +193,42 @@ function readRows(opts = {}) {
 }
 
 /**
+ * Read ONLY the proposal-overlay columns for rows that carry a proposal.
+ * Narrow by design: the /scribe UI overlay (rh-scribe-query.js) and the triage
+ * dedup (rh-scribe-triage.js) need only (bucket, row_id, source_file, proposed_*)
+ * — they must NOT pull the large `content` column. The old readRows({}) hot path
+ * did, and the full-table json_agg blob blew past spawnSync's buffer (ENOBUFS),
+ * silently emptying both consumers. WHERE proposed_at IS NOT NULL keeps the
+ * result to the ~hundreds of proposed rows. Never throws.
+ * See INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md.
+ * @returns {{ok:boolean, rows?:object[], skipped?:boolean, error?:string}}
+ *   skipped:true when scribeDb is off (caller should fall back to md-parse).
+ */
+function readProposals() {
+  try {
+    if (!config.scribeDb) return { ok: true, skipped: true, rows: [] };
+    const sql =
+      "SELECT coalesce(json_agg(row_to_json(t)), '[]'::json) FROM (" +
+      'SELECT bucket, row_id, source_file, ' +
+      'proposed_disposition, proposed_rationale, proposed_followup, proposed_at ' +
+      'FROM scribe_rows WHERE proposed_at IS NOT NULL' +
+      ') t;';
+    const res = runSql(sql);
+    if (!res.ok) {
+      appendOversightEvent('scribe_db_read_failed', { op: 'readProposals', error: res.error });
+      return { ok: false, error: res.error };
+    }
+    let rows;
+    try { rows = JSON.parse(res.stdout || '[]'); } catch (e) {
+      return { ok: false, error: 'unparseable json: ' + String(e.message || e) };
+    }
+    return { ok: true, rows: Array.isArray(rows) ? rows : [] };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
  * Write the LLM-proposed disposition columns for one row. Propose-only —
  * never touches `status`. Matches on the natural key (bucket, source_file,
  * row_id). Never throws.
@@ -206,4 +276,4 @@ function setStatus(p) {
   }
 }
 
-module.exports = { writeRow, readRows, setProposal, setStatus, runSql, dollarQuote, findPsql, canonicalSourceFile };
+module.exports = { writeRow, readRows, readProposals, setProposal, setStatus, runSql, dollarQuote, findPsql, canonicalSourceFile };
