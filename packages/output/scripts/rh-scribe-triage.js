@@ -60,7 +60,11 @@ function recordRun() { try { fs.writeFileSync(LAST_RUN_FILE, new Date().toISOStr
 // Rows already proposed (proposed_at set) in the DB shadow, keyed bucket|src|id.
 function alreadyProposed() {
   const set = new Set();
-  const res = scribeDb.readRows({});
+  // Narrow proposal-only read. The old readRows({}) overflowed spawnSync's
+  // buffer (ENOBUFS) → empty set → every open row looked untriaged → triage
+  // re-dispatched the same oldest rows daily instead of advancing. See
+  // INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md.
+  const res = scribeDb.readProposals();
   if (!res.ok || !res.rows) return set;
   for (const r of res.rows) {
     if (r.proposed_at) set.add(`${r.bucket}|${norm(r.source_file || '')}|${r.row_id}`);

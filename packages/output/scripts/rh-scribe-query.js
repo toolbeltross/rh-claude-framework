@@ -45,7 +45,11 @@ function ageDays(ts) {
 // Proposal overlay: map "bucket|source|id" → {disposition, rationale, followup, at}.
 function proposalMap() {
   const m = new Map();
-  const res = scribeDb.readRows({});
+  // Narrow proposal-only read (drops the large `content` column). The old
+  // readRows({}) overflowed spawnSync's buffer (ENOBUFS) → empty overlay →
+  // proposed:0 despite hundreds of real proposals. See
+  // INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md.
+  const res = scribeDb.readProposals();
   if (!res.ok || !res.rows) return m;
   for (const r of res.rows) {
     if (!r.proposed_at) continue;
