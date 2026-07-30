@@ -9,9 +9,36 @@ import { writeFileAtomic } from './fs-atomic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
-const START_BG_SCRIPT = join(PROJECT_ROOT, 'scripts', 'start-bg.js').replace(/\\/g, '/');
-const HOOK_FORWARDER = join(PROJECT_ROOT, 'scripts', 'hook-forwarder.js').replace(/\\/g, '/');
-const TOOL_VALIDATOR_V2 = join(PROJECT_ROOT, 'scripts', 'tool-validator-v2.js').replace(/\\/g, '/');
+// Hook commands are emitted via the rh-fw.js LAUNCHER when it is deployed, and
+// only fall back to an absolute PROJECT_ROOT path when it is not.
+//
+// Why: absolute paths baked into settings.json are the F-19 failure class —
+// they survive only until something moves. The 2026-07-27/28 OneDrive->local
+// migration broke exactly this, and the fix was to name a stable launcher plus
+// a script NAME, letting rh-fw.js resolve the framework root per invocation.
+//
+// Emitting absolute paths here silently UNDID that fix: filterOurEntries()
+// below identifies its own prior hooks by bare-name substring
+// ('hook-forwarder', 'tool-validator', 'start-bg.js'), and launcher-form
+// commands contain those names as ARGUMENTS — so a re-run matched them,
+// stripped them, and wrote absolute paths back. A clean revert, and a silent
+// one, because rh-fw.js fails open (exit 0) and telemetry would simply stop.
+//
+// Keeping the bare names in the emitted command is therefore deliberate: it
+// keeps filterOurEntries idempotent across re-runs in EITHER form.
+//
+// These constants now hold a full command prefix, not a path — hence the _CMD
+// suffix.
+const FW_LAUNCHER = join(homedir(), '.claude', 'scripts', 'rh-fw.js').replace(/\\/g, '/');
+const USE_LAUNCHER = existsSync(FW_LAUNCHER);
+const cmdFor = (name) =>
+  USE_LAUNCHER
+    ? `node "${FW_LAUNCHER}" ${name}`
+    : `node "${join(PROJECT_ROOT, 'scripts', name).replace(/\\/g, '/')}"`;
+
+const START_BG_SCRIPT_CMD = cmdFor('start-bg.js');
+const HOOK_FORWARDER_CMD = cmdFor('hook-forwarder.js');
+const TOOL_VALIDATOR_V2_CMD = cmdFor('tool-validator-v2.js');
 
 // Detect WSL: Node on WSL reports platform 'linux' but the filesystem may be mounted via /mnt/
 const IS_WSL = platform() === 'linux' && !!process.env.WSL_DISTRO_NAME;
@@ -72,19 +99,19 @@ export function buildHookConfig(existingSettings) {
   // --- SessionStart: auto-start telemetry server ---
   settings.hooks.SessionStart = [
     ...filterOurEntries(settings.hooks.SessionStart, 'start-bg.js'),
-    { hooks: [{ type: 'command', command: `node "${START_BG_SCRIPT}" > /dev/null 2>&1 || true` }] },
+    { hooks: [{ type: 'command', command: `${START_BG_SCRIPT_CMD} > /dev/null 2>&1 || true` }] },
   ];
 
   // --- PostToolUse: forward tool events ---
   settings.hooks.PostToolUse = [
     ...filterOurEntries(settings.hooks.PostToolUse, 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" tool "$CLAUDE_TOOL_NAME" "$CLAUDE_SESSION_ID" post_tool_use` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} tool "$CLAUDE_TOOL_NAME" "$CLAUDE_SESSION_ID" post_tool_use` }] },
   ];
 
   // --- PostToolUseFailure: forward tool failures ---
   settings.hooks.PostToolUseFailure = [
     ...filterOurEntries(settings.hooks.PostToolUseFailure, 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" tool-failure "$CLAUDE_TOOL_NAME" "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} tool-failure "$CLAUDE_TOOL_NAME" "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- PreToolUse:Bash — Layer 1 environment-aware validation (v2) ---
@@ -94,7 +121,7 @@ export function buildHookConfig(existingSettings) {
     ...filterOurEntries(settings.hooks.PreToolUse, 'tool-validator'),
     {
       matcher: 'Bash',
-      hooks: [{ type: 'command', command: `node "${TOOL_VALIDATOR_V2}"`, timeout: 5 }],
+      hooks: [{ type: 'command', command: `${TOOL_VALIDATOR_V2_CMD}`, timeout: 5 }],
     },
   ];
 
@@ -109,7 +136,7 @@ export function buildHookConfig(existingSettings) {
     ...filterOurEntries(settings.hooks.Stop, 'hook-forwarder'),
     {
       hooks: [
-        { type: 'command', command: `node "${HOOK_FORWARDER}" stop "$CLAUDE_SESSION_ID"` },
+        { type: 'command', command: `${HOOK_FORWARDER_CMD} stop "$CLAUDE_SESSION_ID"` },
         {
           type: 'prompt',
           prompt: `ADDITIVE ONLY — Layer 3a narrow supervisory review. Claude just finished its most recent assistant turn. Review ONLY that most recent turn against exactly 3 rules and return JSON. Historical claims from earlier in the conversation are OUT OF SCOPE — do not re-flag violations from prior turns; assume any past issues have been acknowledged and addressed.
@@ -138,25 +165,25 @@ Do NOT flag violations from prior turns — acknowledging a past violation in th
   // --- PreCompact: detect context compaction ---
   settings.hooks.PreCompact = [
     ...filterOurEntries(settings.hooks.PreCompact, 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" compact "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} compact "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- SessionEnd: mark session ended on the dashboard (kept until stale prune) ---
   settings.hooks.SessionEnd = [
     ...filterOurEntries(settings.hooks.SessionEnd || [], 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" session-end "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} session-end "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- PermissionRequest: surface "waiting on permission" state ---
   settings.hooks.PermissionRequest = [
     ...filterOurEntries(settings.hooks.PermissionRequest || [], 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" permission-request "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} permission-request "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- SubagentStart: track spawned subagents ---
   settings.hooks.SubagentStart = [
     ...filterOurEntries(settings.hooks.SubagentStart, 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" subagent-start "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} subagent-start "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- SubagentStop: telemetry ---
@@ -164,7 +191,7 @@ Do NOT flag violations from prior turns — acknowledging a past violation in th
     ...filterOurEntries(settings.hooks.SubagentStop, 'hook-forwarder'),
     {
       hooks: [
-        { type: 'command', command: `node "${HOOK_FORWARDER}" subagent-stop "$CLAUDE_SESSION_ID"` },
+        { type: 'command', command: `${HOOK_FORWARDER_CMD} subagent-stop "$CLAUDE_SESSION_ID"` },
       ],
     },
   ];
@@ -172,19 +199,19 @@ Do NOT flag violations from prior turns — acknowledging a past violation in th
   // --- UserPromptSubmit: capture current prompt ---
   settings.hooks.UserPromptSubmit = [
     ...filterOurEntries(settings.hooks.UserPromptSubmit, 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" user-prompt "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} user-prompt "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- ConfigChange: log settings modifications ---
   settings.hooks.ConfigChange = [
     ...filterOurEntries(settings.hooks.ConfigChange || [], 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" config-change "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} config-change "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- TaskCompleted: log task completions ---
   settings.hooks.TaskCompleted = [
     ...filterOurEntries(settings.hooks.TaskCompleted || [], 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" task-completed "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} task-completed "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // --- InstructionsLoaded: Anthropic-recommended audit/compliance hook ---
@@ -193,7 +220,7 @@ Do NOT flag violations from prior turns — acknowledging a past violation in th
   // CLAUDE.md drift. Added 2026-05-08 (P2-3).
   settings.hooks.InstructionsLoaded = [
     ...filterOurEntries(settings.hooks.InstructionsLoaded || [], 'hook-forwarder'),
-    { hooks: [{ type: 'command', command: `node "${HOOK_FORWARDER}" instructions-loaded "$CLAUDE_SESSION_ID"` }] },
+    { hooks: [{ type: 'command', command: `${HOOK_FORWARDER_CMD} instructions-loaded "$CLAUDE_SESSION_ID"` }] },
   ];
 
   // StatusLine is handled separately via repairStatusLine() in main() — do NOT
