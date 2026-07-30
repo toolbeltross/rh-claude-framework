@@ -669,7 +669,28 @@ if (mode === 'status') {
   // P2-1: write start-flag so subagent-stop can detect orphans (stops without
   // a matching start). Per 2026-05-08 audit, the orphan rate was 71% in 7d
   // window — until alerts fire we have no way to investigate.
-  try { appendFileSync(subagentFlagPath(agentId), `${Date.now()}\n`); } catch {}
+  //
+  // Write it ONLY when the payload carried a real agent_id. `agentId` above
+  // falls back to `agent-${Date.now()}` because deriveAgentTranscriptPath needs
+  // some value, but a FLAG under that synthesized name is strictly harmful:
+  // subagent-stop resolves `parsed.agent_id` only and never reconstructs a
+  // timestamp, so such a flag can NEVER be matched. It strands on disk until
+  // auto-prune's 24h sweep, and the paired stop is misreported as an orphan.
+  // Evidence (2026-07-29): 2 of 5 logged starts used the fallback, and two
+  // unmatchable `subagent-active-agent-<epoch>.flag` files were live on disk.
+  // Skip the flag and record the unpairable start instead, so the gap is
+  // visible here rather than resurfacing later as a false orphan alert.
+  if (parsed.agent_id) {
+    try { appendFileSync(subagentFlagPath(agentId), `${Date.now()}\n`); } catch {}
+  } else {
+    debugLog(`subagent-start: NO agent_id in payload — start-flag skipped (paired stop will be unpairable) tag=${promptTag}`);
+    emitOversightEvent('subagent_start_unpairable', {
+      session_id: sessionId,
+      agent_type: parsed.agent_type || 'unknown',
+      promptTag,
+      note: 'SubagentStart payload carried no agent_id. No start-flag written, because SubagentStop matches on agent_id only — a synthesized name would strand and cause a false orphan alert. The paired stop will still be reported as an orphan; that orphan is explained by THIS event.',
+    });
+  }
 
   await post('/api/subagent', {
     session_id: sessionId,
