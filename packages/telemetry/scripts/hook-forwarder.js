@@ -411,11 +411,20 @@ if (mode === 'status') {
     const totalCacheTokens = cacheRead + cacheWrite;
     const cacheHitPct = totalCacheTokens > 0 ? Math.round(cacheRead / totalCacheTokens * 100) : 0;
 
-    // Git branch (fast fail, 500ms timeout)
+    // Git branch (fast fail, 500ms timeout).
+    // Suppress git's stderr via stdio, NOT a `2>/dev/null` shell redirect:
+    // execSync runs through cmd.exe on Windows, where `/dev/null` is not a valid
+    // path, so the redirect itself failed with "The system cannot find the path
+    // specified." — printed to stderr on EVERY statusline render — and the throw
+    // meant the branch was never detected at all (the statusline silently lost
+    // its branch segment on Windows). stdio suppression is portable.
     let branch = '';
     try {
       const { execSync } = await import('child_process');
-      branch = execSync('git branch --show-current 2>/dev/null', { cwd: cwd || undefined, timeout: 500, encoding: 'utf-8' }).trim();
+      branch = execSync('git branch --show-current', {
+        cwd: cwd || undefined, timeout: 500, encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
     } catch {}
 
     // Worktree indicator
