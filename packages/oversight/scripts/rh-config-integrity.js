@@ -76,10 +76,28 @@ function collectScriptRefs(settingsRaw) {
   const refs = new Set();
   const addPath = (p) => {
     if (!p) return;
+
+    // Placeholders this probe CANNOT resolve are skipped, not guessed.
+    //
+    // ${CLAUDE_PROJECT_DIR} is the PROJECT root (per the hooks docs, which also
+    // set it for stdio MCP servers and plugin LSP servers) — it is NOT
+    // ~/.claude. An earlier revision mapped it to config.claudeDir, which would
+    // have resolved a documented placeholder to the wrong directory and reported
+    // a present script as MISSING. This probe scans a USER-level settings.json
+    // with no project context, so the value differs per session and is
+    // unknowable here; honour $CLAUDE_PROJECT_DIR from the environment when
+    // Claude Code has exported it, and otherwise skip the reference.
+    // ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PLUGIN_DATA} are plugin-install-relative
+    // and change on each plugin update — likewise unknowable, likewise skipped.
+    const hasProjectDir = /\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/.test(p);
+    if (/\$\{?CLAUDE_PLUGIN_(ROOT|DATA)\}?/.test(p)) return;
+    if (hasProjectDir && !process.env.CLAUDE_PROJECT_DIR) return;
+
     p = p
       .replace(/^~/, config.home)
       .replace(/\$HOME|\$\{HOME\}/g, config.home)
-      .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g, config.claudeDir);
+      .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g,
+        process.env.CLAUDE_PROJECT_DIR || '');
     refs.add(path.normalize(p));
   };
   // rh-fw.js indirection: settings.json names the launcher by its (stable,
