@@ -82,16 +82,60 @@ function collectScriptRefs(settingsRaw) {
       .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g, config.claudeDir);
     refs.add(path.normalize(p));
   };
+  // rh-fw.js indirection: settings.json names the launcher by its (stable,
+  // $USERPROFILE-relative) absolute path and passes a framework SCRIPT NAME as
+  // the first argument — `node "…/.claude/scripts/rh-fw.js" hook-forwarder.js
+  // tool …`. That bare name is an ARGUMENT, not a path: resolving it as a
+  // relative path makes every launcher-routed hook look missing (a false
+  // CRITICAL). Resolve it against the framework checkout instead, and stay
+  // silent when the framework is absent — matching the launcher's own fail-open,
+  // since a missing optional checkout is not a config-integrity fault.
+  // NOTE: the candidate chain below intentionally mirrors rh-fw.js and
+  // rh-daily-validate.js. Keep the three in step if the layout changes.
+  const frameworkScriptsDir = () => {
+    const rel = path.join('toolbeltross', 'toolbeltross-public', 'rh-claude-framework',
+      'packages', 'telemetry', 'scripts');
+    // An explicit override wins outright — it must NOT silently fall through to a
+    // different checkout, or the probe would report on a framework the launcher
+    // isn't using. Same precedence as rh-fw.js.
+    if (process.env.RH_FRAMEWORK_ROOT) {
+      const d = path.join(process.env.RH_FRAMEWORK_ROOT, 'packages', 'telemetry', 'scripts');
+      return fs.existsSync(d) ? d : null;
+    }
+    const roots = [];
+    try {
+      const cfg = JSON.parse(fs.readFileSync(path.join(config.claudeDir, 'oversight.json'), 'utf8'));
+      if (cfg && cfg.workspace) roots.push(cfg.workspace);
+    } catch { /* empty/absent oversight.json — fall through to env roots */ }
+    if (process.env.USERPROFILE) roots.push(path.join(process.env.USERPROFILE, 'Workspace'));
+    if (process.env.OneDrive) roots.push(path.join(process.env.OneDrive, 'Workspace'));
+    if (process.env.USERPROFILE) roots.push(path.join(process.env.USERPROFILE, 'OneDrive', 'Workspace'));
+    for (const r of roots) {
+      const d = path.join(r, rel);
+      if (fs.existsSync(d)) return d;
+    }
+    return null;
+  };
+
   const fromCommand = (cmd) => {
     if (typeof cmd !== 'string') return;
     let m;
     // Quoted paths first (may contain spaces): node "…/x.js" arg
     const quoted = /"([^"]*\.(?:js|cjs|mjs))"/g;
     while ((m = quoted.exec(cmd)) !== null) addPath(m[1]);
+    // Launcher-routed framework script, if any — resolved, and excluded below.
+    const viaLauncher = /rh-fw\.js"?\s+([^\s"]+\.(?:js|cjs|mjs))/.exec(cmd);
+    if (viaLauncher) {
+      const dir = frameworkScriptsDir();
+      if (dir) addPath(path.join(dir, viaLauncher[1]));
+    }
     // Then unquoted tokens (no spaces) on the de-quoted remainder.
     const stripped = cmd.replace(/"[^"]*"/g, ' ');
     const unquoted = /(?:^|\s)([^\s"]+\.(?:js|cjs|mjs))(?=\s|$)/g;
-    while ((m = unquoted.exec(stripped)) !== null) addPath(m[1]);
+    while ((m = unquoted.exec(stripped)) !== null) {
+      if (viaLauncher && m[1] === viaLauncher[1]) continue;  // argument, not a path
+      addPath(m[1]);
+    }
   };
 
   let parsed = null;
