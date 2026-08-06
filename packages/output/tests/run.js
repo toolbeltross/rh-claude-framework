@@ -20,6 +20,8 @@ const SUITES = [
   'test-transcript-telemetry.js',
   'test-transcript-ingest.js',
   'test-scribe-parity-audit.js',
+  'test-path-key.js',
+  'test-recall-sources.js',
 ];
 
 let total = 0, failed = 0;

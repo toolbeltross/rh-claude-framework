@@ -11,6 +11,7 @@ const path = require('path');
 const { config } = require('./lib/config');
 const scribeMd = require('./lib/scribe-md');
 const scribeDb = require('./lib/scribe-db');
+const pathKey = require('./lib/path-key');
 
 function parseArgs(argv) {
   const o = { status: 'open' };
@@ -53,7 +54,11 @@ function proposalMap() {
   if (!res.ok || !res.rows) return m;
   for (const r of res.rows) {
     if (!r.proposed_at) continue;
-    m.set(`${r.bucket}|${norm(r.source_file || '')}|${r.row_id}`, {
+    // Join on a HOME-RELATIVE key. Storing an absolute path here is what broke the
+    // overlay at the 2026-07-28 relocation (866 rows orphaned, 591 proposals stranded)
+    // and would break again across devices/accounts. toKey() is idempotent, so rows
+    // still holding a legacy absolute path normalise to the same key as the MD side.
+    m.set(`${r.bucket}|${pathKey.toKey(r.source_file || '')}|${r.row_id}`, {
       proposed_disposition: r.proposed_disposition,
       proposed_rationale: r.proposed_rationale,
       proposed_followup: r.proposed_followup,
@@ -75,7 +80,7 @@ function main() {
     if (!ok) continue;
     for (const r of mdRows) {
       if (args.status && r.status !== args.status) continue;
-      const key = `${bucket}|${norm(file)}|${r.id}`;
+      const key = `${bucket}|${pathKey.toKey(file)}|${r.id}`;
       const p = proposals.get(key) || {};
       const row = {
         id: r.id, ts: r.ts, session: r.session, text: r.text, status: r.status,

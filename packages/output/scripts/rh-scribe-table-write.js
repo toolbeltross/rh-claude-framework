@@ -40,6 +40,7 @@ const fs = require('fs');
 const path = require('path');
 const { withLock } = require('./lib/file-lock');
 const scribeDb = require('./lib/scribe-db');
+const pathKey = require('./lib/path-key');
 // Defensive: a missing/broken context-db.js (e.g. an older install that predates
 // the lib) must NEVER break the canonical md write. Degrade to no-ops; the 3rd
 // write simply stays off until the lib is present.
@@ -240,7 +241,10 @@ function main() {
         ts: r.ts || null,
         content: String(r.text || ''),
         status: r.status || 'open',
-        source_file: targetAbs,
+        // Portable home-relative key (~/Workspace/cleanup.md), not an absolute path —
+        // absolute keys broke the proposal overlay at the 2026-07-28 relocation and do
+        // not survive multi-device / multi-account use. See lib/path-key.js.
+        source_file: pathKey.toKey(targetAbs),
         raw_line: rowLines[i].trimEnd(),
       });
       if (!res.ok) dbShadow = res;
