@@ -84,13 +84,36 @@ function dbUsable() {
   return !!(scribeDb && config && config.scribeDb);
 }
 
+// TWO DIFFERENT DEGRADED STATES, and conflating them hid a real failure (2026-08-06).
+//   (a) NOT CONFIGURED   — config.scribeDb false. Expected on a machine without the
+//                          oversight system. Reported, and it always was.
+//   (b) CONFIGURED BUT UNREACHABLE — flag on, but psql is missing / the service is down /
+//                          the port is wrong. Every query fails, all three Postgres-backed
+//                          sources return empty, and the ONLY signal is their absence.
+//
+// `available()` used to report the CONFIG FLAG, so (b) produced a completely silent
+// zero-result recall — indistinguishable from "searched and found nothing". A peer session
+// reported exactly this and I could not reproduce it against a healthy DB; the report was
+// right and the reproduction was wrong. Verified by forcing RH_SCRIBE_PSQL at a bad path.
+//
+// Rather than probe up front (an extra psql spawn on every run, and a probe can disagree
+// with the real queries), record whether the queries THEMSELVES failed. Zero added cost and
+// strictly more accurate — it reports observed failure, not predicted failure.
+let _dbFailed = false;
+let _dbLastError = null;
+/** Reset between logical runs; exported for tests. */
+function resetDbHealth() { _dbFailed = false; _dbLastError = null; }
+
 function pgSearch(sql, timeout = 20000) {
   if (!dbUsable()) return null;
   try {
     const r = scribeDb.runSql(sql, timeout);
-    if (!r.ok) return null;
+    if (!r.ok) { _dbFailed = true; _dbLastError = String(r.error || 'query failed'); return null; }
     return JSON.parse(r.stdout || '[]');
-  } catch { return null; }
+  } catch (e) {
+    _dbFailed = true; _dbLastError = String((e && e.message) || e);
+    return null;
+  }
 }
 
 function searchTranscripts(query, { limit = 8, days = null } = {}) {
@@ -275,10 +298,20 @@ function searchGraph(query, { limit = 6 } = {}) {
   });
 }
 
-/** Which stores are usable on THIS machine — recall reports degradation honestly. */
+/**
+ * Which stores are usable on THIS machine — recall reports degradation honestly.
+ *
+ * Call AFTER the searches: `postgres` reflects whether the queries actually succeeded, not
+ * merely whether the DB is configured. Before any search runs, a configured-but-unreachable
+ * DB still reports postgres:true, because nothing has failed yet.
+ */
 function available() {
+  const configured = dbUsable();
   return {
-    postgres: dbUsable(),
+    postgres: configured && !_dbFailed,   // usable in practice
+    postgresConfigured: configured,       // the flag says it should be there
+    postgresFailed: configured && _dbFailed, // configured, but every query failed
+    postgresError: _dbLastError,
     learnings: fs.existsSync(path.join(claudeDir(), 'memory-shared', 'learnings')),
     projectMemory: fs.existsSync(path.join(claudeDir(), 'projects')),
     graph: fs.existsSync(path.join(claudeDir(), 'memory-mcp-graph.json')),
@@ -287,7 +320,7 @@ function available() {
 
 module.exports = {
   terms, relax, scoreText, snippet, clip, available,
-  frontmatter, stripFrontmatter,
+  frontmatter, stripFrontmatter, resetDbHealth,
   searchTranscripts, searchLogs, searchScribe,
   searchLearnings, searchProjectMemory, searchGraph,
 };
