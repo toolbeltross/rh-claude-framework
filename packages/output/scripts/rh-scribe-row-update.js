@@ -25,6 +25,7 @@ const { config } = require('./lib/config');
 const { withLock } = require('./lib/file-lock');
 const scribeMd = require('./lib/scribe-md');
 const scribeDb = require('./lib/scribe-db');
+const pathKey = require('./lib/path-key');
 
 const LOCK_RETRIES = 30;
 const LOCK_BASE_WAIT_MS = 50;
@@ -108,7 +109,8 @@ function main() {
       dbShadow = scribeDb.writeRow({
         bucket, row_id: row.id, session_id: row.session ? String(row.session).slice(0, 8) : null,
         ts: /^\d{4}-\d{2}-\d{2}$/.test(row.ts) ? row.ts : row.ts,
-        content: row.text, status: row.status, source_file: source,
+        // Portable home-relative key — see lib/path-key.js and the 2026-07-28 breakage.
+        content: row.text, status: row.status, source_file: pathKey.toKey(source),
         raw_line: `| ${row.id} | ${row.ts} | ${row.session} | ${row.text} | ${row.status} |`,
       });
     }
