@@ -90,6 +90,42 @@ const tests = [
     },
   },
   {
+    // Found 2026-08-06 in production data by a peer session: exactly 1 of 23 memory files
+    // used CRLF, and a bare /^---\n/ made its ENTIRE frontmatter invisible — no name, no
+    // description — while the raw block leaked into the body. These files are hand-edited
+    // across several devices, so mixed line endings are expected.
+    name: 'REGRESSION: CRLF frontmatter parses identically to LF',
+    fn: () => {
+      const lf = '---\nname: "alpha"\ndescription: "a thing"\ntype: feedback\n---\nbody text';
+      const crlf = lf.replace(/\n/g, '\r\n');
+      const a = R.frontmatter(lf), b = R.frontmatter(crlf);
+      assert.deepStrictEqual(b, a, 'CRLF must yield the same object as LF');
+      assert.strictEqual(b.name, 'alpha');
+      assert.strictEqual(b.description, 'a thing', 'quotes stripped despite trailing \\r');
+      assert.strictEqual(b.type, 'feedback');
+    },
+  },
+  {
+    name: 'REGRESSION: stripFrontmatter removes the block for both line endings',
+    fn: () => {
+      const lf = '---\nname: "x"\n---\nbody text';
+      assert.strictEqual(R.stripFrontmatter(lf), 'body text');
+      assert.strictEqual(R.stripFrontmatter(lf.replace(/\n/g, '\r\n')), 'body text');
+      // No frontmatter at all → unchanged, never throws.
+      assert.strictEqual(R.stripFrontmatter('just body'), 'just body');
+      assert.strictEqual(R.stripFrontmatter(''), '');
+    },
+  },
+  {
+    name: 'frontmatter: missing/!malformed block returns {} rather than throwing',
+    fn: () => {
+      assert.deepStrictEqual(R.frontmatter('no frontmatter here'), {});
+      assert.deepStrictEqual(R.frontmatter(''), {});
+      assert.deepStrictEqual(R.frontmatter(null), {});
+      assert.deepStrictEqual(R.frontmatter('---\nunterminated: yes\n'), {});
+    },
+  },
+  {
     name: 'parseArgs: flags parsed, terms collected, limit clamped',
     fn: () => {
       const a = parseArgs(['some', 'query', '--limit', '3', '--days', '7', '--source', 'graph,learnings', '--json']);

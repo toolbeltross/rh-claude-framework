@@ -177,13 +177,26 @@ function searchScribe(query, { limit = 8 } = {}) {
 }
 
 // ─── filesystem sources (always available — .md is the system of record) ─────
+// CRLF TOLERANCE IS LOAD-BEARING (found 2026-08-06 by a peer session, in prod data).
+// A bare /^---\n/ cannot match `---\r\n`, so a single CRLF-line-ending file had its ENTIRE
+// frontmatter go invisible — no name, no description — and the raw frontmatter block then
+// leaked into the body text downstream. Exactly one of 23 memory files was CRLF, which is
+// how it survived unnoticed. These files are hand-edited across several devices and editors,
+// so mixed line endings are expected, not exceptional. Every anchor here is \r?\n.
+const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
+/** Strip a leading frontmatter block, CRLF-safe. Exported shape used by scanDir. */
+function stripFrontmatter(txt) {
+  return String(txt || '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+}
 function frontmatter(txt) {
-  const m = /^---\n([\s\S]*?)\n---/.exec(txt);
+  const m = FM_RE.exec(String(txt || ''));
   if (!m) return {};
   const o = {};
-  for (const ln of m[1].split('\n')) {
+  for (const ln of m[1].split(/\r?\n/)) {
     const kv = /^\s*([\w-]+):\s*(.*)$/.exec(ln);
-    if (kv) o[kv[1]] = kv[2].replace(/^["']|["']$/g, '').trim();
+    // trim BEFORE stripping quotes — a trailing \r would otherwise sit between the closing
+    // quote and end-of-string, defeating the `["']$` anchor and leaving quotes in the value.
+    if (kv) o[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, '').trim();
   }
   return o;
 }
@@ -202,7 +215,7 @@ function scanDir(dir, qTerms, source, limit, extra = {}) {
     if (s <= 0) continue;
     out.push({
       source, ts: meta.created || null, ref: p.replace(/\\/g, '/'),
-      title, text: meta.description ? clip(meta.description, 260) : snippet(txt.replace(/^---[\s\S]*?---\n/, ''), qTerms),
+      title, text: meta.description ? clip(meta.description, 260) : snippet(stripFrontmatter(txt), qTerms),
       score: s, ...extra,
     });
   }
@@ -274,6 +287,7 @@ function available() {
 
 module.exports = {
   terms, relax, scoreText, snippet, clip, available,
+  frontmatter, stripFrontmatter,
   searchTranscripts, searchLogs, searchScribe,
   searchLearnings, searchProjectMemory, searchGraph,
 };
