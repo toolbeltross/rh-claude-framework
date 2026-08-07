@@ -50,7 +50,6 @@ function main() {
     process.exit(1);
   }
 
-  const avail = R.available();
   const picked = args.sources ? SOURCES.filter(s => args.sources.includes(s.key)) : SOURCES;
 
   const results = {};
@@ -58,6 +57,9 @@ function main() {
     try { results[s.key] = s.fn(query, { limit: args.limit, days: args.days }) || []; }
     catch { results[s.key] = []; }
   }
+  // AFTER the searches, deliberately: a configured-but-unreachable DB only reveals itself
+  // when its queries fail. Asking before running them reports the config flag and misses it.
+  const avail = R.available();
 
   if (args.json) {
     console.log(JSON.stringify({ query, available: avail, results }, null, 1));
@@ -70,7 +72,16 @@ function main() {
   // Report degradation explicitly; a silent empty section is indistinguishable from
   // "searched and found nothing", which is the failure mode this tool exists to prevent.
   const degraded = [];
-  if (!avail.postgres) degraded.push('Postgres unavailable → transcripts, logs and scribe rows NOT searched');
+  if (avail.postgresFailed) {
+    // Distinct from "not configured": this machine EXPECTS a database and it did not answer.
+    // Different remedy (start the service / fix the port) and different severity — results
+    // here are incomplete in a way the user did not opt into.
+    degraded.push('Postgres is CONFIGURED BUT UNREACHABLE → transcripts, logs and scribe rows NOT searched');
+    if (avail.postgresError) degraded.push('  └ ' + String(avail.postgresError).split('\n')[0].slice(0, 160));
+    degraded.push('  └ results below are INCOMPLETE — check the DB before trusting an empty result');
+  } else if (!avail.postgresConfigured) {
+    degraded.push('Postgres not configured on this machine → transcripts, logs and scribe rows NOT searched');
+  }
   if (!avail.graph) degraded.push('no knowledge graph on this machine → concept links NOT searched');
   if (!avail.learnings) degraded.push('no shared learnings dir');
   if (degraded.length) {

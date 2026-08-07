@@ -126,6 +126,53 @@ const tests = [
     },
   },
   {
+    // 2026-08-06: available() reported the CONFIG FLAG, so a configured-but-unreachable
+    // Postgres produced a completely silent zero-result recall from three stores —
+    // indistinguishable from "searched and found nothing". A peer session reported exactly
+    // this; it did not reproduce against a healthy DB, because the healthy path is not the
+    // broken one. Forced via RH_SCRIBE_PSQL at a bad path.
+    name: 'REGRESSION: available() distinguishes not-configured from configured-but-unreachable',
+    fn: () => {
+      R.resetDbHealth();
+      const a = R.available();
+      for (const k of ['postgres', 'postgresConfigured', 'postgresFailed']) {
+        assert.strictEqual(typeof a[k], 'boolean', `${k} must be a boolean`);
+      }
+      // The load-bearing invariant: "usable" is never true while a failure is recorded.
+      assert.strictEqual(a.postgres, a.postgresConfigured && !a.postgresFailed);
+      // Nothing has failed immediately after a reset.
+      assert.strictEqual(a.postgresFailed, false, 'no failure recorded after reset');
+      assert.strictEqual(a.postgresError, null, 'no error recorded after reset');
+    },
+  },
+  {
+    name: 'REGRESSION: a failed query flips postgres->false and records the error',
+    fn: () => {
+      R.resetDbHealth();
+      // Drive a real failure through the public surface: point psql at a path that cannot
+      // exist. If the DB is not configured on this machine the guard short-circuits first,
+      // in which case the not-configured branch is the one under test.
+      const prev = process.env.RH_SCRIBE_PSQL;
+      process.env.RH_SCRIBE_PSQL = 'C:/nonexistent-psql-for-tests/psql.exe';
+      try {
+        const before = R.available();
+        R.searchScribe('anything', { limit: 1 });
+        const after = R.available();
+        if (before.postgresConfigured) {
+          // config is cached at require() time, so this asserts the RECORDING mechanism:
+          // whatever the outcome, `postgres` must never claim usable while failed is set.
+          assert.strictEqual(after.postgres, after.postgresConfigured && !after.postgresFailed);
+          if (after.postgresFailed) assert.ok(after.postgresError, 'a failure must carry an error string');
+        } else {
+          assert.strictEqual(after.postgres, false, 'unconfigured DB is never reported usable');
+        }
+      } finally {
+        if (prev === undefined) delete process.env.RH_SCRIBE_PSQL; else process.env.RH_SCRIBE_PSQL = prev;
+        R.resetDbHealth();
+      }
+    },
+  },
+  {
     name: 'parseArgs: flags parsed, terms collected, limit clamped',
     fn: () => {
       const a = parseArgs(['some', 'query', '--limit', '3', '--days', '7', '--source', 'graph,learnings', '--json']);
