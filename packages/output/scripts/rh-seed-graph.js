@@ -43,6 +43,44 @@ const APPLY = process.argv.includes('--apply');
 const RS = require('./lib/recall-sources.js');
 const fm = RS.frontmatter;
 const LINK_RE = /\[\[([^\]]+)\]\]/g;
+
+// CROSS-STORE EDGES (2026-08-07). A peer session reconciled the two live memory stores under
+// Ross's D1 union ruling and recorded the links as prose headings naming ABSOLUTE PATHS, not
+// [[wiki-links]]:
+//
+//   ### Peer memory in the other store — COMPLEMENTARY (linked 2026-08-07)
+//   **other-file.md**
+//   `C:\Users\<user>\.claude\memory-shared\learnings\other-file.md`
+//
+//   ### Merged from `~/.claude/memory-shared/learnings/x.md` (2026-08-07)
+//
+// A [[link]]-only parser sees none of these. They matter more than the wiki-links do: the same
+// scan found 12 overlapping pairs across the stores, and NAME matching finds only 2 — ten pairs
+// have different filenames describing the same subject. Those ten are exactly the edges a
+// filename-based graph can never discover.
+//
+// Paths appear in both Windows-absolute and ~/ form, so resolution goes through path-key.js
+// rather than a second normaliser (one parser, one behaviour — the CRLF lesson).
+const pathKey = require('./lib/path-key.js');
+const PEER_RE = /^###\s+Peer memory in the other store\s*[—-]\s*([A-Z]+)/gm;
+const MERGED_RE = /^###\s+Merged from\s+`([^`]+)`/gm;
+const BACKTICK_PATH_RE = /`([^`\n]*[\\/][^`\n]*\.md)`/g;
+
+/** Extract explicit cross-store references as {kind, key} pairs. */
+function crossStoreRefs(txt) {
+  const out = [];
+  // "Merged from `<path>`" — the path is on the heading line itself.
+  for (const m of String(txt).matchAll(MERGED_RE)) {
+    out.push({ kind: 'merged-from', key: pathKey.toKey(m[1].trim()) });
+  }
+  // "Peer memory ... — KIND" — the path is the first backticked .md path AFTER the heading.
+  for (const m of String(txt).matchAll(PEER_RE)) {
+    const after = String(txt).slice(m.index + m[0].length, m.index + m[0].length + 1200);
+    const p = [...after.matchAll(BACKTICK_PATH_RE)][0];
+    if (p) out.push({ kind: 'peer-' + m[1].toLowerCase(), key: pathKey.toKey(p[1].trim()) });
+  }
+  return out;
+}
 const clip = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
 
 function scan(dir, kind, project) {
@@ -79,6 +117,7 @@ function scan(dir, kind, project) {
       taskName: meta.taskName || '',
       appliesInCwd: meta.appliesInCwd || '',
       links: [...txt.matchAll(LINK_RE)].map(m => m[1].trim()),
+      crossRefs: crossStoreRefs(txt),
       firstPara,
     });
   }
@@ -155,7 +194,9 @@ for (const s of sessions) entities.push({ name: `session:${s}`, entityType: 'ses
 const projects = new Set(items.map(i => i.project).filter(Boolean));
 for (const p of projects) entities.push({ name: `project:${p}`, entityType: 'project', observations: [`per-project memory dir: ~/.claude/projects/${p}/memory`] });
 
-let dangling = 0, ambiguous = 0;
+// Path-keyed index so cross-store refs resolve by FILE, not by name.
+const byPathKey = new Map(items.map(i => [pathKey.toKey(i.file), i]));
+let dangling = 0, ambiguous = 0, crossEdges = 0, crossDangling = 0;
 for (const it of items) {
   for (const l of new Set(it.links)) {
     const group = bySlug.get(l);
@@ -174,6 +215,15 @@ for (const it of items) {
   }
   if (it.session) addRel(it.key, `session:${it.session}`, 'derived-in');
   if (it.project) addRel(it.key, `project:${it.project}`, 'scoped-to');
+
+  // Explicit cross-store edges. Resolved by PATH (via path-key), never by filename — ten of
+  // the twelve overlapping pairs have different names, so a name lookup would find only two.
+  for (const ref of it.crossRefs || []) {
+    const target = byPathKey.get(ref.key);
+    if (!target) { crossDangling++; continue; }
+    addRel(it.key, target.key, ref.kind);
+    crossEdges++;
+  }
 }
 
 const byType = {};
@@ -186,6 +236,8 @@ console.log('  entities :', entities.length, JSON.stringify(byType));
 console.log('  relations:', relations.length, JSON.stringify(relByType));
 console.log('  dangling [[links]] skipped:', dangling);
 console.log('  ambiguous [[links]] skipped (colliding slug, no store-local match):', ambiguous);
+console.log('  cross-store edges (peer/merged, resolved by path):', crossEdges);
+console.log('  cross-store refs unresolved:', crossDangling);
 console.log('  slug collisions across stores:', COLLISIONS.length);
 for (const [slug, g] of COLLISIONS) console.log('     ' + slug + ' -> ' + g.map(x => x.key).join('  |  '));
 

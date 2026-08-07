@@ -281,8 +281,15 @@ function searchGraph(query, { limit = 6 } = {}) {
   return hits.map(({ e, s }) => {
     const edges = relations.filter(r => r.from === e.name || r.to === e.name);
     const linked = edges
-      .filter(r => r.relationType === 'references')
+      // `references` are authored [[links]]; `peer-*` / `merged-from` are cross-store links
+      // recorded as prose headings naming file paths. The cross-store ones are the MORE
+      // valuable of the two here — ten of the twelve overlapping pairs have different
+      // filenames, so they are precisely the connections nothing else can surface.
+      .filter(r => r.relationType === 'references' || /^peer-|^merged-from$/.test(r.relationType))
       .map(r => (r.from === e.name ? r.to : r.from));
+    // Dedupe: a peer can ALSO be an authored [[link]], and an edge recorded in both
+    // directions yields the same neighbour twice. Same neighbour, one mention.
+    const linkedUnique = [...new Set(linked)];
     // Prefer the backing file as the ref — the entity name is already the title, and a
     // path is what someone actually wants to open.
     const fileObs = (e.observations || []).find(o => /^file: /.test(o));
@@ -291,7 +298,7 @@ function searchGraph(query, { limit = 6 } = {}) {
       ref: fileObs ? fileObs.slice(6) : e.name,
       title: `${e.name} [${e.entityType}]`,
       text: clip((e.observations || [])[1] || (e.observations || [])[0] || '', 220) +
-            (linked.length ? `\n      ↳ links: ${linked.slice(0, 6).join(', ')}` : '') +
+            (linkedUnique.length ? `\n      ↳ links: ${linkedUnique.slice(0, 6).join(', ')}` : '') +
             `\n      ↳ ${edges.length} edge(s)`,
       score: s,
     };
