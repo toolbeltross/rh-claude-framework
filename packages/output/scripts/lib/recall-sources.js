@@ -285,7 +285,7 @@ function searchGraph(query, { limit = 6 } = {}) {
       // recorded as prose headings naming file paths. The cross-store ones are the MORE
       // valuable of the two here — ten of the twelve overlapping pairs have different
       // filenames, so they are precisely the connections nothing else can surface.
-      .filter(r => r.relationType === 'references' || /^peer-|^merged-from$/.test(r.relationType))
+      .filter(r => r.relationType === 'references' || /^peer-|^related-|^merged-from$/.test(r.relationType))
       .map(r => (r.from === e.name ? r.to : r.from));
     // Dedupe: a peer can ALSO be an authored [[link]], and an edge recorded in both
     // directions yields the same neighbour twice. Same neighbour, one mention.
