@@ -63,6 +63,13 @@ const LINK_RE = /\[\[([^\]]+)\]\]/g;
 // rather than a second normaliser (one parser, one behaviour — the CRLF lesson).
 const pathKey = require('./lib/path-key.js');
 const PEER_RE = /^###\s+Peer memory in the other store\s*[—-]\s*([A-Z]+)/gm;
+// SAME-STORE links (2026-08-07). The shared learnings store was triaged against ITSELF and
+// complementary pairs were linked with a deliberately different heading — they are not
+// cross-store, and flattening the two would lose a real distinction. Parsed here because
+// otherwise those 20 edges are seeded nowhere and stay invisible to /rh-recall: seeding
+// without surfacing is the write-only failure this whole effort exists to end, and I
+// reintroduced it by inventing a heading the parser did not know.
+const RELATED_RE = /^###\s+Related memory in this store\s*[—-]\s*([A-Z]+)/gm;
 const MERGED_RE = /^###\s+Merged from\s+`([^`]+)`/gm;
 const BACKTICK_PATH_RE = /`([^`\n]*[\\/][^`\n]*\.md)`/g;
 
@@ -73,11 +80,15 @@ function crossStoreRefs(txt) {
   for (const m of String(txt).matchAll(MERGED_RE)) {
     out.push({ kind: 'merged-from', key: pathKey.toKey(m[1].trim()) });
   }
-  // "Peer memory ... — KIND" — the path is the first backticked .md path AFTER the heading.
-  for (const m of String(txt).matchAll(PEER_RE)) {
-    const after = String(txt).slice(m.index + m[0].length, m.index + m[0].length + 1200);
-    const p = [...after.matchAll(BACKTICK_PATH_RE)][0];
-    if (p) out.push({ kind: 'peer-' + m[1].toLowerCase(), key: pathKey.toKey(p[1].trim()) });
+  // "Peer memory ... — KIND" / "Related memory ... — KIND" — in both cases the path is the
+  // first backticked .md path AFTER the heading. Distinct relation prefixes so a consumer can
+  // tell a cross-store pairing from a same-store one; they mean different things.
+  for (const [re, prefix] of [[PEER_RE, 'peer-'], [RELATED_RE, 'related-']]) {
+    for (const m of String(txt).matchAll(re)) {
+      const after = String(txt).slice(m.index + m[0].length, m.index + m[0].length + 1200);
+      const p = [...after.matchAll(BACKTICK_PATH_RE)][0];
+      if (p) out.push({ kind: prefix + m[1].toLowerCase(), key: pathKey.toKey(p[1].trim()) });
+    }
   }
   return out;
 }
