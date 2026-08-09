@@ -30,6 +30,56 @@ Each worktree has an independent working tree, HEAD, and index. `git status` in 
 
 Any skill or automation that commits on the user's behalf (notably `/rh-quit`'s SESSION_STATE refresh) MUST stage by **explicit named path** — never `git add -A`, `git add .`, or `git add -u`. Run `git status --short` as a preflight; if it lists files the step did not author (another session's uncommitted work in a shared checkout), **leave them unstaged** and name them in the summary so they are visibly left behind, not silently swept into the commit. (This is enforced in `packages/skills/rh-quit/SKILL.md` step 5.)
 
+## Scoped staging is NOT sufficient on a shared checkout (2026-08-09 amendment)
+
+**Explicit-path staging bounds WHICH files you add. It does not bound WHOSE commit they land in.**
+
+A checkout has **one index and one HEAD**, shared by every session in it. So *any* branch
+operation by *either* party re-attributes the other's staged work:
+
+- `git checkout -b <branch>` **preserves the index**. Files another session already staged are
+  carried onto your new branch and into your next commit.
+- A branch switch also **reverts the other session's uncommitted working-tree edits**, silently.
+
+Observed live on 2026-08-09 between two coordinating sessions, in **both directions inside one
+hour**: session A branched and committed 25 files, 23 of them session B's staged work; then
+session B's checkout reverted session A's working-tree edits. **Both sessions were staging by
+explicit path and both had avoided `git add -A`.** The existing rule above did not prevent it,
+because the failure is not in file selection.
+
+### Why `~/.claude` cannot use the prescribed remedy
+
+This rule prescribes `git worktree` isolation. **`~/.claude` cannot use one — it *is* the shared
+surface.** Every session reads its scripts, skills, agents and memory from that one path; a
+worktree would be a different tree and would not be the live configuration. So the standard
+remedy is structurally unavailable exactly where the hazard is highest.
+
+### What to do instead, in a shared checkout you cannot isolate
+
+1. **Announce before any branch operation.** `git checkout`, `checkout -b`, `switch`, `reset`,
+   `stash` — ping the other live sessions and wait for ack. This is the only real mitigation.
+2. **Clear the index before staging, not after:** `git reset` → `git add <paths>` → assert.
+   Staging without clearing first *appends to* whatever is already there.
+3. **Assert the staged count before committing:**
+   ```bash
+   git reset
+   git add <explicit paths>
+   git diff --cached --name-only | wc -l    # MUST equal your expected count
+   ```
+   Printing the staged list is not the check — *comparing it to an expectation* is. A session
+   printed its 25-file staged list and read it as confirmation. On its first real use this
+   assertion caught a genuine off-by-one (staged 22, expected 23) in the peer session.
+4. **Read column ONE of `git status --short`.** `M ` is staged, ` M` is unstaged. Counting total
+   dirty lines does not distinguish them, and the staged column is the one that gets committed.
+
+### Recovery
+
+`git reset --soft HEAD~1` then `git reset` restores the index without losing anyone's content;
+re-stage your own paths and force-push **with `--force-with-lease`** if the bad commit was already
+pushed to your own branch. Content is never lost — it returns to the working tree unstaged — but
+**the other session must be told**, because their work is then in no commit and they may believe
+it landed.
+
 ## Why this rule is `warn`, not `block`
 
 Detecting "another session is touching this same checkout right now" from a hook is inherently racy — the state can change between the check and the action — so a hard PreToolUse block would false-positive on legitimate single-session `git add -A` and erode trust. The enforcement is therefore: this advisory rule + the scoped-staging guarantee in the `/rh-quit` skill. A `note`-severity SessionStart worktree check may be added later if this rule plus the skill scoping prove insufficient (see F-13 deferred condition).
