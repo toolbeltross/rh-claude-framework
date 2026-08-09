@@ -81,6 +81,31 @@ function load(dir, label) {
   return out;
 }
 
+// A == B, or one containing the other, is the MORE LIKELY operator error than a wildly wrong
+// directory -- a copy-pasted path is easy -- and it fails worse. Every file matches itself, so
+// the output reads as "the corpora are near-identical, we have massive duplication": plausible,
+// alarming, and actionable-looking. It also defeats the size-ratio guard below, because a 1.0
+// ratio looks BALANCED -- the reassuring shape. Found by a peer running the same directory twice:
+// 386 name matches out of 386 files, no warning.
+//
+// So this is an EQUALITY test, not a heuristic: no threshold to tune, and it fires on the shape
+// of the mistake rather than relying on the reader noticing an anomaly. Containment matters too,
+// now that the scan recurses -- `--corpus-b .../learnings` against the parent default would
+// double-count 381 files.
+if (CROSS) {
+  const rA = path.resolve(DIR_A), rB = path.resolve(DIR_B);
+  const within = (x, y) => x === y || x.startsWith(y + path.sep);
+  if (rA === rB) {
+    console.error(`corpus A and B resolve to the SAME directory:\n  ${rA}\nEvery file would match itself. Refusing.`);
+    process.exit(1);
+  }
+  if (within(rA, rB) || within(rB, rA)) {
+    console.error(`corpus A and B OVERLAP (one contains the other):\n  A=${rA}\n  B=${rB}\n` +
+      `The scan recurses, so shared files would be compared against themselves. Refusing.`);
+    process.exit(1);
+  }
+}
+
 const A = load(DIR_A, 'A');
 const B = CROSS ? load(DIR_B, 'B') : [];
 const docs = A.concat(B);
