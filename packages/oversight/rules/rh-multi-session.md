@@ -56,8 +56,15 @@ remedy is structurally unavailable exactly where the hazard is highest.
 
 ### What to do instead, in a shared checkout you cannot isolate
 
-1. **Announce before any branch operation.** `git checkout`, `checkout -b`, `switch`, `reset`,
-   `stash` — ping the other live sessions and wait for ack. This is the only real mitigation.
+1. **Announce before any branch operation *or any write that transits the shared working tree*.**
+   `git checkout`, `checkout -b`, `switch`, `reset`, `stash` — ping the other live sessions and
+   wait for ack. This is the only real mitigation.
+
+   **And any non-git write that replaces a shared file wholesale**: `git show HEAD:<f> > <f>`,
+   `git restore <f>`, a scripted save/modify/restore, or an editor writing a whole buffer. These
+   touch **neither HEAD nor the index**, so they appear in **no `git status` column** — a session
+   dutifully announcing before `checkout` will still do this without a ping. The hazard is any
+   write transiting the shared tree, not only operations that move HEAD or the index.
 2. **Clear the index before staging, not after:** `git reset` → `git add <paths>` → assert.
    Staging without clearing first *appends to* whatever is already there.
 3. **Assert the staged count before committing:**
@@ -74,11 +81,37 @@ remedy is structurally unavailable exactly where the hazard is highest.
 
 ### Recovery
 
+**For the index-contamination class** (someone else's staged files rode into your commit):
 `git reset --soft HEAD~1` then `git reset` restores the index without losing anyone's content;
 re-stage your own paths and force-push **with `--force-with-lease`** if the bad commit was already
-pushed to your own branch. Content is never lost — it returns to the working tree unstaged — but
+pushed to your own branch. Content is not lost — it returns to the working tree unstaged — but
 **the other session must be told**, because their work is then in no commit and they may believe
 it landed.
+
+### There is one variant where content IS lost outright, and git cannot recover it
+
+The guarantee above does **not** extend to save/modify/restore on a shared file:
+
+```
+A: cp FILE -> scratch           # A snapshots the shared file, which holds B's pending rows
+A: git show HEAD:FILE > FILE    # B's rows are now absent from disk
+B: writes its row to FILE       # B appends to the HEAD version — B's earlier rows already gone
+A: cp scratch -> FILE           # A restores its snapshot — B's NEW row is silently destroyed
+```
+
+B's write then exists **in no commit, in no index, and in no working tree.** There is nothing to
+`git reset --soft` back to, and **B gets no signal at all** — its write appeared to succeed. This
+is genuine data loss, not misattribution.
+
+**There is no git-side recovery. The only mitigation is not doing it while peers are live.**
+
+**Safer pattern:** modify the file in place (read → edit → write) rather than replacing it from
+HEAD and restoring. If you need to stage only a subset, `git stash push --staged` or a temporary
+index via `GIT_INDEX_FILE` avoids touching the working tree at all.
+
+*Reported 2026-08-09 by a session that did exactly this to commit one surgical index row. Nothing
+broke, by luck rather than design — no peer wrote to that file during the window. It is recorded
+because the rule previously reassured the reader that content could not be lost.*
 
 ## Why this rule is `warn`, not `block`
 
