@@ -19,7 +19,9 @@ const RS = require('./lib/recall-sources.js');
 const homeDir = () => process.env.HOME || process.env.USERPROFILE || require('os').homedir();
 // path.join keeps native separators; Node accepts mixed separators on Windows, and every
 // consumer here is fs.*, so no normalisation is needed.
-const L = path.join(homeDir(), '.claude', 'memory-shared', 'learnings');
+// Default is `memory-shared` (the PARENT), not `memory-shared/learnings`. Scanning only the
+// learnings subdir silently dropped the root-level memories -- see the RECURSIVE note below.
+const L = path.join(homeDir(), '.claude', 'memory-shared');
 
 const STOP = new Set(('the a an and or but if then than that this these those is are was were be been being of to in on at by for with from as it its into about over under not no so such can may might will would should could do does did have has had you your we our they their i me my he she them us one two also more most other some any each per via when where which who whom what how why all both few many much very just only same own too s t don now here there'.split(' ')));
 const toks = (s) => String(s).toLowerCase().replace(/```[\s\S]*?```/g, ' ')
@@ -38,12 +40,32 @@ const DIR_A = argOf('--corpus-a') || L;
 const DIR_B = argOf('--corpus-b');          // null => within-corpus mode
 const CROSS = !!DIR_B;
 
+// RECURSIVE (2026-08-09). The default corpus was `memory-shared/learnings` only, which silently
+// excluded the 6 files in `memory-shared/` ROOT -- where supervisor-trends and the feedback_*
+// memories live. A peer running archive-vs-live got "1 candidate" on the default and "4 exact
+// name matches" once pointed at the parent: THREE of four real duplicates were invisible, and it
+// failed the dangerous way -- a clean, quantitative, plausible number rather than an error.
+//
+// Same class as everything else caught this week: a check structurally incapable of answering the
+// question asked. Here the CORPUS BOUNDARY was wrong rather than the metric. Fixed by walking
+// subdirectories and by printing the resolved path AND file count per corpus, so a suspiciously
+// small A is visible on every run instead of only when someone thinks to look.
+function walkMd(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkMd(p, out);
+    else if (e.name.endsWith('.md') && e.name !== 'MEMORY.md') out.push(p);
+  }
+  return out;
+}
+
 function load(dir, label) {
   const out = [];
   if (!fs.existsSync(dir)) { console.error(`corpus not found: ${dir}`); process.exit(1); }
-  for (const f of fs.readdirSync(dir)) {
-    if (!f.endsWith('.md') || f === 'MEMORY.md') continue;
-    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+  for (const full of walkMd(dir)) {
+    const f = path.basename(full);
+    const txt = fs.readFileSync(full, 'utf8');
     const fm = RS.frontmatter(txt);
     // Cut appended link/merge blocks: they quote the peer and would fake similarity.
     const body = RS.stripFrontmatter(txt).split(/^###\s+(?:Merged from|Peer memory in the other store|Related memory in this store)/m)[0];
@@ -124,6 +146,16 @@ hits.sort((x, y) => (y.nameMatch - x.nameMatch) || (y.C - x.C));
 const mode = CROSS ? `CROSS-CORPUS  A=${DIR_A}  (${A.length})  x  B=${DIR_B}  (${B.length})`
                    : `WITHIN-CORPUS  ${DIR_A}  (${A.length} files)`;
 console.log(mode);
+// A corpus far smaller than its partner is nearly always a wrong-directory error, and it is the
+// failure mode that produces a plausible small number instead of an error. Say so out loud.
+const warnSmall = (label, dir, n, other) => {
+  if (other && n > 0 && n * 10 < other) {
+    console.log(`  ⚠ corpus ${label} has only ${n} file(s) vs ${other} — is ${dir} the directory you meant?`);
+  }
+  if (n === 0) console.log(`  ⚠ corpus ${label} is EMPTY (${dir}) — every result below is meaningless`);
+};
+warnSmall('A', DIR_A, A.length, CROSS ? B.length : 0);
+if (CROSS) warnSmall('B', DIR_B, B.length, A.length);
 console.log(`${hits.length} shortlisted by ${CROSS ? 'name-match / ' : ''}IDF-cosine / same-session / title`);
 if (CROSS) console.log(`  (${hits.filter(h => h.nameMatch).length} of them by NAME — the class content scoring misses)`);
 console.log();
