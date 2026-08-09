@@ -25,23 +25,46 @@ const STOP = new Set(('the a an and or but if then than that this these those is
 const toks = (s) => String(s).toLowerCase().replace(/```[\s\S]*?```/g, ' ')
   .split(/[^a-z0-9]+/).filter(w => w.length > 2 && !STOP.has(w));
 
-const docs = [];
-for (const f of fs.readdirSync(L)) {
-  if (!f.endsWith('.md') || f === 'MEMORY.md') continue;
-  const txt = fs.readFileSync(path.join(L, f), 'utf8');
-  const fm = RS.frontmatter(txt);
-  // Cut appended link/merge blocks: they quote the peer and would fake similarity.
-  const body = RS.stripFrontmatter(txt).split(/^###\s+(?:Merged from|Peer memory in the other store|Related memory in this store)/m)[0];
-  docs.push({
-    slug: f.replace(/\.md$/, ''),
-    session: (fm.originSessionId || fm.origin || '').slice(0, 8),
-    head: new Set(toks((fm.name || '') + ' ' + (fm.description || ''))),
-    tf: (() => { const m = new Map(); for (const t of toks(body)) m.set(t, (m.get(t) || 0) + 1); return m; })(),
-    raw: new Set(toks(body)),
-  });
+// ─── corpora ────────────────────────────────────────────────────────────────
+// Default: score one directory against ITSELF (live learnings, all pairs).
+// With --corpus-b: score A against B instead — e.g. an archive tree against the
+// live store. Requested by the session integrating ~145 archive learnings, whose
+// files sit outside ~/.claude entirely. One scorer, two modes, rather than a
+// second metric: two sessions with two scorers produce two answers on the same
+// field, which is precisely what the tiebreak rule exists to clean up after.
+const ARGV = process.argv.slice(2);
+const argOf = (n) => { const i = ARGV.indexOf(n); return i >= 0 ? ARGV[i + 1] : null; };
+const DIR_A = argOf('--corpus-a') || L;
+const DIR_B = argOf('--corpus-b');          // null => within-corpus mode
+const CROSS = !!DIR_B;
+
+function load(dir, label) {
+  const out = [];
+  if (!fs.existsSync(dir)) { console.error(`corpus not found: ${dir}`); process.exit(1); }
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.md') || f === 'MEMORY.md') continue;
+    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+    const fm = RS.frontmatter(txt);
+    // Cut appended link/merge blocks: they quote the peer and would fake similarity.
+    const body = RS.stripFrontmatter(txt).split(/^###\s+(?:Merged from|Peer memory in the other store|Related memory in this store)/m)[0];
+    out.push({
+      corpus: label,
+      slug: f.replace(/\.md$/, ''),
+      session: (fm.originSessionId || fm.origin || '').slice(0, 8),
+      head: new Set(toks((fm.name || '') + ' ' + (fm.description || ''))),
+      tf: (() => { const m = new Map(); for (const t of toks(body)) m.set(t, (m.get(t) || 0) + 1); return m; })(),
+      raw: new Set(toks(body)),
+    });
+  }
+  return out;
 }
 
-// IDF over the corpus.
+const A = load(DIR_A, 'A');
+const B = CROSS ? load(DIR_B, 'B') : [];
+const docs = A.concat(B);
+
+// IDF over the UNION of both corpora. Computing it per-corpus would give the same
+// term two different weights and make cross-corpus scores incomparable.
 const df = new Map();
 for (const d of docs) for (const t of d.raw) df.set(t, (df.get(t) || 0) + 1);
 const N = docs.length;
@@ -60,22 +83,49 @@ const cos = (a, b) => {
 };
 const jac = (a, b) => { let i = 0; for (const t of a.raw) if (b.raw.has(t)) i++; const u = a.raw.size + b.raw.size - i; return u ? i / u : 0; };
 
+// Candidate pairs. Within-corpus: upper triangle of A. Cross-corpus: A x B only —
+// B-vs-B is not this run's question and would bury the signal.
+const pairs = [];
+if (CROSS) { for (const a of A) for (const b of B) pairs.push([a, b]); }
+else { for (let i = 0; i < A.length; i++) for (let j = i + 1; j < A.length; j++) pairs.push([A[i], A[j]]); }
+
 const hits = [];
-for (let i = 0; i < docs.length; i++) for (let j = i + 1; j < docs.length; j++) {
-  const a = docs[i], b = docs[j];
+for (const [a, b] of pairs) {
   const J = jac(a, b);
-  if (J >= 0.30) continue;              // already triaged
-  if (J < 0.10) continue;               // below any plausible floor
   const C = cos(a, b);
   const sameSession = a.session && a.session === b.session;
   let hj = 0; for (const t of a.head) if (b.head.has(t)) hj++;
   const headOverlap = hj / (Math.min(a.head.size, b.head.size) || 1);
+
+  // NAME MATCH — first-class, and ONLY meaningful across corpora. Filenames inside a
+  // single directory are necessarily unique, so this signal is structurally inert in
+  // within-corpus mode (verified: 0 duplicate basenames among 375 live learnings) and
+  // would be a confident-looking no-op if reported there. Across corpora it is the
+  // strongest signal available: it caught a genuine duplicate scoring 0.146 that no
+  // content metric ranked, and a peer's 257-file run found 72 name-only hits that the
+  // content score missed entirely. Promote regardless of score.
+  const nameMatch = CROSS && a.slug === b.slug;
+
+  if (!nameMatch) {
+    if (J >= 0.30) continue;            // already triaged by the earlier sweep
+    if (J < 0.10) continue;             // below any plausible floor
+  }
+
   const why = [];
+  if (nameMatch) why.push('NAME MATCH (exact slug)');
   if (C >= 0.30) why.push('idf-cos ' + C.toFixed(2));
   if (sameSession && C >= 0.18) why.push('SAME SESSION ' + a.session);
   if (headOverlap >= 0.45) why.push('title/desc ' + headOverlap.toFixed(2));
-  if (why.length) hits.push({ a: a.slug, b: b.slug, J, C, why: why.join(' | ') });
+  if (why.length) hits.push({ a: a.slug, b: b.slug, J, C, nameMatch, why: why.join(' | ') });
 }
-hits.sort((x, y) => y.C - x.C);
-console.log(`band 0.10-0.30 raw Jaccard: ${hits.length} shortlisted by IDF-cosine / same-session / title\n`);
+// Name matches first — they are the class content scoring provably misses.
+hits.sort((x, y) => (y.nameMatch - x.nameMatch) || (y.C - x.C));
+
+const mode = CROSS ? `CROSS-CORPUS  A=${DIR_A}  (${A.length})  x  B=${DIR_B}  (${B.length})`
+                   : `WITHIN-CORPUS  ${DIR_A}  (${A.length} files)`;
+console.log(mode);
+console.log(`${hits.length} shortlisted by ${CROSS ? 'name-match / ' : ''}IDF-cosine / same-session / title`);
+if (CROSS) console.log(`  (${hits.filter(h => h.nameMatch).length} of them by NAME — the class content scoring misses)`);
+console.log();
 for (const h of hits) console.log(`  jac ${h.J.toFixed(2)}  cos ${h.C.toFixed(2)}  ${h.a}  ~  ${h.b}\n        ${h.why}`);
+console.log('\nA score locates candidates. It does not license the edit — read both files.');
