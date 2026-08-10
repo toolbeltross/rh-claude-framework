@@ -59,6 +59,7 @@ const path = require('path');
 const { withLock } = require(path.join(__dirname, 'lib', 'file-lock'));
 const { withPhase } = require(path.join(__dirname, 'lib', 'phase-timing'));
 const scribeDb = require(path.join(__dirname, 'lib', 'scribe-db'));
+const pathKey = require(path.join(__dirname, 'lib', 'path-key'));
 // Defensive: a missing/broken context-db.js must NEVER break the canonical md
 // write. Degrade to no-ops; the 3rd write stays off until the lib is present.
 let contextDb;
@@ -142,7 +143,12 @@ ${SENTINEL}
     ts: p.created || null,
     content: body,
     status: 'active',
-    source_file: p.topicFile,
+    // `topicFile` is an absolute path by contract; scribe_rows keys are PORTABLE.
+    // Passing it raw wrote a machine-specific key that no normalising reader could
+    // match — 63 orphaned `learnings` rows between 2026-08-06 and 2026-08-10, every
+    // one of them traced back to a successful create in phase-timing.jsonl.
+    // See lib/path-key.js and PLAN-2026-08-09-absolute-key-emitter.md.
+    source_file: pathKey.toKey(p.topicFile),
   });
   // Context-model 3rd write (Phase 3.2). Best-effort, flag-gated, gate-routed,
   // FAIL-CLOSED. Register the topic file as a source (content-scanned), then

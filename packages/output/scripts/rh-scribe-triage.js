@@ -21,6 +21,7 @@ const { spawnSync } = require('child_process');
 const { config } = require('./lib/config');
 const scribeMd = require('./lib/scribe-md');
 const scribeDb = require('./lib/scribe-db');
+const pathKey = require('./lib/path-key');
 
 let appendOversightEvent = () => {};
 try { ({ appendOversightEvent } = require('./lib/oversight-events')); } catch { /* optional */ }
@@ -32,7 +33,24 @@ const SAME_DAY_GUARD_HOURS = 20;
 const LAST_RUN_FILE = path.join(config.claudeDir, 'scribe-triage-last-run.txt');
 const DISPATCH_TIMEOUT_MS = 5 * 60 * 1000;
 
-function norm(p) { return String(p).replace(/\\/g, '/'); }
+// A filesystem path and a scribe_rows KEY are not the same string. `source_file`
+// is part of both the writeRow upsert conflict key and the dedup identity below,
+// so it must be the portable `~/` form — see lib/path-key.js.
+//
+// This file used to carry its own slashes-only `norm()`, a private fourth copy of
+// a normaliser that never mapped the home prefix. That was the defect: the
+// 2026-08-02 migration re-keyed the shadow to `~/…`, this script kept emitting
+// `<home>/…` absolute, and so `alreadyProposed()` stopped recognising anything it
+// had already triaged. It then re-proposed its entire settled backlog at BATCH_CAP
+// rows/day under a second spelling — 240 duplicate rows over six daily runs, each
+// one an LLM dispatch spent re-deciding a row that was already decided.
+// See PLAN-2026-08-09-absolute-key-emitter.md.
+
+/** Dedup identity of one row. BOTH sides of the comparison must build it here —
+ *  that they agreed was the assumption the defect broke. Accepts either spelling. */
+function rowKey(bucket, fileOrKey, rowId) {
+  return `${bucket}|${pathKey.toKey(fileOrKey || '')}|${rowId}`;
+}
 
 // Canonical scribe files to triage: cleanup + recommendations at the workspace
 // root ONLY. (Learnings are low-fidelity per-turn snippets, not closeable
@@ -40,11 +58,13 @@ function norm(p) { return String(p).replace(/\\/g, '/'); }
 // 2026-07-06: the oversightDir copies were retired — the workspace-root files
 // are the single canonical location; oversight-dir copies were stale
 // cwd-walkup leftovers (see rh-doc-placement.md, workspace-vs-project trap).
+//
+// `file` is the real path scribeMd.readRows() stats; `key` is what the DB stores.
 function scribeFiles() {
-  const ws = norm(config.workspace);
+  const ws = pathKey.norm(config.workspace);
   return [
-    { file: ws + '/cleanup.md', bucket: 'cleanup' },
-    { file: ws + '/recommendations.md', bucket: 'recommendations' },
+    { file: ws + '/cleanup.md', key: pathKey.toKey(ws + '/cleanup.md'), bucket: 'cleanup' },
+    { file: ws + '/recommendations.md', key: pathKey.toKey(ws + '/recommendations.md'), bucket: 'recommendations' },
   ];
 }
 
@@ -66,8 +86,10 @@ function alreadyProposed() {
   // INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md.
   const res = scribeDb.readProposals();
   if (!res.ok || !res.rows) return set;
+  // toKey() folds BOTH spellings onto one identity, so the legacy absolute-keyed
+  // rows still count as triaged and are not re-dispatched while they await dedup.
   for (const r of res.rows) {
-    if (r.proposed_at) set.add(`${r.bucket}|${norm(r.source_file || '')}|${r.row_id}`);
+    if (r.proposed_at) set.add(rowKey(r.bucket, r.source_file, r.row_id));
   }
   return set;
 }
@@ -81,14 +103,13 @@ function ageDays(ts) {
 function collectUntriaged() {
   const proposed = alreadyProposed();
   const out = [];
-  for (const { file, bucket } of scribeFiles()) {
-    const { ok, rows } = scribeMd.readRows(file);
+  for (const { file, key, bucket } of scribeFiles()) {
+    const { ok, rows } = scribeMd.readRows(file);   // real path — this one is stat'd
     if (!ok) continue;
     for (const r of rows) {
       if (r.status !== 'open') continue;
-      const key = `${bucket}|${norm(file)}|${r.id}`;
-      if (proposed.has(key)) continue;
-      out.push({ row_id: r.id, bucket, source_file: norm(file), ts: r.ts, session: r.session,
+      if (proposed.has(rowKey(bucket, key, r.id))) continue;
+      out.push({ row_id: r.id, bucket, source_file: key, ts: r.ts, session: r.session,
                  age_days: ageDays(r.ts), text: r.text });
     }
   }
@@ -195,4 +216,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { collectUntriaged, parseProposals, buildPrompt, scribeFiles };
+module.exports = { collectUntriaged, parseProposals, buildPrompt, scribeFiles, rowKey };
