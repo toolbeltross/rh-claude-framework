@@ -62,6 +62,7 @@ const LINK_RE = /\[\[([^\]]+)\]\]/g;
 // Paths appear in both Windows-absolute and ~/ form, so resolution goes through path-key.js
 // rather than a second normaliser (one parser, one behaviour — the CRLF lesson).
 const pathKey = require('./lib/path-key.js');
+const { scanCorpus } = require('./lib/corpus-scan.js');
 const PEER_RE = /^###\s+Peer memory in the other store\s*[—-]\s*([A-Z]+)/gm;
 // SAME-STORE links (2026-08-07). The shared learnings store was triaged against ITSELF and
 // complementary pairs were linked with a deliberately different heading — they are not
@@ -94,25 +95,20 @@ function crossStoreRefs(txt) {
 }
 const clip = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
 
+// The readdir + frontmatter walk now lives in lib/corpus-scan.js — this was the
+// 4th copy of it. corpus-scan also supplies contentSha256 / mtime / a portable
+// pathKey, and runs the two-call privacy protocol (path-only classify BEFORE
+// the file is opened, content classify after). Measured at the repoint: it
+// blocks 0 of the 431 files this function feeds the graph, so entity and
+// relation counts are unchanged — verified against a same-session baseline
+// rather than against the plan's stale 517/483/0 constant.
+//
+// Graph-specific frontmatter stays here, injected via the `extract` hook, so
+// corpus-scan needs to know nothing about graph edges.
 function scan(dir, kind, project) {
-  const out = [];
-  if (!fs.existsSync(dir)) return out;
-  for (const f of fs.readdirSync(dir)) {
-    if (!f.endsWith('.md') || f === 'MEMORY.md') continue;
-    const p = path.join(dir, f);
-    const txt = fs.readFileSync(p, 'utf8');
-    const meta = fm(txt);
-    // First paragraph of the body = the substantive claim; good substring-search fodder.
-    const body = RS.stripFrontmatter(txt);
-    const firstPara = (body.split(/\n\s*\n/).map(s => s.trim()).find(s => s && !s.startsWith('#')) || '')
-      .replace(/\s+/g, ' ');
-    out.push({
-      kind, project: project || null,
-      slug: f.replace(/\.md$/, ''),
-      file: p.replace(/\\/g, '/'),
-      title: meta.name || '',
-      description: meta.description || '',
-      type: meta.type || meta.node_type || '',
+  const res = scanCorpus(dir, {
+    sourceKind: 'learnings_md',
+    extract: ({ text, meta, body }) => ({
       created: meta.created || '',
       session: meta.originSessionId || '',
       // Lifecycle vocabulary agreed with the rh-platform-agentbuild session 2026-08-06.
@@ -127,12 +123,14 @@ function scan(dir, kind, project) {
       supersededBy: meta.supersededBy || '',
       taskName: meta.taskName || '',
       appliesInCwd: meta.appliesInCwd || '',
-      links: [...txt.matchAll(LINK_RE)].map(m => m[1].trim()),
-      crossRefs: crossStoreRefs(txt),
-      firstPara,
-    });
-  }
-  return out;
+      links: [...text.matchAll(LINK_RE)].map(m => m[1].trim()),
+      crossRefs: crossStoreRefs(text),
+      // First paragraph of the body = the substantive claim; good substring-search fodder.
+      firstPara: (body.split(/\n\s*\n/).map(s => s.trim()).find(s => s && !s.startsWith('#')) || '')
+        .replace(/\s+/g, ' '),
+    }),
+  });
+  return res.entries.map(e => ({ ...e, kind, project: project || null }));
 }
 
 const items = scan(path.join(CLAUDE, 'memory-shared', 'learnings'), 'learning');
