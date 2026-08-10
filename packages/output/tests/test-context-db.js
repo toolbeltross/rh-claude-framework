@@ -163,14 +163,22 @@ const tests = [
     name: 'classifyDisposition: bare-name token -> blocklisted ANYWHERE in path OR content (user direction 2026-06-14)',
     fn: () => {
       const db = freshContextDb({ RH_CONTEXT_DB: '0' });
-      const priv = ['troy2025', 'cs2026'];
+      // FIXTURE ENTITIES MUST BE SYNTHETIC. This repo is public. A blocklist test
+      // needs a token the matcher HITS — it does not need a real one, and the two
+      // are indistinguishable to the assertion. `priv` is passed explicitly here,
+      // so the test never reads the operator's real blocklist; keep it that way.
+      // (Replaced 2026-08-09: this fixture previously used two real project
+      // entity names, published since 2026-06-26.)
+      const priv = ['zephyr2025', 'qx2026'];
       // bare name mid-path, NOT under any private root
       assert.strictEqual(
-        db.classifyDisposition({ canonicalPath: 'C:/ws/somewhere/troy2025-notes.md', sourceKind: 'scribe_md', content: 'x' }, priv),
+        db.classifyDisposition({ canonicalPath: 'C:/ws/somewhere/zephyr2025-notes.md', sourceKind: 'scribe_md', content: 'x' }, priv),
         'blocklisted-skipped');
-      // bare name inside CONTENT even when path is innocuous + a curated kind
+      // bare name inside CONTENT even when path is innocuous + a curated kind.
+      // Deliberately upper-case here while the pattern is lower-case: this is the
+      // case-insensitivity assertion, not an incidental spelling.
       assert.strictEqual(
-        db.classifyDisposition({ canonicalPath: 'C:/ws/recommendations.md', sourceKind: 'scribe_md', content: 'note about CS2026 budget' }, priv),
+        db.classifyDisposition({ canonicalPath: 'C:/ws/recommendations.md', sourceKind: 'scribe_md', content: 'note about QX2026 budget' }, priv),
         'blocklisted-skipped');
       // neither name present -> not blocklisted (no over-block)
       assert.notStrictEqual(
