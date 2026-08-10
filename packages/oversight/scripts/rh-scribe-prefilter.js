@@ -100,13 +100,70 @@ const STATE_FILE = path.join(config.claudeDir, 'scribe-session-state.json');
 //   {
 //     "patterns": ["RegexLiteralWithoutSlashes", "AnotherEntityName", ...]
 //   }
-// Each entry is wrapped as /\b<entry>\b/i at load time. Invalid entries
-// are skipped silently. File missing is fine — only structural patterns apply.
+// Each entry is compiled separator-tolerantly at load time (see below). Invalid
+// entries are skipped silently. File missing is fine — only structural patterns
+// apply.
+//
+// ---------------------------------------------------------------------------
+// Coverage fix 2026-08-09 (plan step 1b). The gate itself is unchanged and has
+// run correctly since the initial commit; these are PATTERN COVERAGE fixes for
+// two measured holes on the per-project-memory surface.
+//
+// Hole 1 — `_` is a REGEX WORD CHARACTER, so `\b` never fires between `_` and a
+//   letter. Every user entry was compiled as /\b<entry>\b/i, which therefore
+//   cannot match inside a snake_case per-project memory filename: in
+//   `user_x_acmebank_management.md` the substring `acmebank` is flanked by `_`
+//   on both sides, so /\bacmebank\b/ finds no boundary and returns false. Bare
+//   memory filenames matched NOTHING AT ALL — not a gap in the vocabulary, a
+//   gap in the boundary. Fixed with an explicit non-alphanumeric boundary.
+//
+// Hole 2 — the per-project directory encoding (`C--Users-<user>-…`) rewrites
+//   EVERY path separator as a hyphen. That makes slash-anchored structural
+//   markers completely inert on that surface, and it splits solid entity
+//   tokens, so `…-Desktop-Name-2023-tax-problem` passed while its solid-form
+//   sibling `…-Personal-Financial-Name2023` blocked — same project, same
+//   private content, opposite outcomes, decided by a hyphen. Fixed by widening
+//   the structural separator class and by compiling each entity entry to accept
+//   any separator run between its alphabetic and numeric parts.
+//
+// Hole 3 (forward cover) — plan §1.3 requires every deliberately adopted
+//   personal artifact to carry `sensitivity: personal` frontmatter and a
+//   `PERSONAL-` filename prefix. Those are STRUCTURAL and enumerable, unlike
+//   private topic vocabulary, so the prefilter recognises them directly. This
+//   is the only layer that does not depend on someone having listed the right
+//   entity name in advance.
+// ---------------------------------------------------------------------------
+
+// Boundary that treats `_` (and `-`, `/`, `.`, whitespace) as a separator.
+// `\b` does not — `_` is a word character to the regex engine.
+const B_OPEN = String.raw`(?<![A-Za-z0-9])`;
+const B_CLOSE = String.raw`(?![A-Za-z0-9])`;
+// Separator run allowed BETWEEN the parts of an entity name (optional, so the
+// solid spelling still matches).
+const ENTITY_SEP = String.raw`[-_/\\\s]*`;
+// Separator REQUIRED after a structural directory marker. Kept mandatory so the
+// ordinary English word ("a personal preference") does not match; widened from
+// [\\/] to include `-` and `_` so the encoded directory form matches too.
+const STRUCT_SEP = String.raw`[\\/_-]`;
+
 const PRIVACY_PATTERNS = [
-  /Personal[\\/]/i,
-  /Financial[\\/]/i,
-  /\bDivorce\b/i,
+  new RegExp(`Personal${STRUCT_SEP}`, 'i'),
+  new RegExp(`Financial${STRUCT_SEP}`, 'i'),
+  new RegExp(`${B_OPEN}Divorce${B_CLOSE}`, 'i'),
+  // Structural markers for deliberately-tagged personal artifacts (plan §1.3).
+  new RegExp(`${B_OPEN}PERSONAL-`, 'i'),
+  /sensitivity:\s*personal/i,
 ];
+
+// Split an entry into its alphabetic and numeric runs and rejoin them with an
+// optional separator run, so ONE entry covers every spelling of the same name:
+// `name2023` also matches `name-2023`, `name_2023` and `Name 2023`; and
+// `Personal/Financial/X` also matches `Personal-Financial-X`. Parts are
+// alphanumeric by construction, so no metacharacter escaping is required.
+function separatorTolerantSource(entry) {
+  const parts = String(entry).match(/[A-Za-z]+|[0-9]+/g);
+  return parts && parts.length ? parts.join(ENTITY_SEP) : null;
+}
 
 (function loadUserBlocklist() {
   try {
@@ -118,7 +175,9 @@ const PRIVACY_PATTERNS = [
     for (const entry of data.patterns) {
       if (typeof entry !== 'string' || !entry.trim()) continue;
       try {
-        PRIVACY_PATTERNS.push(new RegExp(`\\b${entry}\\b`, 'i'));
+        const src = separatorTolerantSource(entry);
+        if (!src) continue;
+        PRIVACY_PATTERNS.push(new RegExp(`${B_OPEN}${src}${B_CLOSE}`, 'i'));
       } catch {}
     }
   } catch {}
