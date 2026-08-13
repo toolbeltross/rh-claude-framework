@@ -56,6 +56,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { withLock } = require(path.join(__dirname, 'lib', 'file-lock'));
 const { withPhase } = require(path.join(__dirname, 'lib', 'phase-timing'));
 const scribeDb = require(path.join(__dirname, 'lib', 'scribe-db'));
@@ -76,6 +77,33 @@ try {
 }
 
 const SENTINEL = '<!-- scribe-done -->';
+
+// Defensive path normalization (Defect-A hardening, incident 2026-06-27).
+// Node's fs does NOT expand a leading `~` — a tilde path resolves cwd-relative,
+// and from a worktree cwd its parent dir is absent, so the write silently fails
+// (see verifyWrote / withLock-undefined guards below). The documented contract
+// is "<absolute path>"; this expands a stray leading `~/` or `~\` to homedir and
+// WARNS (steward condition C5) so the caller violation is surfaced, not masked.
+function resolveTilde(p, fieldName) {
+  if (typeof p === 'string' && /^~[\\/]/.test(p)) {
+    const expanded = path.join(os.homedir(), p.slice(2));
+    process.stderr.write(`warn: ${fieldName} contains an unexpanded tilde — caller should pass an absolute path; expanded to ${expanded}\n`);
+    return expanded;
+  }
+  return p;
+}
+
+// Fail-loud guard for a withLock-wrapped write (Defect-B fix, incident 2026-06-27).
+// withLock returns `undefined` (NO throw) when it never acquired the lock — e.g.
+// the lockfile create hit ENOENT because the target's parent dir is missing. The
+// work fn (the real write) then never ran. Callers MUST check this BEFORE trusting
+// the write (steward condition C6), then verify the on-disk effect. Never report
+// success on an unverified write.
+function assertLockRan(lockRet, op, file) {
+  if (lockRet === undefined) {
+    throw new Error(`${op}: lock acquisition failed for ${file} — write did NOT occur (verify the parent dir exists and is writable; an unexpanded ~ or a non-absolute path is the usual cause)`);
+  }
+}
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -128,12 +156,20 @@ ${decisionRuleSection}## Source
 ${SENTINEL}
 `;
 
-  withLock(p.topicFile, () => {
+  const lockRet = withLock(p.topicFile, () => {
     if (fs.existsSync(p.topicFile)) {
       throw new Error(`create: file already exists: ${p.topicFile} (use append-observation to add to existing)`);
     }
     fs.writeFileSync(p.topicFile, body, 'utf8');
+    return true;
   });
+  // Fail loud BEFORE any DB shadow / success report (steward C6: check the lock
+  // return first, then the filesystem). This is the gap that silently lost the
+  // 2026-06-27 learnings — withLock returned undefined and the old code ignored it.
+  assertLockRan(lockRet, 'create', p.topicFile);
+  if (!fs.existsSync(p.topicFile)) {
+    throw new Error(`create: post-write verification FAILED — ${p.topicFile} does not exist on disk after the write`);
+  }
   // Postgres shadow (Phase 2, PLAN-2026-06-11-scribe-postgres-fts):
   // best-effort after the canonical md write; never affects the result.
   const dbRes = scribeDb.writeRow({
@@ -224,6 +260,11 @@ function modeAppendObservation(p) {
     fs.writeFileSync(p.topicFile, newContent, 'utf8');
     return { rowAdded: row.trim() };
   });
+  // Fail loud on a silently-skipped write (steward C6/C7), then read-back verify.
+  assertLockRan(result, 'append-observation', p.topicFile);
+  if (!fs.readFileSync(p.topicFile, 'utf8').includes(row.trim())) {
+    throw new Error(`append-observation: post-write verification FAILED — appended row not found in ${p.topicFile}`);
+  }
   // Context-model 3rd write (Phase 3.3) — closes the verified gap: an
   // incremental ctx_memory_observation per append. Best-effort, flag-gated,
   // FAIL-CLOSED, gate-routed; resolves its parent artifact by natural key.
@@ -303,6 +344,11 @@ function modeUpdateSubIndex(p) {
     fs.writeFileSync(p.indexFile, newContent, 'utf8');
     return { action: updated ? 'updated' : 'appended', sentinelPosition: 'eof' };
   });
+  // Fail loud on a silently-skipped write (steward C6/C7), then read-back verify.
+  assertLockRan(result, 'update-sub-index', p.indexFile);
+  if (!fs.readFileSync(p.indexFile, 'utf8').includes(newRow)) {
+    throw new Error(`update-sub-index: post-write verification FAILED — row not found in ${p.indexFile}`);
+  }
   return { ok: true, mode: 'update-sub-index', wrote: p.indexFile, ...result };
 }
 
@@ -337,6 +383,13 @@ function modeUpdateRootIndex(p) {
     fs.writeFileSync(p.indexFile, lines.join('\n'), 'utf8');
     return { action: 'updated' };
   });
+  // Fail loud on a silently-skipped write (steward C6/C7). The `absent-not-inserted`
+  // branch is a deliberate no-write (root MEMORY.md is hand-curated) — only read-back
+  // verify when we actually wrote.
+  assertLockRan(result, 'update-root-index', p.indexFile);
+  if (result.action === 'updated' && !fs.readFileSync(p.indexFile, 'utf8').includes(expectedLine)) {
+    throw new Error(`update-root-index: post-write verification FAILED — expected line not found in ${p.indexFile}`);
+  }
   return { ok: true, mode: 'update-root-index', wrote: p.indexFile, ...result };
 }
 
@@ -348,6 +401,12 @@ function modeUpdateRootIndex(p) {
     if (!stdin.trim()) throw new Error('empty stdin (expected JSON payload)');
     let payload;
     try { payload = JSON.parse(stdin); } catch (e) { throw new Error('invalid JSON payload: ' + e.message); }
+
+    // Defect-A hardening: expand a stray leading `~` (and warn) BEFORE any mode
+    // uses the path. The contract is absolute; this is a defensive net, not an
+    // endorsement of tilde paths (steward C5).
+    if (payload.topicFile) payload.topicFile = resolveTilde(payload.topicFile, 'topicFile');
+    if (payload.indexFile) payload.indexFile = resolveTilde(payload.indexFile, 'indexFile');
 
     let result;
     // Phase-timing per mode (Phase 1 follow-on, 2026-05-02). Each mode does
