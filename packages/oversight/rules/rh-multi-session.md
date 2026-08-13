@@ -65,19 +65,61 @@ remedy is structurally unavailable exactly where the hazard is highest.
    touch **neither HEAD nor the index**, so they appear in **no `git status` column** — a session
    dutifully announcing before `checkout` will still do this without a ping. The hazard is any
    write transiting the shared tree, not only operations that move HEAD or the index.
-2. **Clear the index before staging, not after:** `git reset` → `git add <paths>` → assert.
-   Staging without clearing first *appends to* whatever is already there.
+2. **Preflight the index — do NOT clear it.** *(Corrected 2026-08-13; this item used to say
+   "clear the index before staging: `git reset` → `git add` → assert." See the third amendment
+   below — that instruction was itself the hazard this rule exists to prevent.)*
+   Read the index first; if anything is already staged, it is not yours to discard:
+   ```bash
+   git diff --cached --name-only     # MUST be empty before you stage
+   ```
+   Non-empty ⇒ a peer has staged work. **Stop and surface it.** Do not reset, do not stage on
+   top, do not commit. Staging on top of a foreign index is how their work enters your commit.
 3. **Assert the staged count before committing:**
    ```bash
-   git reset
+   git diff --cached --name-only            # preflight — MUST be empty
    git add <explicit paths>
    git diff --cached --name-only | wc -l    # MUST equal your expected count
+   ```
+   To back out your own staging, unstage **by explicit path** — never `git reset`:
+   ```bash
+   git restore --staged <your paths>
    ```
    Printing the staged list is not the check — *comparing it to an expectation* is. A session
    printed its 25-file staged list and read it as confirmation. On its first real use this
    assertion caught a genuine off-by-one (staged 22, expected 23) in the peer session.
 4. **Read column ONE of `git status --short`.** `M ` is staged, ` M` is unstaged. Counting total
    dirty lines does not distinguish them, and the staged column is the one that gets committed.
+
+## Third amendment (2026-08-13): the prescribed `git reset` was itself a shared-state mutation
+
+Items 2 and 3 above used to open with `git reset`. **That instruction was the hazard.** `git
+reset` with no pathspec clears the *entire* index — and on a shared checkout the index is not
+yours. It is safe only if the index is already exclusively yours, and **there is no non-racy way
+to check**: any test you run can be invalidated by a peer between the check and the reset.
+
+Demonstrated 2026-08-13, isolated repo, both branches run back to back:
+
+| Action | Staged after | Peer's work |
+|---|---|---|
+| peer stages `peer.md`, you stage `mine.md` | `mine.md peer.md` | — |
+| `git reset` (what the rule prescribed) | *(empty)* | **peer's staging destroyed** |
+| `git restore --staged mine.md` | `peer.md` | **intact** |
+
+Peer file *content* survives either way — this is a staging-state loss, not content loss — but a
+peer that staged deliberately and finds its index emptied has lost work it believed was captured,
+with no signal. Observed live 2026-08-09; it survived on timing alone.
+
+**The replacement is preflight-and-stop, plus scoped unstage:**
+
+- `git restore --staged <path>` is the scoped inverse of `git add <path>`. It is what makes the
+  assert-then-abort pattern safe on a shared index.
+- A non-empty index at preflight is **not** something to clear. It is a signal to stop.
+
+*Practice note:* this session ran ~7 staging operations across three repos (dotfiles, setup,
+framework) using preflight → explicit-path `git add` → count assertion, with
+`git restore --staged` on the abort path and **no `git reset` at any point**. Every commit staged
+exactly its expected count; foreign dirty files in two of the three repos were left untouched
+throughout. The pattern is not theoretical.
 
 ### Recovery
 
