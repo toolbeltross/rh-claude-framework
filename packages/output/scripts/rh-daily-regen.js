@@ -239,6 +239,20 @@ const STEPS = [
     timeoutOverrideMs: 6 * 60_000,  // supervisor dispatch can take up to 5min
   },
   {
+    // Open memory-system item #3 (wired 2026-08-13): re-seed the MCP knowledge
+    // graph from the memory corpus. It had ZERO references anywhere in this
+    // pipeline, so the graph only refreshed when someone ran it by hand — and
+    // it went stale twice in a single day. Reads the corpus via
+    // lib/corpus-scan.js and writes the server's own JSONL store; the server
+    // calls loadGraph() per operation, so no restart is needed. Runs after the
+    // scribe steps so it seeds from a settled corpus, and before daily-guidance
+    // (the heaviest LLM step). `--apply` is required — without it the script
+    // dry-runs and exits 0, which would have made this step a silent no-op.
+    name: "rh-seed-graph",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-seed-graph.js"), "--apply"],
+  },
+  {
     // PLAN-2026-06-15: automated daily guidance + health digest (fully
     // headless, no manual paste). Pre-computes local checks in Node (no Bash
     // for the LLM) and dispatches the rh-daily-guidance agent (WebFetch/
