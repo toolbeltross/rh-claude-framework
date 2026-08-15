@@ -4,7 +4,7 @@
  *
  * WHY THIS EXISTS. settings.json used to name the framework's telemetry scripts
  * by absolute path (14 hook commands, all
- * C:/Users/rossb/Workspace/.../packages/telemetry/scripts/*.js). The
+ * <workspace>/.../packages/telemetry/scripts/*.js). The
  * 2026-07-27/28 OneDrive->local migration showed which references survive a move
  * and which don't: everything resolved at RUNTIME survived (oversight.json,
  * rh-daily-validate's fallback chain); the one thing that broke was a path
@@ -28,7 +28,7 @@
  * stay visible. Resolution failure only.
  *
  * Usage (from settings.json):
- *   node C:/Users/rossb/.claude/scripts/rh-fw.js hook-forwarder.js tool "$CLAUDE_TOOL_NAME" ...
+ *   node <home>/.claude/scripts/rh-fw.js hook-forwarder.js tool "$CLAUDE_TOOL_NAME" ...
  *
  * Escape hatch: RH_FRAMEWORK_ROOT overrides the workspace search entirely.
  */
