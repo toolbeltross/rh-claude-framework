@@ -42,7 +42,7 @@ export default function OverviewTab({ stats, sessions, onSelectSession, displayM
         <MetricCard label="Total Sessions" value={totalSessions} color="text-gray-100" tooltip="Cumulative number of Claude Code sessions across all projects" />
         <MetricCard label="Total Messages" value={totalMessages} color="text-gray-100" tooltip="Total conversation messages exchanged across all sessions" />
         {isTokenMode ? (
-          <MetricCard label="Total Tokens" value={formatTokens(totalTokens)} color="text-gray-100" tooltip="All-time input + output tokens across every model (from stats cache; excludes cache-read/write tokens). Matches the Daily Token chart." />
+          <MetricCard label="Total Tokens" value={formatTokens(totalTokens)} color="text-gray-100" tooltip="All-time input + output tokens across every model (excludes cache-read/write tokens). Matches the Daily Token chart." />
         ) : (
           <MetricCard label="Total Cost" value={`$${totalCost.toFixed(2)}`} color="text-gray-100" tooltip="Sum of API costs across all tracked sessions" />
         )}
@@ -72,7 +72,7 @@ export default function OverviewTab({ stats, sessions, onSelectSession, displayM
       {/* Recent Sessions */}
       {sessions?.length > 0 && (
         <div className="col-span-12 bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3" title="Last session per project from .claude.json — click a row to open its detail tab">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3" title="Sessions from .claude.json when it carries usage data, otherwise from the live transcript aggregator — click a row to open its detail tab">
             Recent Sessions ({sessions.length})
           </h3>
           <div className="overflow-x-auto">
