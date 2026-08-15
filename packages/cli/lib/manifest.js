@@ -22,6 +22,92 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+// ─────────────────── Non-clobbering install guard (F-10 generalised) ───────────────────
+//
+// F-10 (2026-05-04): `rh-oversight init` overwrote hook entries written by
+// `rh-telemetry setup`; two journal channels went silent for three days and were
+// found only by manual investigation. The fix made settings.json merges ADDITIVE
+// — but it was applied to settings.json alone. Every other installed file still
+// went through a bare copyFileSync: no exists-check, no hash check, no backup.
+// That left the same clobber mechanism live for ~100 files (scripts, agents,
+// skills, workspace rules), which is a standing revert engine: a live incident
+// fix is overwritten by a stale packages/ copy, someone re-applies it, the next
+// init reverts it again.
+//
+// The guard records a sha256 per installed destination. On a later install:
+//
+//   dest missing                      -> copy        (new file)
+//   dest identical to src             -> unchanged   (no-op)
+//   dest matches its recorded hash    -> copy        (untouched since install;
+//                                                     a legitimate framework upgrade)
+//   dest differs from recorded hash   -> PROTECT     (edited after install — the
+//                                                     F-10 case; skip and report)
+//   no record and dest differs        -> PROTECT     (unmanaged drift; skip and report)
+//   --force                           -> copy        (explicit override)
+//
+// Protecting on "no record" is deliberate: the first run after this ships has no
+// state file, so pre-existing drift is surfaced rather than silently destroyed.
+
+function sha256File(p) {
+  try { return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); }
+  catch { return null; }
+}
+
+function loadInstallState(stateFile) {
+  if (!stateFile) return {};
+  try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}; }
+  catch { return {}; }
+}
+
+function saveInstallState(stateFile, state) {
+  if (!stateFile || !state) return false;
+  try {
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + '\n', 'utf8');
+    return true;
+  } catch { return false; }
+}
+
+// Pure decision function — no IO side effects beyond reading. Exported for tests.
+function decideCopy(src, dest, opts) {
+  if (!fs.existsSync(dest)) return 'copy';
+  const destHash = sha256File(dest);
+  if (destHash !== null && destHash === sha256File(src)) return 'unchanged';
+  if (opts && opts.force) return 'copy';
+  // The guard is ACTIVE only when the caller supplies an installState map.
+  // Direct applyOperation/applyManifest callers that omit it keep the legacy
+  // always-overwrite contract — the documented shim → canonical override
+  // (oversight ships scripts/lib shims, shared overwrites them with canonicals,
+  // which is why install order matters) depends on that contract, and a guard
+  // that blocked it would break the install it is meant to protect.
+  //
+  // An EMPTY map is still "active": the first run after this ships has no
+  // records, and surfacing pre-existing drift is the entire point.
+  if (!opts || !opts.installState) return 'copy';
+  const recorded = opts.installState[dest];
+  if (recorded && recorded === destHash) return 'copy';
+  return 'protect';
+}
+
+// Returns true when the file should count toward the operation's file count
+// (copied or already-identical); false when protected.
+function guardedCopy(src, dest, opts) {
+  const decision = decideCopy(src, dest, opts);
+  if (decision === 'protect') {
+    if (opts && Array.isArray(opts.protectedFiles)) opts.protectedFiles.push(dest);
+    console.log(`  [protected] ${dest} — differs from what was installed; not overwritten (use --force)`);
+    return false;
+  }
+  if (opts && opts.dryRun) {
+    console.log(`  [dry-run] copy ${src} → ${dest}`);
+    return true;
+  }
+  if (decision === 'copy') fs.copyFileSync(src, dest);
+  if (opts && opts.installState) opts.installState[dest] = sha256File(dest);
+  return true;
+}
 
 // copyDir recursively copies src → dest. The optional `excludeSubdirs` set
 // (Set<string>) skips top-level subdirectories of src by name — used by
@@ -41,9 +127,7 @@ function copyDir(src, dest, opts, excludeSubdirs) {
       // skip only (more predictable than depth-recursive name matching).
       count += copyDir(srcPath, destPath, opts);
     } else {
-      if (opts.dryRun) console.log(`  [dry-run] copy ${srcPath} → ${destPath}`);
-      else fs.copyFileSync(srcPath, destPath);
-      count++;
+      if (guardedCopy(srcPath, destPath, opts)) count++;
     }
   }
   return count;
@@ -82,9 +166,7 @@ function applyOperation(op, pkgDir, paths, opts) {
       const src = path.join(fromDir, f);
       const destFile = path.join(dest, path.basename(f));
       if (!fs.existsSync(src)) continue;
-      if (opts.dryRun) console.log(`  [dry-run] copy ${src} → ${destFile}`);
-      else fs.copyFileSync(src, destFile);
-      count++;
+      if (guardedCopy(src, destFile, opts)) count++;
     }
     return count;
   }
@@ -127,4 +209,8 @@ function applyManifest(pkgDir, paths, opts) {
   return total;
 }
 
-module.exports = { applyManifest, applyOperation, resolveTo, copyDir };
+module.exports = {
+  applyManifest, applyOperation, resolveTo, copyDir,
+  // install guard (F-10 generalised)
+  decideCopy, guardedCopy, loadInstallState, saveInstallState, sha256File,
+};

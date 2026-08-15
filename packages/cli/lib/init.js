@@ -31,6 +31,9 @@ function parseArgs() {
     else if (args[i] === '--dry-run') opts.dryRun = true;
     else if (args[i] === '--skip-hooks') opts.skipHooks = true;
     else if (args[i] === '--yes' || args[i] === '-y' || args[i] === '--no-prompt') opts.noPrompt = true;
+    // --force: overwrite destinations that were edited after they were installed.
+    // Without it those files are protected and reported (F-10 generalised).
+    else if (args[i] === '--force') opts.force = true;
   }
   return opts;
 }
@@ -58,23 +61,14 @@ function promptLineSync(question) {
   return input.split('\n')[0].replace(/\r$/, '').trim();
 }
 
-function copyDir(src, dest, opts) {
-  if (!fs.existsSync(src)) return 0;
-  if (!opts.dryRun && !fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-  let count = 0;
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      count += copyDir(srcPath, destPath, opts);
-    } else {
-      if (opts.dryRun) { console.log(`  [dry-run] copy ${srcPath} → ${destPath}`); }
-      else { fs.copyFileSync(srcPath, destPath); }
-      count++;
-    }
-  }
-  return count;
-}
+// NOTE: a local `copyDir` used to live here. It was DEAD CODE — defined,
+// self-recursive, never called, never exported; the real install path is
+// manifest.js's copyDir/copyFiles/copySubdirs, reached via applyManifest below.
+// Removed because it was actively misleading: both copies logged dry-run lines
+// in the identical format, so a reader (or an audit) tracing "what does init
+// overwrite?" lands here, hardens the wrong function, and leaves the real
+// clobber path untouched. That misdiagnosis actually happened before this
+// change. Removal assessment: no callers, no export, no behaviour delta.
 
 function resolveTemplate(templateContent, vars) {
   let result = templateContent;
@@ -415,11 +409,31 @@ function run(extraOpts = {}) {
   // (Phase 4b of reorg). Order matters: shared MUST run after oversight +
   // output so the shared/{config,file-lock}.js canonicals overwrite the
   // shims that oversight ships in scripts/lib/. Skills order is independent.
-  const { applyManifest } = require('./manifest');
+  const { applyManifest, loadInstallState, saveInstallState } = require('./manifest');
   const installPaths = { scriptsDir, agentsDir, skillsDir, rulesDir };
   const PACKAGE_INSTALL_ORDER = [OVERSIGHT_PKG, OUTPUT_PKG, SHARED_PKG, SKILLS_PKG];
+
+  // Non-clobbering guard (F-10 generalised — see manifest.js). The state file
+  // records a sha256 per installed destination so a later init can tell an
+  // untouched file (safe to upgrade) from one edited after install (protect).
+  // Shared across all four packages so one save covers the whole install.
+  const installStateFile = path.join(CLAUDE_DIR, '.rh-install-state.json');
+  opts.installState = loadInstallState(installStateFile);
+  opts.protectedFiles = [];
+
   for (const pkgDir of PACKAGE_INSTALL_ORDER) {
     applyManifest(pkgDir, installPaths, opts);
+  }
+
+  if (!opts.dryRun) saveInstallState(installStateFile, opts.installState);
+
+  if (opts.protectedFiles.length) {
+    console.log('');
+    console.log(`  ⚠ ${opts.protectedFiles.length} file(s) PROTECTED — edited after install, not overwritten:`);
+    for (const f of opts.protectedFiles) console.log(`      ${f}`);
+    console.log('  Reconcile them into packages/ (live is often ahead — it carries the incident');
+    console.log('  fixes), or re-run with --force to overwrite. This guard exists because F-10');
+    console.log('  was exactly this: an init silently reverted live changes.');
   }
 
   // 6. Create oversight dir
