@@ -168,6 +168,13 @@ export function adaptAggregateSessions(aggSessions) {
         ...tokens,
         total: tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite,
       },
+      // Context fill at session end, from the transcript's last API call.
+      // The gauge MUST use this rather than tokens.input: that field is the
+      // cumulative sum of uncached input across every message, which for a long
+      // session is a few hundred tokens while the real context was near full.
+      // Dividing it by a window size yields a confident 0% — a wrong number
+      // where the honest answer is "unknown".
+      contextTokens: s.lastContextTokens || 0,
       // Not derivable from the aggregator — parser.js sourced these from
       // .claude.json's `last*` block. Zeroed rather than omitted so consumers
       // that read them get a number instead of undefined.

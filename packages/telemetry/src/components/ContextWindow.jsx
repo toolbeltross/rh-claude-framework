@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import InfoIcon, { Legend } from './InfoIcon';
 
-const CONTEXT_SIZES = [200_000, 1_000_000];
+import { getContextLimit, CONTEXT_SIZES } from '../lib/context-limit';
 const STORAGE_KEY = 'telemetry-ctx-override';
 
 function loadOverride() {
@@ -144,10 +144,23 @@ export default function ContextWindow({ session, liveSession }) {
 
   // Fallback to file-based session data
   const { input, output, cacheRead, cacheWrite } = session.tokens;
-  const reported = getContextLimit(session.primaryModelId);
+  // Context fill at session end, when the source can supply it (aggregator-backed
+  // sessions carry it; .claude.json parser sessions do not).
+  //
+  // `input` is NOT a substitute. It is the cumulative sum of uncached input
+  // across every message — a few hundred tokens on a session whose context was
+  // actually near full. Dividing it by the window renders a confident 0%, which
+  // is worse than the honest "?" it would replace. So the percentage is shown
+  // only when a real measurement exists; otherwise fillPct stays null and the
+  // gauge keeps saying it does not know.
+  const contextTokens = Number.isFinite(session.contextTokens) ? session.contextTokens : null;
+  const hasContextMeasurement = contextTokens !== null && contextTokens > 0;
+  const reported = getContextLimit(session.primaryModelId, contextTokens ?? 0);
   const contextLimit = override ?? reported;
-  const effectiveTokens = input;
-  const fillPct = contextLimit ? Math.min((effectiveTokens / contextLimit) * 100, 100) : null;
+  const effectiveTokens = hasContextMeasurement ? contextTokens : input;
+  const fillPct = contextLimit && hasContextMeasurement
+    ? Math.min((effectiveTokens / contextLimit) * 100, 100)
+    : null;
   const barColor = fillPct !== null ? (fillPct > 80 ? 'bg-red' : fillPct > 50 ? 'bg-amber' : 'bg-accent') : 'bg-gray-600';
   const cacheHit = cacheRead > 0 ? ((cacheRead / (cacheRead + input || 1)) * 100).toFixed(1) : null;
   const isOverridden = override !== null && override !== reported;
@@ -181,7 +194,13 @@ export default function ContextWindow({ session, liveSession }) {
           </div>
         </div>
         <span className="text-xs text-gray-400 shrink-0 inline-flex items-center">
-          {formatTokens(effectiveTokens)} /&nbsp;{contextLimit
+          <span title={hasContextMeasurement
+            ? 'Context in use at the end of this session (last request: input + cache read + cache write)'
+            : 'No end-of-session context measurement for this session — this is cumulative input tokens across every message, not context fill, so no percentage is shown'}
+            className={hasContextMeasurement ? '' : 'text-gray-500'}>
+            {formatTokens(effectiveTokens)}
+          </span>
+          &nbsp;/&nbsp;{contextLimit
             ? <button onClick={cycleSize} className={`cursor-pointer hover:underline ${isOverridden ? 'text-amber' : 'text-gray-400'}`} title={`Click to cycle: ${CONTEXT_SIZES.map(s => formatTokens(s)).join(' / ')}${isOverridden ? ' (overridden)' : ''}`}>{formatTokens(contextLimit)}</button>
             : <button onClick={cycleSize} className="animate-pulse text-gray-500 cursor-pointer hover:text-gray-300" title="Context size unknown — click to set manually">?</button>}
         </span>
@@ -335,14 +354,5 @@ function VelocityRow({ liveData, contextLimit }) {
   );
 }
 
-function getContextLimit(modelId) {
-  if (!modelId) return null;
-  if (/\[1m\]/.test(modelId)) return 1_000_000;
-  const limits = {
-    'claude-opus-4': 200000,
-    'claude-sonnet-4': 200000,
-    'claude-haiku-4': 200000,
-  };
-  const match = Object.entries(limits).find(([k]) => modelId.includes(k));
-  return match ? match[1] : null;
-}
+// getContextLimit now lives in ../lib/context-limit.js — moved there so the
+// plain-Node test harness can import it (no JSX transform), and imported above.
