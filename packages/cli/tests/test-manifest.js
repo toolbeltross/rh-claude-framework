@@ -12,7 +12,10 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { applyManifest, applyOperation, resolveTo } = require('../lib/manifest');
+const {
+  applyManifest, applyOperation, resolveTo,
+  sha256File, loadInstallState, saveInstallState,
+} = require('../lib/manifest');
 
 const PACKAGES_ROOT = path.join(__dirname, '..', '..');
 
@@ -252,6 +255,95 @@ const tests = [
         fs.readFileSync(path.join(dest, 'lib', 'config.js'), 'utf8'),
         '// CANONICAL\n', 'canonical should overwrite shim post-shared step'
       );
+    }),
+  },
+
+  // ───────── install guard (F-10 generalised) ─────────
+  //
+  // F-10: an init silently reverted live changes. settings.json got an additive
+  // merge; the ~100 copied files did not. These cover the guard that closes it.
+
+  {
+    name: 'guard: a destination edited after install is PROTECTED, not overwritten',
+    fn: () => withTmpDir((dir) => {
+      const src = path.join(dir, 'pkg'); const dest = path.join(dir, 'dest');
+      fs.mkdirSync(src); fs.mkdirSync(dest);
+      fs.writeFileSync(path.join(src, 'a.js'), '// FRAMEWORK\n');
+      fs.writeFileSync(path.join(dest, 'a.js'), '// LIVE INCIDENT FIX\n');
+      const opts = { dryRun: false, installState: {}, protectedFiles: [] };
+      applyOperation({ kind: 'copyFiles', files: ['a.js'], to: 'scriptsDir' },
+        src, { scriptsDir: dest }, opts);
+      assert.strictEqual(fs.readFileSync(path.join(dest, 'a.js'), 'utf8'),
+        '// LIVE INCIDENT FIX\n', 'live edit must survive');
+      assert.strictEqual(opts.protectedFiles.length, 1, 'must be reported as protected');
+    }),
+  },
+  {
+    name: 'guard: an untouched destination IS upgraded (legitimate framework update)',
+    fn: () => withTmpDir((dir) => {
+      const src = path.join(dir, 'pkg'); const dest = path.join(dir, 'dest');
+      fs.mkdirSync(src); fs.mkdirSync(dest);
+      fs.writeFileSync(path.join(dest, 'a.js'), '// V1\n');
+      fs.writeFileSync(path.join(src, 'a.js'), '// V2\n');
+      // state records the dest exactly as installed -> untouched since
+      const opts = {
+        dryRun: false, protectedFiles: [],
+        installState: { [path.join(dest, 'a.js')]: sha256File(path.join(dest, 'a.js')) },
+      };
+      applyOperation({ kind: 'copyFiles', files: ['a.js'], to: 'scriptsDir' },
+        src, { scriptsDir: dest }, opts);
+      assert.strictEqual(fs.readFileSync(path.join(dest, 'a.js'), 'utf8'),
+        '// V2\n', 'untouched dest must accept the upgrade');
+      assert.strictEqual(opts.protectedFiles.length, 0);
+    }),
+  },
+  {
+    name: 'guard: --force overwrites a protected destination',
+    fn: () => withTmpDir((dir) => {
+      const src = path.join(dir, 'pkg'); const dest = path.join(dir, 'dest');
+      fs.mkdirSync(src); fs.mkdirSync(dest);
+      fs.writeFileSync(path.join(src, 'a.js'), '// FRAMEWORK\n');
+      fs.writeFileSync(path.join(dest, 'a.js'), '// LIVE\n');
+      const opts = { dryRun: false, installState: {}, protectedFiles: [], force: true };
+      applyOperation({ kind: 'copyFiles', files: ['a.js'], to: 'scriptsDir' },
+        src, { scriptsDir: dest }, opts);
+      assert.strictEqual(fs.readFileSync(path.join(dest, 'a.js'), 'utf8'), '// FRAMEWORK\n');
+      assert.strictEqual(opts.protectedFiles.length, 0);
+    }),
+  },
+  {
+    name: 'guard: shim → canonical override still works WITH the guard active',
+    fn: () => withTmpDir((dir) => {
+      // REGRESSION: the first cut of the guard broke this. oversight ships a
+      // scripts/lib shim and shared overwrites it with the canonical IN THE SAME
+      // RUN; a guard that treats the second write as drift blocks the canonical
+      // and installs a broken lib. Recording each write as it happens is what
+      // makes the intra-run override legal.
+      const oversightSrc = path.join(dir, 'oversight'); const sharedSrc = path.join(dir, 'shared');
+      const dest = path.join(dir, 'dest');
+      fs.mkdirSync(path.join(oversightSrc, 'scripts', 'lib'), { recursive: true });
+      fs.mkdirSync(sharedSrc);
+      fs.writeFileSync(path.join(oversightSrc, 'scripts', 'lib', 'config.js'), '// SHIM\n');
+      fs.writeFileSync(path.join(sharedSrc, 'config.js'), '// CANONICAL\n');
+      const opts = { dryRun: false, installState: {}, protectedFiles: [] };  // ONE opts, as init.js does
+      applyOperation({ kind: 'copyDir', from: 'scripts', to: 'scriptsDir' },
+        oversightSrc, { scriptsDir: dest }, opts);
+      applyOperation({ kind: 'copyFiles', files: ['config.js'], to: 'scriptsDir/lib' },
+        sharedSrc, { scriptsDir: dest }, opts);
+      assert.strictEqual(fs.readFileSync(path.join(dest, 'lib', 'config.js'), 'utf8'),
+        '// CANONICAL\n', 'canonical must still win with the guard active');
+      assert.strictEqual(opts.protectedFiles.length, 0, 'intra-run override is not drift');
+    }),
+  },
+  {
+    name: 'guard: install state round-trips through save/load',
+    fn: () => withTmpDir((dir) => {
+      const f = path.join(dir, 'nested', 'state.json');
+      assert.strictEqual(saveInstallState(f, { '/a': 'deadbeef' }), true, 'creates parent dir');
+      assert.deepStrictEqual(loadInstallState(f), { '/a': 'deadbeef' });
+      assert.deepStrictEqual(loadInstallState(path.join(dir, 'missing.json')), {}, 'missing → {}');
+      fs.writeFileSync(path.join(dir, 'bad.json'), '{not json');
+      assert.deepStrictEqual(loadInstallState(path.join(dir, 'bad.json')), {}, 'corrupt → {} not throw');
     }),
   },
 ];
