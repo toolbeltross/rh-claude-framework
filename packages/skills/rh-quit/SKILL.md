@@ -141,6 +141,27 @@ When the user invokes `/rh-quit`:
 
 5. **Loose-ends sweep (REQUIRED before declaring "safe to close").** Git/PR commands only see *tracked* state — they cannot see edits in gitignored dirs, `~/.claude/`, or non-repo paths, nor the IDE's "Create PR" affordance. Declaring cleanup from `git status` / `gh pr list` / `git branch` alone is exactly how loose ends slip through (**oversight failure F-14**, 2026-06-14: a `/rh-quit`-adjacent "cleaned up" claim missed a gitignored `OVERSIGHT_SYSTEM.md` edit the IDE was surfacing as `rh-oversight-content +16 [Create PR]`). Run each check and report **resolved or explicitly left, with full paths**, as its own structured section:
    - **Tracked git state** — `git status --short` in every repo you committed to this session; `git log <upstream>..HEAD` for unpushed commits; `gh pr list --state open` for your unmerged PRs. **Any open PR you authored this session is resolved in step 6 — merely listing it here is NOT sufficient.**
+   - **Multi-repo uncommitted sweep — enumerate repos MECHANICALLY, including NESTED ones (added 2026-08-13).** "Every repo you committed to" is the wrong set twice over: background automation writes tracked files you never touched, and **a nested git repo is invisible to its parent's `git status`**. Both have bitten:
+     - `rh-daily-regen` regenerates tracked artifacts on every run and commits none of them — `ENVIRONMENT.md`, `GUIDANCE_CHANGES.md`, `supervisor-trends.md` were all found dirty, one of them 8 days stale. The drain never wrote them, so a "repos I committed to" sweep never looks.
+     - `oversight-system/` is a **separate repo nested inside** `claude-setup-ross/`. Its `OVERSIGHT_SYSTEM.md` sat uncommitted for **six days**, invisible to the parent's `git status` and to a four-repo sweep. That is **failure F-14 recurring on the same file** the rule was written for.
+     **Scope it to the SYSTEM repos — do not sweep the whole workspace.** Rooting the search at the workspace pulled in unrelated product repos (measured: 111 dirty files in one, 50 in another) and buried the three artifacts that mattered. Breadth here destroys the signal it exists to surface.
+     ```bash
+     # Roots = the repos the oversight/scribe system itself writes into:
+     #   ~/.claude, the oversight dir's containing tree (which is where the
+     #   NESTED oversight repo lives), plus any repo you committed to this session.
+     # --untracked-files=no: TRACKED edits only. Untracked scratch belongs to the
+     #   self-reported bullet below; sweeping it in reproduces the noise problem.
+     { echo "$HOME/.claude"
+       find "<oversight-dir>/.." -maxdepth 3 -name .git -not -path "*/node_modules/*" -print 2>/dev/null \
+         | sed 's|[/\\]\.git$||'
+       # add each repo you committed to this session, one per line
+     } | sort -u | while read -r r; do
+         [ -e "$r/.git" ] || continue
+         n=$(git -C "$r" status --porcelain --untracked-files=no | wc -l)
+         [ "$n" -gt 0 ] && { echo "== $n uncommitted (tracked) in $r"; git -C "$r" status --short --untracked-files=no; }
+       done
+     ```
+     **Do not substitute `git status` at the workspace root for this.** It cannot see into a nested repo, and when the workspace is not itself a repo (it isn't here) it reports nothing at all. Report each hit with its full path and a disposition — a generated artifact still needs a decision (commit it, or gitignore it), not silence.
    - **Branch deletion** — for each PR you merged with `--delete-branch`, confirm via `git ls-remote --heads origin` (the *server*, not the local `git branch -r` cache, which `git fetch` doesn't prune) that the branch is actually gone; a worktree-pinned local branch makes `--delete-branch` silently fail.
    - **Worktrees** — `git worktree list`; flag any worktree or `.git/worktrees/` admin folder you created.
    - **Out-of-git edits (SELF-REPORTED — not a filesystem scan):** for each directory OUTSIDE a tracked git checkout that *you wrote to this session* (gitignored dirs e.g. `oversight-system/`, `~/.claude/`, non-repo paths), list each file you wrote and state its disposition — **intentional disk-only** (say why it needs no PR) or **needs-commit** (open item). These never appear in `git status`.
