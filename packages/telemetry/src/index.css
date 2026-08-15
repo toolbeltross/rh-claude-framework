@@ -22,7 +22,9 @@
 }
 
 /* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; }
+/* height matters for HORIZONTAL scrollbars (the tab strip); width alone left
+   them at the OS default, which is several times taller than the thumb below. */
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--color-gray-900); }
 ::-webkit-scrollbar-thumb { background: var(--color-gray-700); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-gray-600); }

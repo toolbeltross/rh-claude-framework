@@ -526,6 +526,17 @@ export default function App() {
 
         return (
           <div className="flex items-end gap-1 px-2 mb-0">
+            {/* Session tabs scroll INSIDE this container rather than pushing the
+                page wide. At a 720px-class viewport (a high-DPI laptop at 200%
+                zoom) four live tabs plus the two controls measured 962px against
+                a 722px client width, so the whole document scrolled sideways and
+                the right-hand controls sat off-screen.
+
+                Only the tabs go in here. The "…" overflow button and the sessions
+                dropdown stay outside as siblings: both open absolutely-positioned
+                menus, and an ancestor with overflow-x would clip them. The tabs
+                themselves contain no absolute children, so clipping is safe. */}
+            <div className="flex items-end gap-1 min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
             {/* Live session tabs */}
             {sessionIds.map((id) => {
               const s = liveSessions[id];
@@ -588,8 +599,13 @@ export default function App() {
               );
             })()}
 
-            {/* Overflow menu — Overview + all file sessions */}
-            <div className="relative" ref={overflowRef}>
+            </div>{/* end scrollable tab strip */}
+
+            {/* Overflow menu — Overview + all file sessions.
+                shrink-0 so it keeps its width instead of being squeezed by the
+                scroll container's flex-1 — it is the only route to Overview and
+                Trends, so it must never be the thing that gets compressed. */}
+            <div className="relative shrink-0" ref={overflowRef}>
               <button
                 onClick={() => setShowOverflow(v => !v)}
                 title="More sessions & overview"
@@ -680,7 +696,7 @@ export default function App() {
             {/* Session count dropdown — far right of tab bar. ml-auto kicks in
                 when SessionMetaStrip is null (Overview tab). */}
             {stats && (
-              <div className="relative ml-auto self-center" ref={sessionListRef}>
+              <div className="relative ml-auto self-center shrink-0" ref={sessionListRef}>
                 <button
                   onClick={() => setShowSessionList(v => !v)}
                   className={`text-xs font-medium transition-colors cursor-pointer py-1 ${
