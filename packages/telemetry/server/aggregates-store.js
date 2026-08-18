@@ -173,6 +173,12 @@ async function parseTranscript(filePath, sessionId) {
   const agentMeta = new Map(); // agentId -> {agentType,status,prompt,...} from toolUseResult records
   let projectPath = null;
   let firstUserText = null;
+  // Context fill at the END of the session = the last API call's input side
+  // (input + cache read + cache write). This is NOT derivable from the `models`
+  // sums above, which are cumulative across every message and so run far higher
+  // than any single request's context. Same quantity hook-forwarder.js's
+  // parseTranscript() calls `lastContextUsed`; kept in sync deliberately.
+  let lastContextTokens = 0;
 
   for (const line of lines) {
     if (!line) continue;
@@ -233,6 +239,12 @@ async function parseTranscript(filePath, sessionId) {
           cur.cacheRead += usage.cache_read_input_tokens || 0;
           cur.cacheWrite += usage.cache_creation_input_tokens || 0;
           models.set(modelId, cur);
+          // Overwritten on every usage-bearing message; the loop runs in file
+          // order, so after it the value is the last call's context fill.
+          lastContextTokens =
+            (usage.input_tokens || 0) +
+            (usage.cache_read_input_tokens || 0) +
+            (usage.cache_creation_input_tokens || 0);
         }
       }
     }
@@ -255,6 +267,7 @@ async function parseTranscript(filePath, sessionId) {
     messageCount,
     toolCallCount,
     models, // Map<modelId, {input,output,cacheRead,cacheWrite}>
+    lastContextTokens,
     totalCost,
     agentMeta, // Map<agentId, {agentType,status,prompt,totalDurationMs,totalToolUseCount}>
     firstUserText,
@@ -501,6 +514,9 @@ export class AggregatesStore extends EventEmitter {
       totalCost: s.totalCost,
       models: serializeModels(s.models),
       primaryModel: primaryModelOf(s.models),
+      // Context fill at session end. Distinct from the cumulative token sums in
+      // `models` — consumers showing a context gauge must use this, not those.
+      lastContextTokens: s.lastContextTokens ?? 0,
     }));
     sessions.sort((a, b) => String(b.lastTs || '').localeCompare(String(a.lastTs || '')));
     return { sessions, total: sessions.length, lastComputedAt: this.lastComputedAt };

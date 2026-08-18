@@ -192,3 +192,26 @@ test('formatDuration: matches server/parser.js behavior', () => {
 });
 
 summary();
+
+// ─── contextTokens passthrough (end-of-session context fill) ──────────────
+
+test('adaptAggregateSessions: carries lastContextTokens through as contextTokens', () => {
+  const [s] = adaptAggregateSessions([{ ...SAMPLE, lastContextTokens: 383_000 }]);
+  assert.strictEqual(s.contextTokens, 383_000);
+});
+
+test('adaptAggregateSessions: missing lastContextTokens yields 0, not undefined', () => {
+  // 0 is falsy, which the gauge treats as "no measurement" and renders "?".
+  // undefined would silently become NaN downstream.
+  const [s] = adaptAggregateSessions([SAMPLE]);
+  assert.strictEqual(s.contextTokens, 0);
+});
+
+test('adaptAggregateSessions: contextTokens is independent of the cumulative sums', () => {
+  // The whole point: tokens.total runs to ~87M on this fixture while the real
+  // end-of-session context was 383K. Conflating them is the bug this prevents.
+  const [s] = adaptAggregateSessions([{ ...SAMPLE, lastContextTokens: 383_000 }]);
+  assert.ok(s.tokens.total > 80_000_000, 'fixture should have huge cumulative total');
+  assert.strictEqual(s.contextTokens, 383_000);
+  assert.ok(s.contextTokens < s.tokens.total / 100);
+});
