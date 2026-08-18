@@ -1,10 +1,20 @@
 import { useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useWebSocket } from './useWebSocket';
+import { adaptAggregates, adaptAggregateSessions } from '../lib/aggregate-adapters';
 
 const initialState = {
   currentSession: null,
   stats: null,
   sessions: [],
+  // Live transcript aggregates from /api/aggregates — the replacement for
+  // ~/.claude/stats-cache.json, which Claude Code no longer writes. Same field
+  // names as parser.js's parseStatsCache() output, so it drops straight into
+  // any consumer of `stats`. See src/lib/aggregate-adapters.js for the full
+  // measurement of what went missing.
+  aggregates: null,
+  // Parser-shaped session list derived from /api/sessions, used when
+  // .claude.json's per-project `last*` blocks are absent or zeroed.
+  aggregateSessions: [],
   toolEvents: [],
   liveSessions: {},
   planInfo: { planType: null, displayMode: 'cost', usage: null },
@@ -229,6 +239,10 @@ function reducer(state, action) {
       };
     case 'FAILURE_PATTERNS':
       return { ...state, failurePatterns: action.data };
+    case 'AGGREGATES':
+      return { ...state, aggregates: adaptAggregates(action.data) };
+    case 'AGGREGATE_SESSIONS':
+      return { ...state, aggregateSessions: adaptAggregateSessions(action.data) };
     case 'PLAN_INFO':
       return { ...state, planInfo: action.data };
     case 'STATUS_LINE_STATE':
@@ -253,6 +267,19 @@ export function useDashboardData() {
 
   // Derive WebSocket URL from current page location (works in dev via Vite proxy and in prod)
   const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+
+  // Throttled fetch of /api/sessions → parser-shaped rows for Recent Sessions.
+  // Declared before handleMessage, which calls it.
+  const lastSessionsFetchRef = useRef(0);
+  const refetchAggregateSessions = useCallback((force = false) => {
+    const now = Date.now();
+    if (!force && now - lastSessionsFetchRef.current < 15000) return;
+    lastSessionsFetchRef.current = now;
+    fetch('/api/sessions')
+      .then(r => r.json())
+      .then(data => dispatch({ type: 'AGGREGATE_SESSIONS', data: data?.sessions }))
+      .catch(() => {});
+  }, []);
 
   // Dispatch WebSocket messages directly via callback — avoids React state batching drops
   const handleMessage = useCallback((msg) => {
@@ -302,8 +329,18 @@ export function useDashboardData() {
       case 'forcedContinuation':
         dispatch({ type: 'FORCED_CONTINUATION', data: msg.data });
         break;
+      case 'aggregatesUpdated':
+        // Pushed by aggregates-store on every transcript reload. The frame
+        // carries the full aggregates payload, so `stats` needs no refetch.
+        dispatch({ type: 'AGGREGATES', data: msg.data });
+        // The per-session list is a separate endpoint. Refetch it here so the
+        // Recent Sessions table tracks new sessions, but throttle it — this
+        // frame fires on every transcript write, which is several times a
+        // minute with a few sessions live.
+        refetchAggregateSessions();
+        break;
     }
-  }, []);
+  }, [refetchAggregateSessions]);
 
   const { connected } = useWebSocket(wsUrl, handleMessage);
 
@@ -315,8 +352,16 @@ export function useDashboardData() {
         .then(r => r.json())
         .then(data => dispatch({ type: 'FAILURE_PATTERNS', data }))
         .catch(() => {});
+      // Seed the aggregator-backed Overview data. The WebSocket only pushes
+      // `aggregatesUpdated` when a transcript changes, so without this the
+      // Overview stays empty until the next write.
+      fetch('/api/aggregates')
+        .then(r => r.json())
+        .then(data => dispatch({ type: 'AGGREGATES', data }))
+        .catch(() => {});
+      refetchAggregateSessions(true);
     }
-  }, [connected]);
+  }, [connected, refetchAggregateSessions]);
 
   const selectSession = useCallback((id) => {
     dispatch({ type: 'SELECT_SESSION', id });
@@ -343,10 +388,34 @@ export function useDashboardData() {
     ? state.liveSessions[state.selectedSessionId] || null
     : null;
 
+  // Overview data resolution — parser first, aggregator as fallback.
+  //
+  // `stats` comes from ~/.claude/stats-cache.json, which current Claude Code
+  // no longer writes, so parseStatsCache() returns null and every summary card
+  // and both charts render empty. The aggregator computes the same fields from
+  // transcripts, so it stands in. Parser data still wins if it ever returns,
+  // keeping this strictly additive.
+  const effectiveStats = state.stats ?? state.aggregates;
+
+  // `sessions` comes from .claude.json's per-project `last*` blocks, which are
+  // now largely absent — and the surviving ones are zeroed, so a length check
+  // alone is not enough to tell working data from degraded data. Prefer the
+  // parser list only when it carries at least one session with real usage on
+  // it; otherwise fall back to the aggregator, which reads transcripts.
+  const parserSessionsUsable = state.sessions?.some(
+    (s) => (s.cost || 0) > 0 || (s.tokens?.total || 0) > 0
+  );
+  const effectiveSessions =
+    parserSessionsUsable || state.aggregateSessions.length === 0
+      ? state.sessions
+      : state.aggregateSessions;
+
   return {
     ...state,
     activeLiveSession,
     sessionIds,
     selectSession,
+    effectiveStats,
+    effectiveSessions,
   };
 }

@@ -154,7 +154,9 @@ export default function App() {
   const data = useDashboardData();
   const pip = usePictureInPicture();
   const session = data.currentSession;
-  const stats = data.stats;
+  // Resolved in useDashboardData: parser output when it has data, live
+  // transcript aggregates when it doesn't. See src/lib/aggregate-adapters.js.
+  const stats = data.effectiveStats;
   const live = data.activeLiveSession;
   const isLive = !!live;
   const { sessionIds, liveSessions, sessionCostTrack, sessionActivity, selectSession } = data;
@@ -707,7 +709,7 @@ export default function App() {
       {/* Tab Content */}
       <div className="mt-0">
         {activeTab === 'overview' ? (
-          <OverviewTab stats={stats} sessions={data.sessions} onSelectSession={handleFileSessionSelect} displayMode={data.planInfo?.displayMode || 'cost'} failurePatterns={data.failurePatterns} />
+          <OverviewTab stats={stats} sessions={data.effectiveSessions} onSelectSession={handleFileSessionSelect} displayMode={data.planInfo?.displayMode || 'cost'} failurePatterns={data.failurePatterns} />
         ) : activeTab === 'trends' ? (
           <TrendsTab />
         ) : (
