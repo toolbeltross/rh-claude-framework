@@ -79,7 +79,7 @@ function runSql(sql, timeoutMs = 15000) {
   // (readRows({})) exceeded it → ENOBUFS → ok:false, which silently emptied the
   // /scribe proposal overlay AND the triage dedup set (backlog appeared
   // undrained). 64 MiB floor so no runSql caller can silently overflow again.
-  // See claude-setup-ross/oversight-system/INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md
+  // See <user-setup>/oversight-system/INVESTIGATION-2026-07-26-scribe-proposal-surfacing.md
   const MAX_BUFFER = 64 * 1024 * 1024;
   const res = spawnSync(psql, [
     '-U', config.scribeDbUser, '-h', config.scribeDbHost, '-p', String(config.scribeDbPort),
