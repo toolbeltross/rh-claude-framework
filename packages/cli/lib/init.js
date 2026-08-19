@@ -358,6 +358,11 @@ function run(extraOpts = {}) {
   const agentsDir = path.join(CLAUDE_DIR, 'agents');
   const skillsDir = path.join(CLAUDE_DIR, 'skills');
   const rulesDir = path.join(workspace, '.claude', 'rules');
+  // Workspace slash-commands (/rh-decide, /rh-status, ...). Added 2026-08-18: these
+  // existed ONLY at <workspace>/.claude/commands with no repo and no backup anywhere,
+  // the same single-copy exposure as rh-worktree-limitations.md. Workspace-scoped like
+  // rulesDir, not user-scoped.
+  const commandsDir = path.join(workspace, '.claude', 'commands');
 
   console.log(`  Home:          ${HOME}`);
   console.log(`  Workspace:     ${workspace}`);
@@ -410,7 +415,7 @@ function run(extraOpts = {}) {
   // output so the shared/{config,file-lock}.js canonicals overwrite the
   // shims that oversight ships in scripts/lib/. Skills order is independent.
   const { applyManifest, loadInstallState, saveInstallState } = require('./manifest');
-  const installPaths = { scriptsDir, agentsDir, skillsDir, rulesDir };
+  const installPaths = { scriptsDir, agentsDir, skillsDir, rulesDir, commandsDir };
   const PACKAGE_INSTALL_ORDER = [OVERSIGHT_PKG, OUTPUT_PKG, SHARED_PKG, SKILLS_PKG];
 
   // Non-clobbering guard (F-10 generalised — see manifest.js). The state file

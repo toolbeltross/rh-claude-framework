@@ -1,8 +1,29 @@
 {
   "package": "@rh/oversight",
   "operations": [
-    { "kind": "copyDir", "from": "scripts", "to": "scriptsDir", "label": "oversight script files" },
-    { "kind": "copyDir", "from": "agents",  "to": "agentsDir",  "label": "agent files" },
-    { "kind": "copyDir", "from": "rules",   "to": "rulesDir",   "label": "rule files" }
+    {
+      "kind": "copyDir",
+      "from": "scripts",
+      "to": "scriptsDir",
+      "label": "oversight script files"
+    },
+    {
+      "kind": "copyDir",
+      "from": "agents",
+      "to": "agentsDir",
+      "label": "agent files"
+    },
+    {
+      "kind": "copyDir",
+      "from": "rules",
+      "to": "rulesDir",
+      "label": "rule files"
+    },
+    {
+      "kind": "copyDir",
+      "from": "commands",
+      "to": "commandsDir",
+      "label": "workspace command files"
+    }
   ]
 }
