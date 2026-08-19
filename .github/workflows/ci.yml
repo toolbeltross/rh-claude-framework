@@ -17,9 +17,17 @@ name: CI
 # counts against a main-branch run.
 #
 # Each package now gets its own step, so the failing step names the culprit, and
-# a summary table lands in the run summary. continue-on-error + an explicit gate
-# means one broken package no longer hides the state of the others in the report.
-# Job count is unchanged (4 legs), so this costs no extra runner minutes.
+# a summary table lands in the run summary. Job count is unchanged (4 legs), so
+# this costs no extra runner minutes.
+#
+# `if: always()` on each step -- NOT `continue-on-error: true`. Both let later
+# steps run after a failure, but continue-on-error REWRITES the failing step's
+# conclusion to "success" (the true result survives only in `outcome`, which the
+# gate reads). Measured on the first attempt at this change: cli genuinely failed,
+# the gate correctly caught it, and every per-package step still rendered GREEN in
+# the UI -- which defeated the point, since the visible step names were then the
+# one thing that did not identify the culprit. `if: always()` keeps each step's
+# real red status while still running the rest.
 
 on:
   push:
@@ -60,27 +68,27 @@ jobs:
       # Playwright browsers); `npm test` in that package is unit + integration.
       - name: Test — shared
         id: t_shared
-        continue-on-error: true
+        if: always()
         run: npm run test -w packages/shared --if-present
       - name: Test — oversight
         id: t_oversight
-        continue-on-error: true
+        if: always()
         run: npm run test -w packages/oversight --if-present
       - name: Test — output
         id: t_output
-        continue-on-error: true
+        if: always()
         run: npm run test -w packages/output --if-present
       - name: Test — skills
         id: t_skills
-        continue-on-error: true
+        if: always()
         run: npm run test -w packages/skills --if-present
       - name: Test — cli
         id: t_cli
-        continue-on-error: true
+        if: always()
         run: npm run test -w packages/cli --if-present
       - name: Test — telemetry
         id: t_telemetry
-        continue-on-error: true
+        if: always()
         run: npm run test -w packages/telemetry --if-present
 
       # Summarise every package's outcome, then fail the leg if any failed.
