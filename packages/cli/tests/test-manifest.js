@@ -212,6 +212,11 @@ const tests = [
         agentsDir:  path.join(dir, 'agents'),
         skillsDir:  path.join(dir, 'skills'),
         rulesDir:   path.join(dir, 'rules'),
+        // Added 2026-08-18 with the commandsDir install target. This map must
+        // carry EVERY key any sibling install.json resolves, or resolveTo throws
+        // 'unknown path key' — which is exactly how this test caught the new
+        // target before it shipped.
+        commandsDir: path.join(dir, 'commands'),
       };
       const packages = ['oversight', 'output', 'shared', 'skills'];
       for (const pkg of packages) {

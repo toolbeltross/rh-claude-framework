@@ -23,6 +23,7 @@ rh-claude-framework/
     │   ├── scripts/rh-scribe-staging-read.js # /rh-quit consumer for staged turns (P1-3)
     │   ├── agents/                 # rh-*.md agent definitions (copied to ~/.claude/agents/)
     │   ├── rules/                  # workspace rule files (copied to <workspace>/.claude/rules/)
+    │   ├── commands/               # workspace slash-commands (copied to <workspace>/.claude/commands/)
     │   ├── templates/journals.json # runtime journal config (NOT an install template)
     │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (207 tests)
     │
