@@ -4,6 +4,22 @@ name: CI
 # push and PR. This is the "CI regression test" the README refers to — it fails
 # the build if any hardcoded user path leaks into packages/ (via the cli suite's
 # test-no-identity-refs.js) or if any package's tests regress.
+#
+# WHY THE TESTS ARE SPLIT PER PACKAGE (2026-08-18)
+# ------------------------------------------------
+# This used to be a single `npm test` step (`npm run test --workspaces`). Every
+# package's tests did run, but a failure anywhere produced one red check named
+# only `test (node 20.x, ubuntu-latest)`. That is actively misleading: for weeks
+# `main` was red purely because of 5 identity refs in output/ and oversight/,
+# while telemetry passed 38/38 on all four matrix legs — and anyone opening a
+# telemetry PR saw a red check named `test` and reasonably read it as "my tests
+# failed". Confirming otherwise meant downloading raw logs and diffing failure
+# counts against a main-branch run.
+#
+# Each package now gets its own step, so the failing step names the culprit, and
+# a summary table lands in the run summary. continue-on-error + an explicit gate
+# means one broken package no longer hides the state of the others in the report.
+# Job count is unchanged (4 legs), so this costs no extra runner minutes.
 
 on:
   push:
@@ -37,11 +53,74 @@ jobs:
       # bundles (v1 + v2) — so this also validates the Vite build.
       - name: Install (also builds dashboard via prepare)
         run: npm ci
-      # Runs every workspace's tests: oversight + cli + output + telemetry
-      # (unit + integration). The telemetry browser tier is intentionally skipped
-      # (it needs a built dashboard + Playwright browsers).
-      - name: Test (all workspaces)
-        run: npm test
+
+      # One step per workspace. --if-present so packages without a test script
+      # (shared, skills) are skipped rather than failing the leg.
+      # The telemetry browser tier is intentionally not run here (it needs
+      # Playwright browsers); `npm test` in that package is unit + integration.
+      - name: Test — shared
+        id: t_shared
+        continue-on-error: true
+        run: npm run test -w packages/shared --if-present
+      - name: Test — oversight
+        id: t_oversight
+        continue-on-error: true
+        run: npm run test -w packages/oversight --if-present
+      - name: Test — output
+        id: t_output
+        continue-on-error: true
+        run: npm run test -w packages/output --if-present
+      - name: Test — skills
+        id: t_skills
+        continue-on-error: true
+        run: npm run test -w packages/skills --if-present
+      - name: Test — cli
+        id: t_cli
+        continue-on-error: true
+        run: npm run test -w packages/cli --if-present
+      - name: Test — telemetry
+        id: t_telemetry
+        continue-on-error: true
+        run: npm run test -w packages/telemetry --if-present
+
+      # Summarise every package's outcome, then fail the leg if any failed.
+      # The gate is what keeps this equivalent to the old `npm test` — the
+      # continue-on-error above only defers the failure, it never swallows it.
+      - name: Summarise + gate
+        if: always()
+        shell: bash
+        env:
+          R_SHARED: ${{ steps.t_shared.outcome }}
+          R_OVERSIGHT: ${{ steps.t_oversight.outcome }}
+          R_OUTPUT: ${{ steps.t_output.outcome }}
+          R_SKILLS: ${{ steps.t_skills.outcome }}
+          R_CLI: ${{ steps.t_cli.outcome }}
+          R_TELEMETRY: ${{ steps.t_telemetry.outcome }}
+        run: |
+          set -u
+          failed=""
+          {
+            echo "### Test results by package"
+            echo
+            echo "| package | result |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for pair in "shared:$R_SHARED" "oversight:$R_OVERSIGHT" "output:$R_OUTPUT" \
+                      "skills:$R_SKILLS" "cli:$R_CLI" "telemetry:$R_TELEMETRY"; do
+            pkg="${pair%%:*}"; res="${pair##*:}"
+            if [ "$res" = "success" ]; then icon=":white_check_mark:"
+            elif [ "$res" = "skipped" ]; then icon=":fast_forward:"
+            else icon=":x:"; failed="$failed $pkg"; fi
+            echo "| \`$pkg\` | $icon $res |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$failed" ]; then
+            echo "**Failing package(s):**$failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Failing packages::$failed"
+            echo "Failing package(s):$failed"
+            exit 1
+          fi
+          echo "All packages passed." >> "$GITHUB_STEP_SUMMARY"
 
   verify-install:
     name: verify install + self-test
