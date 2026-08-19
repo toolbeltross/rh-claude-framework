@@ -36,7 +36,8 @@ v2 ships in the same tarball as v1, gated by an env flag. v1 is untouched and re
 
 - **Backend**: Express + WebSocket + chokidar file watchers on port 7890
 - **Frontend**: React 19 + Vite + Tailwind CSS v4 + Recharts
-- **Data**: Reads `~/.claude.json` and `~/.claude/stats-cache.json` (no database)
+- **Data**: Primary source is this package's own transcript aggregator (`server/aggregates-store.js`, served at `/api/aggregates` and `/api/sessions`). It reads the session transcript JSONL directly. No database.
+  - **Do not build on `~/.claude/stats-cache.json` or `~/.claude.json`.** Both are Claude Code internals and both have stopped carrying what this dashboard needs. Measured on CC 2.1.216 (2026-08-15): `stats-cache.json` **does not exist at all**, and `~/.claude.json`'s per-project `last*` telemetry blocks were absent for 12 of 13 projects and zeroed in the 13th (`lastCost: 0`, `lastModelUsage: {}`). `server/parser.js` still reads both and is still wired up, so its output degrades silently to empty/zero rather than erroring — which is exactly how the v1 Overview surface came to render "no sessions" while every other surface was fine (PR #162).
 - **Real-time**: WebSocket broadcasts file changes and hook events to all connected clients
 - **Hooks**: Claude Code hooks POST tool events, prompts, agent activity, and live session status
 - **Validation**: PreToolUse hook catches wrong-tool usage (cat→Read, grep→Grep, echo>→Write) before execution (deterministic, no LLM cost)
@@ -46,9 +47,14 @@ v2 ships in the same tarball as v1, gated by an env flag. v1 is untouched and re
 ## Data Flow
 
 ```
-~/.claude.json ──┐
+transcript JSONL ──→ aggregates-store.js ──→ /api/aggregates, /api/sessions ──→ WebSocket
+                     (PRIMARY — always accurate)      (aggregatesUpdated frame)      → React
+
+~/.claude.json ──┐   LEGACY / usually EMPTY on current Claude Code — see the Data note above.
                  ├─→ chokidar (3s poll) → parser.js → store.js → broadcaster.js → WebSocket → React
-stats-cache.json─┘
+stats-cache.json─┘   stats-cache.json no longer exists; .claude.json last* blocks are absent/zeroed.
+                     Kept wired (ADDITIVE ONLY) and it wins when it HAS data, but the v1 Overview
+                     falls back to the aggregator when it does not — src/lib/aggregate-adapters.js.
 
 Claude Code hooks:
   PreToolUse:Bash ──→ tool-validator.js (deterministic) → BLOCK or ALLOW
@@ -81,7 +87,11 @@ bin/
 
 server/
   index.js          — Express server, routes, port 7890
-  parser.js         — Parses .claude.json & stats-cache.json into dashboard state
+  parser.js         — Parses .claude.json & stats-cache.json into dashboard state (LEGACY: both
+                      inputs are usually empty on current Claude Code — see the Data note above)
+  aggregates-store.js — PRIMARY data source. Rolls transcript JSONL into per-day/per-session/
+                      per-model aggregates + lastContextTokens. Backs /api/aggregates,
+                      /api/sessions, /api/subagents.
   store.js          — In-memory EventEmitter store (sessions, stats, toolEvents, liveSessions, prompts)
   broadcaster.js    — WebSocket server on /ws, broadcasts store events
   watchers.js       — chokidar file watchers (3s polling for Windows/OneDrive)
@@ -200,7 +210,9 @@ Legend shown in the header. Used in: AgentActivity (model pills, cost table), Mo
 {
   currentSession,     // Top session (highest cost)
   sessions: [],       // All project sessions sorted by cost desc
-  stats,              // Aggregated stats from stats-cache.json
+  stats,              // Aggregated stats from stats-cache.json — NULL on current Claude Code.
+                      // Consumers should read the hook's `effectiveStats` (parser first,
+                      // /api/aggregates as fallback), not this field directly.
   toolEvents: [],     // Last 200 tool events (from hooks)
   liveSessions: {},   // Map: sessionId → live status data (from hooks)
   sessionActivity: {},// Map: sessionId → 'processing' | 'idle' (event-driven)
@@ -235,7 +247,7 @@ Legend shown in the header. Used in: AgentActivity (model pills, cost table), Mo
 - **Overview tab**: Always visible. Shows aggregate stats, charts, and recent sessions table.
 - **Trends tab** (P3-2): Cross-session oversight-event aggregations from `rh-supervisor-sweep`. Day-range selector (1/7/14/30), summary cards with prior-window deltas, daily-cadence BarChart, event-type table, top missing oversight elements, top subagent-failure patterns, top sessions by event count. Component: `src/components/TrendsTab.jsx`. Data: `GET /api/trends?days=N` (`server/trends-router.js`) which wraps the oversight package's `rh-supervisor-sweep.js` aggregation via `createRequire` cross-package import.
 - **Live session tabs**: From Claude Code hooks. Green pulsing dot = processing (tool events flowing), blue solid dot = idle (turn ended). Pruned after 2 hours of no events.
-- **File session tabs** (gray dot): From `.claude.json` parser. Auto-populated on load. Also openable by clicking rows in the Recent Sessions table.
+- **File session tabs** (gray dot): From the `.claude.json` parser when it has data, otherwise adapted from `/api/sessions` (`src/lib/aggregate-adapters.js`, which reshapes aggregator rows into the exact parser session shape so `SessionTab` receives what it expects). Auto-populated on load. Also openable by clicking rows in the Recent Sessions table.
 
 The `'trends'` value is whitelisted in the App.jsx unknown-tab guard (line ~297) — without that whitelist, `setActiveTab('trends')` is auto-reset to `'overview'` on the next render.
 
@@ -403,6 +415,9 @@ Full color-usage rules, type scale, badge/dot/row conventions, and number/date f
 - **All environments**: User runs Claude in CLI, VS Code, Desktop, WSL, iOS, web, PowerShell, bash, coworker sessions.
 - **Real-time first**: Everything should update live via WebSocket. File-based data is fallback only.
 - **Legends & tooltips on everything**: Every dot, color, icon, label needs a tooltip.
+- **A row count is not a health check.** The degraded Overview rendered `Recent Sessions (1)` — present, non-empty, and completely wrong, because the one surviving `.claude.json` project was zeroed. A `length > 0` fallback would have preserved the bad data indefinitely. Test the *content* (real cost/tokens), not the presence of rows.
+- **Never turn an unknown into a value without checking the value means what the label says.** The context gauge read `448 / ?`. The obvious fix (the model-id table) would have made it divide a *cumulative* token sum by the window and render a confident `0%` — worse than the `?` it replaced, because nobody questions a number. Prefer `?` over a figure you cannot source.
+- **Prove a fix with a second, independent path — not more care on the first.** The aggregator computed one session at 34% of 1M; the statusLine path, sharing no code, independently reported 31%. That agreement is worth more than any amount of re-reading one implementation.
 
 ## Testing
 
@@ -446,7 +461,9 @@ Four-tier test harness. Plain Node `assert` scripts — no test framework, no ne
 
 ## Known Issues / TODO
 
-- Context window: **live** sessions (CLI `context`/`summary`) read the real reported window from the statusLine payload (`context_window.context_window_size` + `used_percentage`) as of PR #93 — a 1M Opus session shows `/1.0M`, not the default. **File-based** sessions (parser.js path) still default to 200K; 1M detected only via model display name containing "(1M context)". Deriving the file-based window from the model id is an open follow-up.
+- ~~Context window: file-based sessions default to 200K; deriving the window from the model id is an open follow-up.~~ **DONE — PR #163 (2026-08-18).** Live sessions still read the reported window from the statusLine payload (PR #93). File-based sessions now resolve it in `src/lib/context-limit.js`, matching on model **family** rather than family+generation — the old table was keyed on `claude-*-4` and silently returned `null` for every Claude 5 session. Two things to preserve if you touch it:
+  - **The 1M window is never inferred from a model id.** Measured: concurrent `claude-opus-5` sessions reported both 200K and 1M, so the id does not determine it. 1M is concluded only from an explicit `[1m]` / "1M context" marker, or from a context fill exceeding the base window (which proves a larger one).
+  - **The gauge needs `lastContextTokens`, not `tokens.input`.** `tokens.input` is the cumulative sum across every message; measured over 53 sessions it runs **118×–237×** the real end-of-session context. `aggregates-store.js` now records the last API call's `input + cacheRead + cacheWrite` and serves it on `/api/sessions`. Where no measurement exists the gauge shows `?` rather than a computed percentage — deliberately, since the alternative was a confident `0%`.
 - Build warning: bundle >500KB (Recharts is large) — could code-split
 - Supervisory agent Stop hook (Layer 3b): schema supported, not wired — parked pending cost/benefit review (see `scripts/supervisory-agent-prompt.md:50`)
 - Not yet published to npm — `npm publish` when ready
