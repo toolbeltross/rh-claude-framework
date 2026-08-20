@@ -47,10 +47,22 @@ export default function DailyActivity({ stats, displayMode = 'cost' }) {
         familyToIds.get(fam).push(id);
       })
     );
-    const families = [...familyToIds.keys()].map(name => ({
-      name,
-      ids: [...new Set(familyToIds.get(name))],
-    }));
+    // Drop families that contributed no tokens at all. Claude Code emits a
+    // `<synthetic>` model id for messages with no real API call behind them;
+    // measured across 23 days it is 0 input, 0 output, 0 cache and $0 cost on
+    // every single day, yet it still claimed a legend slot and one of the chart
+    // colours — implying a fourth model family had been used when none had.
+    //
+    // Filtered on the DATA (total === 0) rather than on the id string: a magic
+    // `<synthetic>` check would rot the moment the marker is renamed, and would
+    // also keep showing any OTHER all-zero family. This hides nothing real —
+    // a family with tokens on any day survives.
+    const familyTotal = (ids) => stats.dailyModelTokens.reduce(
+      (sum, d) => sum + ids.reduce((s, id) => s + (d.tokensByModel?.[id] || 0), 0), 0);
+
+    const families = [...familyToIds.keys()]
+      .map(name => ({ name, ids: [...new Set(familyToIds.get(name))] }))
+      .filter(({ ids }) => familyTotal(ids) > 0);
 
     const data = stats.dailyModelTokens.map(d => {
       const row = { date: d.date.slice(5) };
