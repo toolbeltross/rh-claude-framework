@@ -526,6 +526,19 @@ export default function App() {
 
         return (
           <div className="flex items-end gap-1 px-2 mb-0">
+            {/* Overview is a PERMANENT, VISIBLE tab. It used to be reachable only from
+                the unlabelled "..." overflow, which meant the primary aggregate view —
+                totals, charts, the full session table — was invisible unless you already
+                knew where to look. The package docs have always said "Overview tab:
+                Always visible"; the UI had drifted from that. Pinned OUTSIDE the scroll
+                container with shrink-0 so a crowd of session tabs can never push it off.
+                It remains in the overflow menu too — additive, nothing removed. */}
+            <div className="shrink-0">
+              <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>
+                <span title="Aggregate stats, activity charts and every session">Overview</span>
+              </TabButton>
+            </div>
+
             {/* Session tabs scroll INSIDE this container rather than pushing the
                 page wide. At a 720px-class viewport (a high-DPI laptop at 200%
                 zoom) four live tabs plus the two controls measured 962px against
