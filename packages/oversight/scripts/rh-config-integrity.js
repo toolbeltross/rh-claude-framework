@@ -33,6 +33,7 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const { config } = require('./lib/config');
+const framework = require('./lib/framework');
 
 const JSON_OUT = process.argv.includes('--json');
 const IS_WIN = process.platform === 'win32';
@@ -108,32 +109,12 @@ function collectScriptRefs(settingsRaw) {
   // CRITICAL). Resolve it against the framework checkout instead, and stay
   // silent when the framework is absent — matching the launcher's own fail-open,
   // since a missing optional checkout is not a config-integrity fault.
-  // NOTE: the candidate chain below intentionally mirrors rh-fw.js and
-  // rh-daily-validate.js. Keep the three in step if the layout changes.
-  const frameworkScriptsDir = () => {
-    const rel = path.join('toolbeltross', 'toolbeltross-public', 'rh-claude-framework',
-      'packages', 'telemetry', 'scripts');
-    // An explicit override wins outright — it must NOT silently fall through to a
-    // different checkout, or the probe would report on a framework the launcher
-    // isn't using. Same precedence as rh-fw.js.
-    if (process.env.RH_FRAMEWORK_ROOT) {
-      const d = path.join(process.env.RH_FRAMEWORK_ROOT, 'packages', 'telemetry', 'scripts');
-      return fs.existsSync(d) ? d : null;
-    }
-    const roots = [];
-    try {
-      const cfg = JSON.parse(fs.readFileSync(path.join(config.claudeDir, 'oversight.json'), 'utf8'));
-      if (cfg && cfg.workspace) roots.push(cfg.workspace);
-    } catch { /* empty/absent oversight.json — fall through to env roots */ }
-    if (process.env.USERPROFILE) roots.push(path.join(process.env.USERPROFILE, 'Workspace'));
-    if (process.env.OneDrive) roots.push(path.join(process.env.OneDrive, 'Workspace'));
-    if (process.env.USERPROFILE) roots.push(path.join(process.env.USERPROFILE, 'OneDrive', 'Workspace'));
-    for (const r of roots) {
-      const d = path.join(r, rel);
-      if (fs.existsSync(d)) return d;
-    }
-    return null;
-  };
+  // The candidate chain lives in @rh/shared/framework.js, which rh-fw.js and
+  // rh-daily-validate.js also import — the three used to carry three copies of
+  // it under a comment asking humans to keep them in step. RH_FRAMEWORK_ROOT
+  // still wins outright there: a probe must NOT silently fall through to a
+  // different checkout than the launcher is using.
+  const frameworkScriptsDir = () => framework.frameworkScriptsDir('telemetry');
 
   const fromCommand = (cmd) => {
     if (typeof cmd !== 'string') return;

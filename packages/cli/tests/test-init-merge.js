@@ -279,6 +279,42 @@ const tests = [
     },
   },
 
+  // ─── buildConfigData: frameworkRoot fast path ───
+  // Added 2026-08-19 with @rh/shared/framework.js. The installer is the one
+  // process that knows the checkout location authoritatively (it runs FROM it),
+  // so it records it for the resolver that rh-fw.js consults on every hook
+  // invocation. It is a cache, not a source of truth — the resolver
+  // existsSync-guards it and falls through to the F-19 candidate chain when
+  // stale, which is what keeps this from being the install-time path capture
+  // F-19 root cause (a) warns about.
+  {
+    name: 'buildConfigData includes frameworkRoot only when provided',
+    fn: () => {
+      const without = buildConfigData({ workspace: '/w', oversightDir: '/o' });
+      assert.ok(!('frameworkRoot' in without), 'frameworkRoot omitted when not provided');
+      const withRoot = buildConfigData({
+        workspace: '/w',
+        oversightDir: '/o',
+        frameworkRoot: '/checkout/rh-framework',
+      });
+      assert.strictEqual(withRoot.frameworkRoot, '/checkout/rh-framework');
+    },
+  },
+  {
+    name: 'mergeConfigData: frameworkRoot is re-keyed on re-run, not merge-preserved',
+    fn: () => {
+      // Unlike workspace/oversightDir, this is not a user preference: it is a
+      // fact about where the installer lives. A re-run after a move must
+      // overwrite a stale value rather than preserve it.
+      const detected = buildConfigData({
+        workspace: '/w', oversightDir: '/o', frameworkRoot: '/new/location',
+      });
+      const existing = { frameworkRoot: '/old/moved-away', workspace: '/w' };
+      const merged = mergeConfigData(detected, existing, { frameworkRoot: '/new/location' });
+      assert.strictEqual(merged.frameworkRoot, '/new/location');
+    },
+  },
+
   // ─── mergeConfigData: init must not clobber a hand-tuned oversight.json ───
   // Added 2026-06-11 (OI-31). Incident: a no-flag init re-run reduced
   // oversight.json to near-empty; with workspace/oversightDir gone, the

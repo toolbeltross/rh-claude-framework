@@ -72,25 +72,22 @@ function claimToday() {
   }
 }
 
-// Resolve the framework CLI. Prefer oversight.json's workspace; fall back to
-// $USERPROFILE\Workspace (the post-2026-07-27 non-synced root), then the legacy
-// $OneDrive\Workspace / $USERPROFILE\OneDrive\Workspace, so an empty/partial
-// oversight.json (observed 2026-06-06 — init wrote {}) doesn't break the gate.
+// Resolve the framework CLI through the shared candidate chain (@rh/shared/
+// framework.js), which rh-fw.js and rh-config-integrity.js also import: prefer
+// oversight.json's workspace, then the post-2026-07-27 non-synced root, then the
+// legacy cloud-sync roots, so an empty/partial oversight.json (observed
+// 2026-06-06 — init wrote {}) doesn't break the gate. The CLI entry point is
+// itself the validity probe, so a checkout that lacks it is correctly skipped.
 function cliPath() {
-  const candidates = [];
+  let framework;
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(CLAUDE, "oversight.json"), "utf8"));
-    if (cfg && cfg.workspace) candidates.push(cfg.workspace);
-  } catch {}
-  if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "Workspace"));
-  if (process.env.OneDrive) candidates.push(path.join(process.env.OneDrive, "Workspace"));
-  if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "OneDrive", "Workspace"));
-  for (const ws of candidates) {
-    const p = path.join(ws, "toolbeltross", "toolbeltross-public",
-      "rh-claude-framework", "packages", "cli", "bin", "rh-oversight.js");
-    if (fs.existsSync(p)) return p;
+    framework = require("./lib/framework");
+  } catch {
+    return null;                          // resolver absent — treat as no CLI
   }
-  return null;
+  return framework.resolveFrameworkPath(
+    path.join("packages", "cli", "bin", "rh-oversight.js")
+  );
 }
 
 // Run a node CLI subcommand; return {exit, ok}. exit captured even on non-zero.

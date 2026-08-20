@@ -37,37 +37,25 @@ const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
-const CLAUDE = path.join(
-  process.env.USERPROFILE || process.env.HOME || "",
-  ".claude"
-);
-
-const REL = path.join(
-  "toolbeltross", "toolbeltross-public", "rh-claude-framework",
-  "packages", "telemetry", "scripts"
-);
-
-// Ordered workspace candidates, mirroring the chain rh-daily-validate.js already
-// proves out: oversight.json first (authoritative + re-keyed on migration), then
-// the post-2026-07-27 non-synced root, then the legacy OneDrive roots so a
-// partial/empty oversight.json doesn't strand the hooks.
+// The ordered candidate chain lives in @rh/shared/framework.js, which
+// rh-daily-validate.js and rh-config-integrity.js also import: oversight.json
+// first (authoritative + re-keyed on migration), then the post-2026-07-27
+// non-synced root, then the legacy cloud-sync roots so a partial/empty
+// oversight.json doesn't strand the hooks. It carries no machine-specific
+// literals and requires nothing but node builtins — this launcher runs once per
+// hook invocation, so the resolver must not pull in config.js's directory walks.
+//
+// The require is guarded for the same reason resolution failure is: a hook must
+// never throw because an optional piece of the install is missing. Installed
+// layout is ~/.claude/scripts/rh-fw.js + ~/.claude/scripts/lib/framework.js.
 function scriptsDir() {
-  if (process.env.RH_FRAMEWORK_ROOT) {
-    return path.join(process.env.RH_FRAMEWORK_ROOT, "packages", "telemetry", "scripts");
-  }
-  const candidates = [];
+  let framework;
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(CLAUDE, "oversight.json"), "utf8"));
-    if (cfg && cfg.workspace) candidates.push(cfg.workspace);
-  } catch {}
-  if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "Workspace"));
-  if (process.env.OneDrive) candidates.push(path.join(process.env.OneDrive, "Workspace"));
-  if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "OneDrive", "Workspace"));
-  for (const ws of candidates) {
-    const dir = path.join(ws, REL);
-    if (fs.existsSync(dir)) return dir;
+    framework = require("./lib/framework");
+  } catch {
+    return null;                          // resolver absent — fail open
   }
-  return null;
+  return framework.frameworkScriptsDir("telemetry");
 }
 
 const name = process.argv[2];

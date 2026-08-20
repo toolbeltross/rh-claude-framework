@@ -75,15 +75,16 @@ rh-claude-framework/
 - **CJS only** — `require()` / `module.exports`. Matches the installed scripts target environment. Telemetry is the single ESM exception (uses dynamic import / subprocess to bridge).
 - **`rh-` prefix** on every framework artifact — distinguishes framework-installed files from user's local edits.
 - **Config priority** — env var > `~/.claude/oversight.json` > auto-detect from CWD.
-- **Source-tree shims** — `packages/oversight/scripts/lib/{config,file-lock}.js` re-export from `@rh/shared`. The installer overwrites these with the canonical files at install time, so post-install `~/.claude/scripts/lib/` has self-contained modules with no relative `../../../shared/` dependency.
+- **Source-tree shims** — `packages/{oversight,output}/scripts/lib/{config,file-lock,framework}.js` re-export from `@rh/shared`. The installer overwrites these with the canonical files at install time, so post-install `~/.claude/scripts/lib/` has self-contained modules with no relative `../../../shared/` dependency.
+- **Framework-root resolution is shared, not copied** — `@rh/shared/framework.js` owns the ordered, `existsSync`-guarded chain that finds the checkout at runtime (`RH_FRAMEWORK_ROOT` → `oversight.json` `frameworkRoot` → workspace roots × `frameworkRelPaths` → self-location → bounded discovery). `rh-fw.js`, `rh-daily-validate.js` and `rh-config-integrity.js` all import it; they previously kept three private copies under a comment asking humans to keep them in step. It depends on nothing but node builtins **by design** — `rh-fw.js` runs once per hook invocation, so it must not pull in `config.js`'s directory walks.
 
 ## How to test changes
 
 | Surface | Command |
 |---|---|
-| Oversight tests | `node packages/oversight/tests/run.js` (207 tests) |
-| CLI tests | `node packages/cli/tests/run.js` (83 tests) |
-| Output tests | `node packages/output/tests/run.js` (205 tests) |
+| Oversight tests | `node packages/oversight/tests/run.js` (228 tests) |
+| CLI tests | `node packages/cli/tests/run.js` (92 tests) |
+| Output tests | `node packages/output/tests/run.js` (242 tests) |
 | All workspace tests | `npm test` |
 | Dry-run install | `node packages/cli/bin/rh-oversight.js init --dry-run` |
 | Real install against tmp HOME | `HOME=/tmp/test USERPROFILE=/tmp/test node packages/cli/bin/rh-oversight.js init --workspace /tmp/test-ws` |

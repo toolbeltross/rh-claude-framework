@@ -291,7 +291,7 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
  * ~/.claude/oversight/...) so the supervisory log co-locates with the rest of
  * the oversight artifacts regardless of where oversightDir resolves.
  */
-function buildConfigData({ workspace, oversightDir, privateDirs }) {
+function buildConfigData({ workspace, oversightDir, privateDirs, frameworkRoot }) {
   const data = {
     workspace,
     oversightDir,
@@ -300,6 +300,15 @@ function buildConfigData({ workspace, oversightDir, privateDirs }) {
     userName: process.env.USER || process.env.USERNAME || path.basename(HOME),
   };
   if (privateDirs) data.privateDirs = privateDirs;
+  // frameworkRoot is the fast path for @rh/shared/framework.js, which resolves
+  // the checkout for rh-fw.js (per hook invocation), rh-daily-validate.js and
+  // rh-config-integrity.js. The installer is the one process that knows this
+  // authoritatively — it is running FROM the checkout. It is a cache, not a
+  // source of truth: the resolver existsSync-guards it and falls through to its
+  // candidate chain when stale, so a relocation degrades to the F-19 chain
+  // rather than breaking. Written into the explicit bucket below so a re-run
+  // after a move re-keys it instead of preserving a dead path.
+  if (frameworkRoot) data.frameworkRoot = frameworkRoot;
   return data;
 }
 
@@ -376,10 +385,14 @@ function run(extraOpts = {}) {
   // survives re-runs of init — previously it was dropped, leaving the runtime
   // to fall back to the hardcoded ~/.claude/oversight/supervisory-log.md
   // default even on machines where oversightDir was correctly redirected.
+  // The checkout this installer is running from — PACKAGES_ROOT is <framework>/packages.
+  const frameworkRoot = path.join(PACKAGES_ROOT, '..');
+
   const configData = buildConfigData({
     workspace,
     oversightDir,
     privateDirs: opts.privateDirs,
+    frameworkRoot,
   });
 
   const configPath = path.join(CLAUDE_DIR, 'oversight.json');
@@ -392,6 +405,9 @@ function run(extraOpts = {}) {
       workspace: opts.workspace ? workspace : undefined,
       oversightDir: oversightDirChosen ? oversightDir : undefined,
       privateDirs: opts.privateDirs,
+      // Not a user preference to merge-preserve: it is a fact about where this
+      // installer lives, so a re-run after a move must overwrite a stale value.
+      frameworkRoot,
     });
     if (opts.dryRun) console.log(`  [dry-run] would write ${configPath}`);
     else {
