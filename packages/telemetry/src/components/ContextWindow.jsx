@@ -64,8 +64,20 @@ export default function ContextWindow({ session, liveSession }) {
     const lastCompact = liveSession?._lastCompactAt;
     const compactAgo = lastCompact ? Math.round((Date.now() - lastCompact) / 1000) : null;
 
+    // Standard panel chrome (border border-gray-800), matching the other 31 panels and
+    // this component's own two other branches (~line 35 and ~169). This branch used to be
+    // `border-2 border-green/40` — the only 2px green outline in the app. Two problems:
+    // it read as a different visual system from every neighbouring panel, and 2px vs 1px
+    // grows the border box a pixel on each side, so it stopped bottom-aligning with the
+    // MODELS panel beside it. "Live" is still signalled, via the documented left-edge
+    // accent (STYLEGUIDE: inset 3px 0 0 <colour>) plus the pulsing tab dot and the header
+    // LIVE count.
     return (
-      <div className="bg-gray-900 border-2 border-green/40 rounded-lg px-4 py-2 h-full flex flex-col justify-center">
+      <div
+        className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-2 h-full flex flex-col justify-center"
+        style={{ boxShadow: 'inset 3px 0 0 var(--color-green)' }}
+        title="Live session — context is updating in real time"
+      >
         {/* Row 1: Label + gauge bar + fill stats */}
         <div className="flex items-center gap-4" title="Percentage of the model's context window currently used">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 shrink-0 inline-flex items-center gap-1.5">Context <InfoIcon>
