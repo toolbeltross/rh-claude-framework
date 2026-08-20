@@ -279,6 +279,40 @@ const tests = [
     },
   },
 
+  // ─── buildConfigData: frameworkRoot, the direct-hit entry in the resolution chain ───
+  // Added 2026-08-20. PR #173 taught rh-fw.js / rh-daily-validate.js /
+  // rh-config-integrity.js to READ oversight.json:frameworkRoot as the
+  // highest-priority non-env candidate, but nothing WROTE it — so on every
+  // machine that entry was dead and resolution always fell through to the
+  // bounded marker scan (7.6-9.3ms vs 0.3ms, per hook invocation).
+  {
+    name: 'buildConfigData includes frameworkRoot only when provided',
+    fn: () => {
+      const without = buildConfigData({ workspace: '/w', oversightDir: '/o' });
+      assert.ok(!('frameworkRoot' in without), 'frameworkRoot omitted when not provided');
+      const withRoot = buildConfigData({
+        workspace: '/w',
+        oversightDir: '/o',
+        frameworkRoot: '/checkout/rh-framework',
+      });
+      assert.strictEqual(withRoot.frameworkRoot, '/checkout/rh-framework');
+    },
+  },
+  {
+    name: 'mergeConfigData: frameworkRoot is re-keyed on re-run, not merge-preserved',
+    fn: () => {
+      // Unlike workspace/oversightDir this is not a user preference but a fact
+      // about where the installer lives, so a re-run after a move must
+      // overwrite a stale value rather than preserve a dead path.
+      const detected = buildConfigData({
+        workspace: '/w', oversightDir: '/o', frameworkRoot: '/new/location',
+      });
+      const existing = { frameworkRoot: '/old/moved-away', workspace: '/w' };
+      const merged = mergeConfigData(detected, existing, { frameworkRoot: '/new/location' });
+      assert.strictEqual(merged.frameworkRoot, '/new/location');
+    },
+  },
+
   // ─── mergeConfigData: init must not clobber a hand-tuned oversight.json ───
   // Added 2026-06-11 (OI-31). Incident: a no-flag init re-run reduced
   // oversight.json to near-empty; with workspace/oversightDir gone, the
