@@ -41,15 +41,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # WHY A MATRIX-BUILDING JOB (2026-08-20)
+  # -------------------------------------
+  # Actions is free on public repos and BILLED on private ones, with Windows
+  # runners charged at 2x the Linux rate. Measured on this repo before the change:
+  # verify-install 21s + ubuntu 1m20 + 1m22 + windows 2m12 + 2m20, which is roughly
+  # 17 billable minutes per run once per-job rounding and the 2x multiplier are
+  # applied. At the observed ~15 runs/day that is ~250 min/day - enough to exhaust a
+  # typical monthly allowance in 8-12 days.
+  #
+  # Windows is where this repo's real platform risk lives (path handling, PowerShell
+  # quoting, MSYS argument mangling), so it is kept rather than dropped - but it only
+  # needs to gate what LANDS. Ubuntu runs on every PR; Windows runs on pushes to main.
+  #
+  # Done by computing the matrix rather than duplicating the job, because Actions does
+  # not support YAML anchors and the per-package step body below is long enough that
+  # two copies would drift. Costs one ~5s ubuntu job; saves ~12 billable min per PR.
+  matrix:
+    name: choose matrix
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - id: pick
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo 'os=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
+            echo "push to a protected branch - full matrix incl. Windows"
+          else
+            echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+            echo "pull_request - Ubuntu only; Windows runs when this lands on main"
+          fi
+
   test:
     name: test (node ${{ matrix.node }}, ${{ matrix.os }})
+    needs: matrix
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # Node 20/22 across both OSes. The dashboard build (Vite 6 + Tailwind v4)
-        # is validated on 20+; engines declares >=18 but the build toolchain wants 20+.
-        os: [ubuntu-latest, windows-latest]
+        # OS list is event-dependent - see the `matrix` job above.
+        # Node 20/22 both run everywhere the OS runs. The dashboard build (Vite 6 +
+        # Tailwind v4) is validated on 20+; engines declares >=18 but the build
+        # toolchain wants 20+.
+        os: ${{ fromJSON(needs.matrix.outputs.os) }}
         node: ['20.x', '22.x']
     steps:
       - uses: actions/checkout@v4
