@@ -262,6 +262,21 @@ Event-driven (not timer-based):
 
 ## Supervisory Agent
 
+> **`npm run setup-hooks` INSTALLS THE ENFORCEMENT LAYERS, not just the telemetry hooks.**
+> It wires the Layer-1 Bash validator (`PreToolUse:Bash`) and the Layer-3a Stop review described
+> below into `~/.claude/settings.json`. That is the intended behaviour, but it is worth stating
+> plainly because it is silent: there is no prompt and no summary of what enforcement got turned on.
+>
+> If an environment deliberately runs telemetry WITHOUT enforcement — a clean baseline for
+> evaluating other tooling, a machine where a supervisory review would skew what is being measured,
+> or anywhere the per-turn cost of Layer 3a is not wanted — then running this script re-enables the
+> exact thing that was removed, with no error and no warning. Install the telemetry hooks only, or
+> re-check `settings.json` afterwards for `PreToolUse` and any `type: "prompt"` Stop entry.
+>
+> Editing the Layer-3a prompt text in `scripts/setup-hooks.js` does **not** by itself change any
+> machine. The script has to be run for that to happen — which is the gap: a code change looks inert
+> right up until someone runs the installer.
+
 **Layer 1 — Deterministic** (`scripts/tool-validator.js`, PreToolUse:Bash command hook):
 - Blocks: `cat`→Read, `head`/`tail`→Read, `grep`/`rg`→Grep, `find`→Glob, `sed`→Edit, `awk`→Edit, `echo`/`printf` with `>`→Write
 - Allows: git, npm, node, docker, and all legitimate bash commands
