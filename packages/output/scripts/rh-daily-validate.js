@@ -31,6 +31,41 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+// Locate a framework checkout under candidate workspace roots WITHOUT hardcoding
+// any one maintainer's org/repo nesting. Tries every root directly first (cheap),
+// then scans a bounded number of directories (<=3 levels, skipping dot-dirs and
+// node_modules) for one containing MARKER. Replaces a fixed <org>/<wrapper>/<repo>
+// segment that only ever resolved on one machine and was flagged by
+// packages/cli/tests/test-no-identity-refs.js.
+function findMarkerUnder(roots, MARKER, budget) {
+  budget = budget || 400;
+  for (const root of roots) {
+    const direct = path.join(root, MARKER);
+    if (fs.existsSync(direct)) return direct;
+  }
+  for (const root of roots) {
+    let frontier = [root];
+    for (let depth = 0; depth < 3 && frontier.length; depth++) {
+      const next = [];
+      for (const dir of frontier) {
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          if (e.name === "node_modules" || e.name.charAt(0) === ".") continue;
+          if (--budget < 0) return null;
+          const child = path.join(dir, e.name);
+          const hit = path.join(child, MARKER);
+          if (fs.existsSync(hit)) return hit;
+          next.push(child);
+        }
+      }
+      frontier = next;
+    }
+  }
+  return null;
+}
+
 const { execSync } = require("child_process");
 
 const CLAUDE = path.join(os.homedir(), ".claude");
@@ -77,20 +112,29 @@ function claimToday() {
 // $OneDrive\Workspace / $USERPROFILE\OneDrive\Workspace, so an empty/partial
 // oversight.json (observed 2026-06-06 — init wrote {}) doesn't break the gate.
 function cliPath() {
+  // Marker identifying a framework checkout by its CLI entry point, independent of
+  // where the checkout sits. Note this differs from rh-fw.js's marker: that one
+  // wants packages/telemetry/scripts, this wants the oversight CLI.
+  const MARKER = path.join("packages", "cli", "bin", "rh-oversight.js");
+  if (process.env.RH_FRAMEWORK_ROOT) {
+    const d = path.join(process.env.RH_FRAMEWORK_ROOT, MARKER);
+    return fs.existsSync(d) ? d : null;
+  }
   const candidates = [];
+  // Parity with rh-config-integrity.js, which resolves this via @rh/shared/config.
+  // These two are copied to ~/.claude/scripts and must stay dependency-free, so the
+  // env var is read directly rather than importing the shared resolver.
+  if (process.env.CLAUDE_WORKSPACE) candidates.push(process.env.CLAUDE_WORKSPACE);
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(CLAUDE, "oversight.json"), "utf8"));
+    if (cfg && cfg.frameworkRoot) candidates.push(cfg.frameworkRoot);
     if (cfg && cfg.workspace) candidates.push(cfg.workspace);
   } catch {}
   if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "Workspace"));
-  if (process.env.OneDrive) candidates.push(path.join(process.env.OneDrive, "Workspace"));
-  if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "OneDrive", "Workspace"));
-  for (const ws of candidates) {
-    const p = path.join(ws, "toolbeltross", "toolbeltross-public",
-      "rh-claude-framework", "packages", "cli", "bin", "rh-oversight.js");
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
+  const home = process.env.USERPROFILE || process.env.HOME;
+  const oneDriveBase = process.env.OneDrive || (home ? path.join(home, "OneDrive") : null);
+  if (oneDriveBase) candidates.push(path.join(oneDriveBase, "Workspace"));
+  return findMarkerUnder(candidates, MARKER);
 }
 
 // Run a node CLI subcommand; return {exit, ok}. exit captured even on non-zero.

@@ -43,7 +43,7 @@ function seedClean(t) {
   return ref;
 }
 
-function run(t, args = []) {
+function run(t, args = [], extraEnv = {}) {
   const r = spawnSync('node', [SCRIPT, ...args], {
     encoding: 'utf8', timeout: 40000, windowsHide: true,
     env: {
@@ -52,10 +52,36 @@ function run(t, args = []) {
       CLAUDE_DIR: t.claudeDir,
       CLAUDE_WORKSPACE: t.workspace,
       OVERSIGHT_DIR: t.oversightDir,
+      // Neutralised so the host machine's real values cannot leak into a fixture
+      // and make a test pass (or fail) for reasons the fixture does not control.
+      OneDrive: '', RH_FRAMEWORK_ROOT: '',
+      ...extraEnv,
     },
   });
   return { exitCode: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
+
+// Seed settings.json with a LAUNCHER-ROUTED hook: rh-fw.js is named by absolute
+// path and the framework script is passed as a bare NAME argument. Resolving that
+// name requires locating the framework checkout, which is the behaviour under test.
+// `nesting` is deliberately NOT the maintainer's org layout — that is the point.
+function seedLauncherHook(t, { nesting = ['acme', 'inner', 'fw-checkout'], withForwarder = true } = {}) {
+  const launcher = path.join(t.scriptsDir, 'rh-fw.js').split(path.sep).join('/');
+  fs.writeFileSync(launcher, '// launcher');
+  const settings = {
+    hooks: { PostToolUse: [{ matcher: '*', hooks: [
+      { type: 'command', command: `node "${launcher}" hook-forwarder.js tool` },
+    ] }] },
+  };
+  fs.writeFileSync(path.join(t.claudeDir, 'settings.json'), JSON.stringify(settings, null, 2));
+  fs.writeFileSync(path.join(t.rulesDir, 'rh-example.md'), '# rulebody');
+  const scripts = path.join(t.workspace, ...nesting, 'packages', 'telemetry', 'scripts');
+  fs.mkdirSync(scripts, { recursive: true });
+  if (withForwarder) fs.writeFileSync(path.join(scripts, 'hook-forwarder.js'), '// fwd');
+  return { scripts, frameworkRoot: path.join(t.workspace, ...nesting) };
+}
+
+const lvlOf = (r, name) => JSON.parse(r.stdout).probes.find(p => p.name === name).level;
 
 function withTmp(fn) {
   const t = mkTmp();
@@ -208,6 +234,76 @@ const tests = [
         fs.rmSync(base, { recursive: true, force: true });
       }
     },
+  },
+  // ---- frameworkScriptsDir: the candidate chain, previously UNPINNED ----------
+  // Before these, nothing exercised frameworkScriptsDir/RH_FRAMEWORK_ROOT, so the
+  // chain could be changed freely without any test noticing — which is why issue
+  // #165 claimed a fix could only be verified on the machine that runs oversight.
+  {
+    // THE REGRESSION TEST for #165. The old code required the maintainer's exact
+    // <org>/<wrapper>/<repo> nesting, so on any other layout the checkout was never
+    // found and the probe stayed silent. Silence is indistinguishable from health,
+    // so the discriminating fixture is a checkout that IS found but is MISSING the
+    // referenced script: only a resolver that actually located it can report crit.
+    name: 'frameworkScriptsDir: resolves a NON-maintainer nesting (crit proves it was found)',
+    fn: () => withTmp((t) => {
+      seedLauncherHook(t, { nesting: ['acme', 'inner', 'fw-checkout'], withForwarder: false });
+      const r = run(t, ['--json']);
+      assert.strictEqual(lvlOf(r, 'hook-references'), 'crit',
+        'expected crit: the checkout exists under a non-maintainer nesting and hook-forwarder.js is absent');
+    }),
+  },
+  {
+    name: 'frameworkScriptsDir: non-maintainer nesting WITH the script present → ok',
+    fn: () => withTmp((t) => {
+      seedLauncherHook(t, { nesting: ['acme', 'inner', 'fw-checkout'], withForwarder: true });
+      assert.strictEqual(lvlOf(run(t, ['--json']), 'hook-references'), 'ok');
+    }),
+  },
+  {
+    name: 'frameworkScriptsDir: no framework anywhere → fail-open (not crit)',
+    fn: () => withTmp((t) => {
+      const launcher = path.join(t.scriptsDir, 'rh-fw.js').split(path.sep).join('/');
+      fs.writeFileSync(launcher, '// launcher');
+      fs.writeFileSync(path.join(t.claudeDir, 'settings.json'), JSON.stringify({
+        hooks: { PostToolUse: [{ matcher: '*', hooks: [
+          { type: 'command', command: `node "${launcher}" hook-forwarder.js tool` }] }] },
+      }, null, 2));
+      fs.writeFileSync(path.join(t.rulesDir, 'rh-example.md'), '# rule');
+      assert.strictEqual(lvlOf(run(t, ['--json']), 'hook-references'), 'ok',
+        'a missing optional checkout is not a config-integrity fault');
+    }),
+  },
+  {
+    // The override must WIN OUTRIGHT. If it silently fell through to a workspace
+    // root, the resolvable-but-incomplete checkout below would be found and the
+    // probe would go crit — so 'ok' here is the assertion that it did not.
+    name: 'frameworkScriptsDir: RH_FRAMEWORK_ROOT pointing nowhere does NOT fall through',
+    fn: () => withTmp((t) => {
+      seedLauncherHook(t, { withForwarder: false });
+      const r = run(t, ['--json'], { RH_FRAMEWORK_ROOT: path.join(t.home, 'no-such-framework') });
+      assert.strictEqual(lvlOf(r, 'hook-references'), 'ok',
+        'a dead explicit override must resolve to null, never fall back to a workspace root');
+    }),
+  },
+  {
+    name: 'frameworkScriptsDir: RH_FRAMEWORK_ROOT wins when it does resolve',
+    fn: () => withTmp((t) => {
+      const { frameworkRoot } = seedLauncherHook(t, { withForwarder: false });
+      const r = run(t, ['--json'], { RH_FRAMEWORK_ROOT: frameworkRoot });
+      assert.strictEqual(lvlOf(r, 'hook-references'), 'crit',
+        'override points at the incomplete checkout, so the missing script must surface');
+    }),
+  },
+  {
+    name: 'frameworkScriptsDir: oversight.json frameworkRoot is honoured',
+    fn: () => withTmp((t) => {
+      const { frameworkRoot } = seedLauncherHook(t, { nesting: ['x', 'y', 'z'], withForwarder: false });
+      fs.writeFileSync(path.join(t.claudeDir, 'oversight.json'),
+        JSON.stringify({ frameworkRoot }, null, 2));
+      assert.strictEqual(lvlOf(run(t, ['--json']), 'hook-references'), 'crit',
+        'config-provided frameworkRoot must resolve the checkout');
+    }),
   },
 ];
 
