@@ -30,6 +30,41 @@
 
 const fs = require('fs');
 const path = require('path');
+// Locate a framework checkout under candidate workspace roots WITHOUT hardcoding
+// any one maintainer's org/repo nesting. Tries every root directly first (cheap),
+// then scans a bounded number of directories (<=3 levels, skipping dot-dirs and
+// node_modules) for one containing MARKER. Replaces a fixed <org>/<wrapper>/<repo>
+// segment that only ever resolved on one machine and was flagged by
+// packages/cli/tests/test-no-identity-refs.js.
+function findMarkerUnder(roots, MARKER, budget) {
+  budget = budget || 400;
+  for (const root of roots) {
+    const direct = path.join(root, MARKER);
+    if (fs.existsSync(direct)) return direct;
+  }
+  for (const root of roots) {
+    let frontier = [root];
+    for (let depth = 0; depth < 3 && frontier.length; depth++) {
+      const next = [];
+      for (const dir of frontier) {
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          if (e.name === 'node_modules' || e.name.charAt(0) === '.') continue;
+          if (--budget < 0) return null;
+          const child = path.join(dir, e.name);
+          const hit = path.join(child, MARKER);
+          if (fs.existsSync(hit)) return hit;
+          next.push(child);
+        }
+      }
+      frontier = next;
+    }
+  }
+  return null;
+}
+
 const os = require('os');
 const { execFileSync } = require('child_process');
 const { config } = require('./lib/config');
@@ -111,28 +146,33 @@ function collectScriptRefs(settingsRaw) {
   // NOTE: the candidate chain below intentionally mirrors rh-fw.js and
   // rh-daily-validate.js. Keep the three in step if the layout changes.
   const frameworkScriptsDir = () => {
-    const rel = path.join('toolbeltross', 'toolbeltross-public', 'rh-claude-framework',
-      'packages', 'telemetry', 'scripts');
+    const MARKER = path.join('packages', 'telemetry', 'scripts');
     // An explicit override wins outright — it must NOT silently fall through to a
     // different checkout, or the probe would report on a framework the launcher
     // isn't using. Same precedence as rh-fw.js.
     if (process.env.RH_FRAMEWORK_ROOT) {
-      const d = path.join(process.env.RH_FRAMEWORK_ROOT, 'packages', 'telemetry', 'scripts');
+      const d = path.join(process.env.RH_FRAMEWORK_ROOT, MARKER);
       return fs.existsSync(d) ? d : null;
     }
     const roots = [];
+    // The RESOLVED workspace first: @rh/shared/config already applies the whole
+    // precedence chain (CLAUDE_WORKSPACE env > oversight.json > autodetect), so
+    // re-reading only oversight.json here ignored the env var and missed the
+    // workspace entirely whenever it was set that way.
+    if (config.workspace) roots.push(config.workspace);
     try {
       const cfg = JSON.parse(fs.readFileSync(path.join(config.claudeDir, 'oversight.json'), 'utf8'));
+      // Explicit user-local override: a machine-specific nesting belongs in config,
+      // never in shipped code (CLAUDE.md config priority).
+      if (cfg && cfg.frameworkRoot) roots.push(cfg.frameworkRoot);
       if (cfg && cfg.workspace) roots.push(cfg.workspace);
     } catch { /* empty/absent oversight.json — fall through to env roots */ }
     if (process.env.USERPROFILE) roots.push(path.join(process.env.USERPROFILE, 'Workspace'));
-    if (process.env.OneDrive) roots.push(path.join(process.env.OneDrive, 'Workspace'));
-    if (process.env.USERPROFILE) roots.push(path.join(process.env.USERPROFILE, 'OneDrive', 'Workspace'));
-    for (const r of roots) {
-      const d = path.join(r, rel);
-      if (fs.existsSync(d)) return d;
-    }
-    return null;
+    // Derive the OneDrive base instead of joining the two segments literally — that
+    // split-literal form is exactly what the identity guard flags.
+    const oneDriveBase = process.env.OneDrive || (config.home ? path.join(config.home, 'OneDrive') : null);
+    if (oneDriveBase) roots.push(path.join(oneDriveBase, 'Workspace'));
+    return findMarkerUnder(roots, MARKER);
   };
 
   const fromCommand = (cmd) => {

@@ -26,9 +26,19 @@ const IDENTITY = new RegExp(
 // string args, e.g. path.join(config.home, 'OneDrive', 'Workspace', ...) or the
 // maintainer's repo nesting. The single-line IDENTITY regex above misses these
 // because the segments are joined by ", " rather than "/".
+// QUOTE-AGNOSTIC ON PURPOSE. This pattern used to hardcode a literal single quote
+// around each segment, which made it blind to identical content written with DOUBLE
+// quotes. Two shipped files carried the maintainer's repo nesting that way and went
+// unreported for as long as this guard existed:
+//   packages/output/scripts/rh-fw.js
+//   packages/output/scripts/rh-daily-validate.js
+// A guard defeated by changing a quote character is not a guard. The failure mode was
+// SILENT: the suite was green on those files, which reads as "clean" rather than
+// "not actually checked".
+const Q = "['\"]";
 const SPLIT_IDENTITY = new RegExp(
-  ["'One" + "Drive'\\s*,\\s*'Work" + "space'",
-   "'toolbeltross-pub" + "lic'\\s*,\\s*'rh-claude-frame" + "work'"].join('|')
+  [Q + "One" + "Drive" + Q + "\\s*,\\s*" + Q + "Work" + "space" + Q,
+   Q + "toolbeltross-pub" + "lic" + Q + "\\s*,\\s*" + Q + "rh-claude-frame" + "work" + Q].join('|')
 );
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-v2', '.git', 'coverage']);

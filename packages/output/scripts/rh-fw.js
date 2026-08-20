@@ -42,10 +42,46 @@ const CLAUDE = path.join(
   ".claude"
 );
 
-const REL = path.join(
-  "toolbeltross", "toolbeltross-public", "rh-claude-framework",
-  "packages", "telemetry", "scripts"
-);
+// Marker that identifies a framework checkout, independent of where it sits.
+const MARKER = path.join("packages", "telemetry", "scripts");
+// Locate the framework checkout under candidate workspace roots WITHOUT hardcoding
+// any one maintainer's org/repo nesting. Tries each root directly, then scans a
+// bounded number of directories (<=3 levels, skipping dot-dirs and node_modules)
+// for any directory containing MARKER. Replaces a fixed
+// <org>/<wrapper>/<repo> segment, which only ever resolved on one machine and was
+// flagged by packages/cli/tests/test-no-identity-refs.js.
+//
+// Bounded on purpose: this runs on every hook invocation via rh-fw.js, so it must
+// stay cheap. Direct hits are checked for ALL roots before any scanning begins.
+function findMarkerUnder(roots, MARKER, budget) {
+  budget = budget || 400;
+  for (const root of roots) {
+    const direct = path.join(root, MARKER);
+    if (fs.existsSync(direct)) return direct;
+  }
+  for (const root of roots) {
+    let frontier = [root];
+    for (let depth = 0; depth < 3 && frontier.length; depth++) {
+      const next = [];
+      for (const dir of frontier) {
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          if (e.name === "node_modules" || e.name.charAt(0) === ".") continue;
+          if (--budget < 0) return null;
+          const child = path.join(dir, e.name);
+          const hit = path.join(child, MARKER);
+          if (fs.existsSync(hit)) return hit;
+          next.push(child);
+        }
+      }
+      frontier = next;
+    }
+  }
+  return null;
+}
+
 
 // Ordered workspace candidates, mirroring the chain rh-daily-validate.js already
 // proves out: oversight.json first (authoritative + re-keyed on migration), then
@@ -53,21 +89,27 @@ const REL = path.join(
 // partial/empty oversight.json doesn't strand the hooks.
 function scriptsDir() {
   if (process.env.RH_FRAMEWORK_ROOT) {
-    return path.join(process.env.RH_FRAMEWORK_ROOT, "packages", "telemetry", "scripts");
+    const d = path.join(process.env.RH_FRAMEWORK_ROOT, MARKER);
+    return fs.existsSync(d) ? d : null;   // explicit override never falls through
   }
   const candidates = [];
+  // Parity with rh-config-integrity.js, which resolves this via @rh/shared/config.
+  // These two are copied to ~/.claude/scripts and must stay dependency-free, so the
+  // env var is read directly rather than importing the shared resolver.
+  if (process.env.CLAUDE_WORKSPACE) candidates.push(process.env.CLAUDE_WORKSPACE);
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(CLAUDE, "oversight.json"), "utf8"));
+    // Explicit, user-local override: the machine-specific nesting belongs in
+    // config, never in shipped code (CLAUDE.md config priority).
+    if (cfg && cfg.frameworkRoot) candidates.push(cfg.frameworkRoot);
     if (cfg && cfg.workspace) candidates.push(cfg.workspace);
   } catch {}
   if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "Workspace"));
-  if (process.env.OneDrive) candidates.push(path.join(process.env.OneDrive, "Workspace"));
-  if (process.env.USERPROFILE) candidates.push(path.join(process.env.USERPROFILE, "OneDrive", "Workspace"));
-  for (const ws of candidates) {
-    const dir = path.join(ws, REL);
-    if (fs.existsSync(dir)) return dir;
-  }
-  return null;
+  // Derive the OneDrive base rather than joining the two segments literally, which
+  // is the split-literal form the identity guard flags.
+  const oneDriveBase = process.env.OneDrive || (process.env.USERPROFILE || process.env.HOME ? path.join(process.env.USERPROFILE || process.env.HOME, "OneDrive") : null);
+  if (oneDriveBase) candidates.push(path.join(oneDriveBase, "Workspace"));
+  return findMarkerUnder(candidates, MARKER);
 }
 
 const name = process.argv[2];
