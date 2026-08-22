@@ -25,7 +25,7 @@ rh-claude-framework/
     │   ├── rules/                  # workspace rule files (copied to <workspace>/.claude/rules/)
     │   ├── commands/               # workspace slash-commands (copied to <workspace>/.claude/commands/)
     │   ├── templates/journals.json # runtime journal config (NOT an install template)
-    │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (207 tests)
+    │   └── tests/                  # config + guard + scribe-staging + settings-validator + supervisor-sweep (222 tests)
     │
     ├── output/                     # @rh/output — rendered artifacts + scribe writers
     │   ├── scripts/rh-render-md-html.js        # md → styled HTML, withLock-wrapped writes
@@ -49,7 +49,7 @@ rh-claude-framework/
     │   ├── lib/status.js           # `status` — unified "full system on?" readout (oversight + telemetry + DB)
     │   ├── lib/settings-cli.js     # `rh-oversight settings <sub>` (validate/show/diff/merge/backup/restore)
     │   ├── templates/              # settings.json + CLAUDE.md templates
-    │   └── tests/                  # init-merge + cross-package-contract + settings-cli (83 tests)
+    │   └── tests/                  # init-merge + cross-package-contract + settings-cli (92 tests)
     │
     └── telemetry/                  # rh-telemetry (migrated 2026-05-04; canonical home — standalone repo archived)
         ├── server/trends-router.js          # GET /api/trends — cross-package wrap of supervisor-sweep (P3-2)
@@ -83,9 +83,9 @@ rh-claude-framework/
 
 | Surface | Command |
 |---|---|
-| Oversight tests | `node packages/oversight/tests/run.js` (207 tests) |
-| CLI tests | `node packages/cli/tests/run.js` (83 tests) |
-| Output tests | `node packages/output/tests/run.js` (205 tests) |
+| Oversight tests | `node packages/oversight/tests/run.js` (222 tests) |
+| CLI tests | `node packages/cli/tests/run.js` (92 tests) |
+| Output tests | `node packages/output/tests/run.js` (242 tests) |
 | All workspace tests | `npm test` |
 | Dry-run install | `node packages/cli/bin/rh-oversight.js init --dry-run` |
 | Real install against tmp HOME | `HOME=/tmp/test USERPROFILE=/tmp/test node packages/cli/bin/rh-oversight.js init --workspace /tmp/test-ws` |

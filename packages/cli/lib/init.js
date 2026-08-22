@@ -291,7 +291,7 @@ function mergeHooks(settingsPath, templatePath, vars, opts) {
  * ~/.claude/oversight/...) so the supervisory log co-locates with the rest of
  * the oversight artifacts regardless of where oversightDir resolves.
  */
-function buildConfigData({ workspace, oversightDir, privateDirs }) {
+function buildConfigData({ workspace, oversightDir, privateDirs, frameworkRoot }) {
   const data = {
     workspace,
     oversightDir,
@@ -300,6 +300,20 @@ function buildConfigData({ workspace, oversightDir, privateDirs }) {
     userName: process.env.USER || process.env.USERNAME || path.basename(HOME),
   };
   if (privateDirs) data.privateDirs = privateDirs;
+  // frameworkRoot is the direct-hit entry in the checkout-resolution chain that
+  // rh-fw.js, rh-daily-validate.js and rh-config-integrity.js share (PR #173).
+  // Those three READ it; until now nothing WROTE it, so the entry was dead on
+  // every machine and resolution always fell through to the bounded marker scan
+  // — measured on this repo at 7.6-9.3ms versus 0.3ms for a direct hit, paid on
+  // every hook invocation because rh-fw.js runs per tool call.
+  //
+  // The installer is the one process that knows the checkout authoritatively: it
+  // is running FROM it. Recording it here is a CACHE, not a source of truth —
+  // every consumer existsSync-guards the entry and falls through to the scan
+  // when it is stale, so a relocation degrades to today's behaviour rather than
+  // breaking. That guard is what keeps this from being the install-time path
+  // capture F-19 root cause (a) warns about.
+  if (frameworkRoot) data.frameworkRoot = frameworkRoot;
   return data;
 }
 
@@ -376,10 +390,14 @@ function run(extraOpts = {}) {
   // survives re-runs of init — previously it was dropped, leaving the runtime
   // to fall back to the hardcoded ~/.claude/oversight/supervisory-log.md
   // default even on machines where oversightDir was correctly redirected.
+  // The checkout this installer is running from — PACKAGES_ROOT is <framework>/packages.
+  const frameworkRoot = path.join(PACKAGES_ROOT, '..');
+
   const configData = buildConfigData({
     workspace,
     oversightDir,
     privateDirs: opts.privateDirs,
+    frameworkRoot,
   });
 
   const configPath = path.join(CLAUDE_DIR, 'oversight.json');
@@ -392,6 +410,12 @@ function run(extraOpts = {}) {
       workspace: opts.workspace ? workspace : undefined,
       oversightDir: oversightDirChosen ? oversightDir : undefined,
       privateDirs: opts.privateDirs,
+      // Explicit bucket, not merge-preserved: this is not a user preference but
+      // a fact about where this installer lives. A re-run after the checkout
+      // moves must re-key it — the same "re-keyed on migration" property that
+      // let oversight.json survive the 2026-07-27 move — rather than preserving
+      // a dead path that forces every hook back onto the scan.
+      frameworkRoot,
     });
     if (opts.dryRun) console.log(`  [dry-run] would write ${configPath}`);
     else {
