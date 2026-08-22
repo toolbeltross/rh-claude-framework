@@ -226,6 +226,33 @@ const STEPS = [
     args: [path.join(SCRIPTS_DIR, "rh-auto-prune.js"), "--apply"],
   },
   {
+    // Incident 2026-06-27 (scribe false-success), steward condition C8: daily
+    // claimed-vs-on-disk reconciliation of the scribe md files against the
+    // postgres shadow. READ-ONLY and NON-BLOCKING (no --strict, so always exit
+    // 0; self-skips with exit 0 when scribeDb is off). Surfaces `db_only` drift
+    // — the exact signature of a silent md-write loss (DB shadow written, md
+    // file absent), which is what the 2026-06-27 learnings loss would have
+    // shown. The inline /rh-quit step-3a gate is the primary catch; this is the
+    // periodic cross-session backstop. Runs after auto-prune so it audits the
+    // surviving (non-archived) rows.
+    name: "rh-scribe-parity-audit",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-scribe-parity-audit.js")],
+  },
+  {
+    // Incident F-15 visibility follow-up: the parity audit above only logs to
+    // daily-regen.log (which nobody reads). This surfaces the actionable signal
+    // — learnings db_only > 0 (silent md-write loss, recoverable from the DB
+    // shadow) — as ONE deduped OPEN row in recommendations.md, so a silent-loss
+    // regression is seen within a day instead of when someone asks for a
+    // missing file. Non-blocking (always exit 0). Completes M-4's "caught
+    // without a human asking" intent. Runs immediately after the audit it
+    // depends on.
+    name: "rh-scribe-drift-alert",
+    cmd: "node",
+    args: [path.join(SCRIPTS_DIR, "rh-scribe-drift-alert.js")],
+  },
+  {
     // PLAN-2026-06-15 (F-K): propose-only daily triage of the open scribe
     // backlog. Reads OPEN rows from the canonical md files, dispatches
     // rh-supervisor (scope=scribe-triage) for a per-row disposition proposal,
