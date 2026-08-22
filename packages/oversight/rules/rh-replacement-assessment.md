@@ -50,16 +50,16 @@ Examples of removals/replacements (assessment required):
 
 ## Interaction with adjacent rules
 
-- **`work-verification.md`** — outer-seam verification still applies after a removal/replacement lands. Assessment is *before* the change; verification is *after*.
-- **`oversight-doc-sync.md`** — if the removal/replacement touches an oversight trigger surface, sync the design doc per that rule. The assessment can include the sync plan as one of its bullets.
-- **`subagent-oversight.md`** — when the removal proposal comes from a subagent's analysis, apply the cross-subagent verification rule before acting. Don't remove based on a single subagent's finding without source verification.
+- **`rh-work-verification.md`** — outer-seam verification still applies after a removal/replacement lands. Assessment is *before* the change; verification is *after*.
+- **`rh-oversight-doc-sync.md`** — if the removal/replacement touches an oversight trigger surface, sync the design doc per that rule. The assessment can include the sync plan as one of its bullets.
+- **`rh-subagent-oversight.md`** — when the removal proposal comes from a subagent's analysis, apply the cross-subagent verification rule before acting. Don't remove based on a single subagent's finding without source verification.
 - **Project-level ADDITIVE ONLY rules** — this workspace rule does not override project rules; it qualifies the meta-pattern. Each project still owns its own rule text. When a project's rule and this rule both apply, both apply.
 
 ## What this rule does NOT cover
 
 - Stylistic preferences (which side of the if-clause to negate, which order to declare imports). These don't engage ADDITIVE ONLY in the first place.
 - New additions. Adding to existing functionality is the default mode and needs no assessment.
-- Verification of whether the removal worked after it lands — that's `work-verification.md`'s job.
+- Verification of whether the removal worked after it lands — that's `rh-work-verification.md`'s job.
 - Domain decisions in project work (e.g., dropping a project-specific spreadsheet column). Project plans govern those.
 
 ## Failure modes this rule mitigates

@@ -1,6 +1,6 @@
 ---
 description: "Context window monitoring thresholds and required disclosure actions"
-keywords: [context, tokens, remaining, threshold, compaction, telemetry context, headroom, disclose, /telemetry]
+keywords: [context, tokens, remaining, threshold, compaction, telemetry context, headroom, disclose, /rh-telemetry]
 severity: warn
 ---
 
@@ -11,7 +11,7 @@ severity: warn
 Thresholds are expressed as **remaining tokens**, not percentages, so they apply correctly
 across all model sizes (e.g., ~200K windows on Sonnet/Haiku and ~1M windows on Opus 4.7).
 
-**Measure before acting — never estimate or guess.** Run `/telemetry context` to get the
+**Measure before acting — never estimate or guess.** Run `/rh-telemetry context` to get the
 actual remaining token count. Do not infer context pressure from message length, turn count,
 or a felt sense of "this is getting long." Guessing a percentage and acting on the guess is a
 policy violation.

@@ -14,9 +14,9 @@ When changes touch any of the **oversight-defining surfaces** below, the corresp
 
 | Surface | What lives here |
 |---|---|
-| `~/.claude/scripts/` | Oversight enforcement scripts (consolidation-guard.js, agent-oversight-guard.js, agent-result-guard.js, read-audit.js, layer3a-capture.js, oversight-self-test.js, generate-state-md.js, daily-regen.js, lib/oversight-events.js) |
-| `~/.claude/agents/` | Agent definitions used by the workspace (supervisor.md, source-verifier.md, facilitator.md, etc.) |
-| `Workspace/.claude/rules/` | The workspace rule files (18 as of 2026-06-14; see the auto-generated Rules Domain Index in `OVERSIGHT_STATE.md` for the current list) |
+| `~/.claude/scripts/` | Oversight enforcement scripts — all are `rh-`prefixed on disk: `rh-consolidation-guard.js`, `rh-agent-oversight-guard.js`, `rh-agent-result-guard.js`, `rh-read-audit.js`, `rh-layer3a-capture.js`, `rh-oversight-self-test.js`, `rh-generate-state-md.js`, `rh-daily-regen.js`. Files under `lib/` are **not** prefixed (e.g. `lib/oversight-events.js`) |
+| `~/.claude/agents/` | Agent definitions used by the workspace — all `rh-`prefixed: `rh-supervisor.md`, `rh-source-verifier.md`, `rh-facilitator.md`, etc. (20 as of 2026-08-07) |
+| `Workspace/.claude/rules/` | The workspace rule files (**20 as of 2026-08-22**; see the auto-generated Rules Domain Index in `OVERSIGHT_STATE.md` for the current list) |
 | `~/.claude/settings.json` | Hooks configuration (PreToolUse / PostToolUse / Stop / SessionStart / etc.) |
 | Telemetry hook-forwarder script | Cross-environment telemetry forwarder used by the oversight feed |
 
@@ -44,10 +44,10 @@ When the trigger fires, review and update these artifacts in the same session:
 
 ## Enforcement
 
-- **In-session manual**: Before declaring oversight-system work "done," verify the corresponding sync target was updated. The work-verification.md "outer-seam" rule applies — a hook script change is not done until the design doc reflects it.
+- **In-session manual**: Before declaring oversight-system work "done," verify the corresponding sync target was updated. The `rh-work-verification.md` "outer-seam" rule applies — a hook script change is not done until the design doc reflects it.
 - **Git-diff checklist (tracked, not just mtime)**: When committing changes that touch a trigger surface, run `git diff --stat <surface>` (and `git log --oneline <surface>` since the design doc's last update) to produce an explicit list of what changed. Reconcile each changed surface against its row in the *Sync points* table above and tick it off in the commit message or PR body. This turns the sync into an auditable checklist item rather than relying solely on the self-test's soft mtime warning — the mtime check tells you *that* something drifted; the diff tells you *what* to reconcile.
-- **Daily regen**: `daily-regen.js` re-runs `generate-state-md.js`, which captures the *current state* (rule/hook/agent inventory). The state doc is self-healing; the design doc is not.
-- **Self-test soft check**: `oversight-self-test.js` may include an mtime sanity check — if any trigger surface is newer than `OVERSIGHT_SYSTEM.md`, emit a soft warning (not a hard fail).
+- **Daily regen**: `rh-daily-regen.js` re-runs `rh-generate-state-md.js`, which captures the *current state* (rule/hook/agent inventory). The state doc is self-healing; the design doc is not.
+- **Self-test soft check**: `rh-oversight-self-test.js` may include an mtime sanity check — if any trigger surface is newer than `OVERSIGHT_SYSTEM.md`, emit a soft warning (not a hard fail).
 
 ## What this rule does NOT cover
 

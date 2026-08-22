@@ -51,7 +51,7 @@ Never silently pick one subagent's answer over another when they disagree. Never
 ScheduleWakeup resumes the same conversation thread; it is **not** a subagent dispatch. The four-item protocol (verification tokens, self-reported telemetry, batch overflow rule, count cross-reference) does not apply to ScheduleWakeup payloads.
 
 However, resumed turns must still:
-- Disclose context pressure per `rh-context-discipline.md` (>70% inform, >85% stop, >95% halt).
+- Disclose context pressure per `rh-context-discipline.md`, using **that rule's remaining-token thresholds** (<80K inform, <40K stop taking new work, <15K halt) — *not* percentages. `rh-context-discipline.md` explicitly forbids percentage-based judgment; this line previously contradicted the rule it cites.
 - Surface between-cycle improvement signals per `~/.claude/memory-shared/feedback_iterate_between_pipeline_cycles.md` — don't run cycle N+1 with stale params; explicit between-cycle improvement step required.
 
 Also note: the `rh-agent-oversight-guard.js` PreToolUse hook matches the `Agent` tool only. ScheduleWakeup invocations are not policed by it.
