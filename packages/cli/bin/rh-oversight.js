@@ -54,7 +54,7 @@ const commands = {
   },
 };
 
-if (!command || command === '--help' || command === '-h') {
+function printUsage() {
   console.log(`
 rh-oversight — Claude Code oversight framework CLI
 
@@ -96,12 +96,37 @@ Options for init/reset:
   --skip-hooks            Don't merge hooks into settings.json
   --yes, -y               Accept defaults; never prompt (alias: --no-prompt)
 `);
+}
+
+if (!command || command === '--help' || command === '-h') {
+  printUsage();
   process.exit(0);
 }
 
 if (!commands[command]) {
   console.error(`Unknown command: ${command}\nRun 'rh-oversight --help' for usage.`);
   process.exit(1);
+}
+
+// A subcommand's own flags are parsed by that subcommand, and the init/reset
+// parser silently IGNORES tokens it does not recognise. So `rh-oversight init
+// --help` did not print help - it fell through to a real install.
+//
+// Observed 2026-08-22: a session ran `init --help` purely to read the flag list
+// before deciding anything, and performed a full install into ~/.claude (wrote
+// oversight.json, rewrote settings.json, created .rh-install-state.json). No
+// damage, because the F-10 guard protected every drifted file - but the command
+// that looked like the safest possible way to ask a question was destructive.
+//
+// Intercepted HERE, before dispatch, so no individual subcommand parser has to
+// remember to. Placed after the unknown-command check so `bogus --help` still
+// reports the bad command rather than printing usage and exiting 0.
+//
+// `settings` is excluded deliberately: it implements its own richer per-
+// subcommand help (lib/settings-cli.js), which a blanket intercept would hide.
+if (command !== 'settings' && process.argv.slice(3).some((a) => a === '--help' || a === '-h')) {
+  printUsage();
+  process.exit(0);
 }
 
 // Run the command, catching both synchronous throws and async rejections so a
