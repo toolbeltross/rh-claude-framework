@@ -33,6 +33,10 @@ tmp/screenshots/<descriptive-name>.png
 
 Do not rely on the gitignore's `/*.png` wildcard as the routing mechanism — that is a safety net, not the routing convention. Route first; gitignore catches leakage.
 
+A **relative** filename is not routing — it resolves against cwd and lands at the project root. Pass a path that starts with `tmp/`.
+
+**Playwright MCP `browser_navigate` auto-writes artifacts you cannot route.** Every navigate silently drops a `.playwright-mcp/` directory into cwd containing an ARIA snapshot (`page-<ts>.yml`) and a console log (`console-<ts>.log`). **No tool parameter controls this path.** Verified 2026-08-07: leaked `.playwright-mcp/` directories were found in three locations — the Workspace root, `toolbeltross/toolbeltwork/` (also holding a stray `customer-web-login.png`), and `To Do/rob/`. Because it cannot be routed, it must be **swept**: add `.playwright-mcp/` to every project `.gitignore`, and delete the directory when a browser task finishes. Treat this as a known unavoidable leak, not a technique failure.
+
 **Playwright CLI** (`npx playwright screenshot URL out.png`) in pipeline use should write to the OS temp directory (`/tmp/shot.png` on bash-on-Windows, which aliases to `%TEMP%`), not to the project's `tmp/`. That is the correct path for ephemeral pipeline intermediates.
 
 **Any tool that defaults to cwd** (file exporters, screenshot tools, log dumpers): pass an explicit `tmp/<subfolder>/` path rather than accepting the default.
