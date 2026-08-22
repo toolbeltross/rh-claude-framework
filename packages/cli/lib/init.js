@@ -34,6 +34,16 @@ function parseArgs() {
     // --force: overwrite destinations that were edited after they were installed.
     // Without it those files are protected and reported (F-10 generalised).
     else if (args[i] === '--force') opts.force = true;
+    // Anything else that LOOKS like a flag is recorded, not ignored. Silently
+    // dropping unrecognised flags made two destructive-by-typo cases possible:
+    // `init --help` (which printed nothing and installed - observed 2026-08-22)
+    // and `init --dryrun`, a one-character slip from --dry-run that performs a
+    // REAL install while the operator believes they asked for a preview.
+    // Collected here rather than exiting, so parseArgs stays a pure function and
+    // stays unit-testable; run() does the refusing, before any filesystem work.
+    else if (typeof args[i] === 'string' && args[i].startsWith('-')) {
+      (opts.unknownFlags || (opts.unknownFlags = [])).push(args[i]);
+    }
   }
   return opts;
 }
@@ -334,6 +344,17 @@ function mergeConfigData(detected, existing, explicit = {}) {
 
 function run(extraOpts = {}) {
   const opts = { ...parseArgs(), ...extraOpts };
+
+  // Refuse BEFORE any filesystem work. An installer that shrugs off a flag it
+  // does not understand cannot be trusted to have understood the request: the
+  // operator who typed --dryrun is not asking to install. Exit 1 so a script
+  // wrapping this notices too.
+  if (opts.unknownFlags && opts.unknownFlags.length) {
+    console.error(`rh-oversight: unrecognised option(s): ${opts.unknownFlags.join(' ')}`);
+    console.error("Nothing was installed. Run 'rh-oversight --help' for usage.");
+    process.exit(1);
+  }
+
   const configModule = require(path.join(SHARED_PKG, 'config'));
 
   console.log('\nrh-oversight init');
