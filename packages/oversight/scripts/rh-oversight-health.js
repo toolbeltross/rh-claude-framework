@@ -22,7 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { config } = require('./lib/config');
+const { config, CONFIG_PATH } = require('./lib/config');
 
 const JSON_OUT = process.argv.includes('--json');
 const TODAY = new Date();
@@ -116,11 +116,24 @@ function probeSupervisoryLog() {
 // maintainer-specific personal path). Honor an explicit override, else look in
 // ~/.claude/ and the workspace root.
 function resolveHookDebugLog() {
-  return [
-    process.env.HOOK_DEBUG_LOG,
-    path.join(config.claudeDir, 'hook-debug.log'),
-    path.join(config.workspace, 'hook-debug.log'),
-  ].filter(Boolean).find(p => fileExists(p)) || null;
+  const candidates = [process.env.HOOK_DEBUG_LOG];
+  // The log telemetry actually writes lives in the framework checkout, not in
+  // ~/.claude. Reach it via oversight.json's `frameworkRoot` (written by
+  // `rh-oversight init`) rather than a hardcoded <org>/<wrapper>/<repo> segment,
+  // which is the identity-ref form test-no-identity-refs.js flags.
+  //
+  // Read raw: resolveConfig() builds a curated object and drops keys it does not
+  // know about, so `config.frameworkRoot` is undefined even when oversight.json
+  // has it. The deployed resolvers read the same file the same way.
+  try {
+    const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    if (raw && raw.frameworkRoot) {
+      candidates.push(path.join(raw.frameworkRoot, 'packages', 'telemetry', 'hook-debug.log'));
+    }
+  } catch { /* no config, or unreadable — fall through to the generic candidates */ }
+  candidates.push(path.join(config.claudeDir, 'hook-debug.log'));
+  candidates.push(path.join(config.workspace, 'hook-debug.log'));
+  return candidates.filter(Boolean).find(p => fileExists(p)) || null;
 }
 
 function probeHookDebugLog() {
