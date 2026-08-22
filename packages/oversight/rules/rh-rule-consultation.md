@@ -16,7 +16,7 @@ Cascade-loading does not enforce consultation. The 2026-05-31 session (`d82b184a
 
 This rule does not replace the Stop-hook supervisor (which catches violations after-the-fact). It is the upstream discipline that prevents the violations from being produced.
 
-## Frontmatter convention (shipped on all 12 workspace rules)
+## Frontmatter convention (shipped on all 20 workspace rules)
 
 Every workspace rule includes `keywords:` and `severity:` frontmatter. The `keywords:` field lists the domain terms the rule covers. Sample:
 
