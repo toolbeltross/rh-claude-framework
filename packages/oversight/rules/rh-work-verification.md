@@ -45,6 +45,21 @@ Before composing a status / completion message:
 
 If step 5 reveals extrapolation, either verify it or downgrade the claim to "implemented but not verified in this session."
 
+## The mirror image: a check that could not have failed
+
+Everything above is about verifying **after** the operation. The same defect has a *before*
+form, and it is easy to miss because the command appears to succeed.
+
+If you run a command's preview or check mode and the parser silently discarded your flag, you
+did not run a check — you ran the real thing, and its reassuring output is not evidence.
+`--dryrun` is not `--dry-run`; a parser with no rejecting branch cannot tell you which one you
+typed. **A check that could not have failed has not passed**, exactly as a unit that was never
+exercised through its outer seam has not been verified.
+
+Full treatment, including the two silences that have to line up and the worked example:
+[`rh-flag-safety.md`](rh-flag-safety.md). Keep the two in step — this section states the
+principle, that rule carries the detail; if they drift, the detail wins.
+
 ## When to relax
 
 - **Pure documentation / prose changes**: re-running the full test suite is not required. A build / render smoke check is enough.
